@@ -38,8 +38,12 @@ import org.lwjgl.BufferUtils;
 import org.lwjgl.opengl.GL11;
 import org.lwjgl.opengl.GL20;
 import shit.zen.ClientBase;
+import shit.zen.render.DrawContext;
 import shit.zen.render.GaussianBlur;
+import shit.zen.render.Paint;
+import shit.zen.render.Renderer;
 import shit.zen.render.ResourceLocationWrapper;
+import shit.zen.render.RoundedRectangle;
 import shit.zen.render.shader.ShaderFormats;
 import shit.zen.render.shader.ShaderProgram;
 import shit.zen.utils.animation.Timer;
@@ -75,6 +79,15 @@ extends ClientBase {
     private static float zLevel;
 
     public static void drawGradientV(PoseStack poseStack, float x, float y, float width, float height, int colorTop, int colorBottom) {
+        if (Renderer.isSkikoEnabled()) {
+            Renderer.renderWithPose(poseStack, drawContext -> {
+                try (Paint paint = new Paint()) {
+                    paint.setColor(colorTop).setGradCoords(new Paint.GradientCoords(x, y, x, y + height, colorTop, colorBottom));
+                    drawContext.drawRectXYWH(x, y, width, height, paint);
+                }
+            });
+            return;
+        }
         RenderSystem.enableBlend();
         RenderSystem.defaultBlendFunc();
         RenderHelper.resetShaderColor();
@@ -91,6 +104,15 @@ extends ClientBase {
     }
 
     public static void drawGradientH(PoseStack poseStack, float x, float y, float width, float height, int colorLeft, int colorRight) {
+        if (Renderer.isSkikoEnabled()) {
+            Renderer.renderWithPose(poseStack, drawContext -> {
+                try (Paint paint = new Paint()) {
+                    paint.setColor(colorLeft).setGradCoords(new Paint.GradientCoords(x, y, x + width, y, colorLeft, colorRight));
+                    drawContext.drawRectXYWH(x, y, width, height, paint);
+                }
+            });
+            return;
+        }
         RenderSystem.enableBlend();
         RenderSystem.defaultBlendFunc();
         RenderHelper.resetShaderColor();
@@ -138,6 +160,15 @@ extends ClientBase {
     }
 
     public static void drawRoundedRect(PoseStack poseStack, float x, float y, float width, float height, float radius, float smoothness, int color) {
+        if (Renderer.isSkikoEnabled()) {
+            Renderer.renderWithPose(poseStack, drawContext -> {
+                try (Paint paint = new Paint()) {
+                    paint.setColor(color);
+                    drawContext.drawRoundedRect(RoundedRectangle.ofXYWHR(x, y, width, height, radius), paint);
+                }
+            });
+            return;
+        }
         if (roundedRectShader == null) {
             roundedRectShader = new ShaderProgram("rounded_rect", "vertex_color", ShaderFormats.POSITION_UV_COLOR);
         }
@@ -166,6 +197,22 @@ extends ClientBase {
     }
 
     public static void drawRoundedRectCorners(PoseStack poseStack, float x, float y, float width, float height, float radius, boolean topLeft, boolean topRight, boolean bottomLeft, boolean bottomRight, int color) {
+        if (Renderer.isSkikoEnabled()) {
+            float clampedRadius = Math.max(0.0f, Math.min(radius, Math.min(width, height) / 2.0f));
+            float[] radii = new float[]{
+                    topLeft ? clampedRadius : 0.0f,
+                    topRight ? clampedRadius : 0.0f,
+                    bottomRight ? clampedRadius : 0.0f,
+                    bottomLeft ? clampedRadius : 0.0f
+            };
+            Renderer.renderWithPose(poseStack, drawContext -> {
+                try (Paint paint = new Paint()) {
+                    paint.setColor(color);
+                    drawContext.drawRoundedRect(RoundedRectangle.ofXYWHRadii(x, y, width, height, radii), paint);
+                }
+            });
+            return;
+        }
         if (radius <= 0.0f || !topLeft && !topRight && !bottomLeft && !bottomRight) {
             RenderUtil.drawFilledRect(poseStack, x, y, width, height, color);
             return;
@@ -336,6 +383,15 @@ extends ClientBase {
     }
 
     public static void drawFilledRect(PoseStack poseStack, float x, float y, float width, float height, int color) {
+        if (Renderer.isSkikoEnabled()) {
+            Renderer.renderWithPose(poseStack, drawContext -> {
+                try (Paint paint = new Paint()) {
+                    paint.setColor(color);
+                    drawContext.drawRectXYWH(x, y, width, height, paint);
+                }
+            });
+            return;
+        }
         RenderSystem.enableBlend();
         RenderSystem.defaultBlendFunc();
         RenderHelper.setShaderColor(color);
@@ -658,24 +714,44 @@ extends ClientBase {
     }
 
     public static void drawTexture(int textureId, PoseStack poseStack, float x, float y, float width, float height, float alpha, int color) {
-        Matrix4f matrix4f = poseStack.last().pose();
-        RenderHelper.setShaderColor(ColorUtil.withAlpha(color, alpha));
-        if (textureId != -1) {
-            RenderSystem.setShader(GameRenderer::getPositionTexShader);
-            RenderSystem.setShaderTexture(0, textureId);
+        DrawContext drawContext = Renderer.getCanvas();
+        if (drawContext != null) {
+            drawContext.beforeExternalGlDraw();
         }
-        Tesselator tesselator = Tesselator.getInstance();
-        BufferBuilder bufferBuilder = tesselator.getBuilder();
-        bufferBuilder.begin(VertexFormat.Mode.QUADS, DefaultVertexFormat.POSITION_TEX);
-        bufferBuilder.vertex(matrix4f, x, y, 0.0f).uv(0.0f, 0.0f).endVertex();
-        bufferBuilder.vertex(matrix4f, x, y + height, 0.0f).uv(0.0f, 1.0f).endVertex();
-        bufferBuilder.vertex(matrix4f, x + width, y + height, 0.0f).uv(1.0f, 1.0f).endVertex();
-        bufferBuilder.vertex(matrix4f, x + width, y, 0.0f).uv(1.0f, 0.0f).endVertex();
-        BufferUploader.drawWithShader(bufferBuilder.end());
-        RenderHelper.resetShaderColor();
+        try {
+            Matrix4f matrix4f = poseStack.last().pose();
+            RenderHelper.setShaderColor(ColorUtil.withAlpha(color, alpha));
+            if (textureId != -1) {
+                RenderSystem.setShader(GameRenderer::getPositionTexShader);
+                RenderSystem.setShaderTexture(0, textureId);
+            }
+            Tesselator tesselator = Tesselator.getInstance();
+            BufferBuilder bufferBuilder = tesselator.getBuilder();
+            bufferBuilder.begin(VertexFormat.Mode.QUADS, DefaultVertexFormat.POSITION_TEX);
+            bufferBuilder.vertex(matrix4f, x, y, 0.0f).uv(0.0f, 0.0f).endVertex();
+            bufferBuilder.vertex(matrix4f, x, y + height, 0.0f).uv(0.0f, 1.0f).endVertex();
+            bufferBuilder.vertex(matrix4f, x + width, y + height, 0.0f).uv(1.0f, 1.0f).endVertex();
+            bufferBuilder.vertex(matrix4f, x + width, y, 0.0f).uv(1.0f, 0.0f).endVertex();
+            BufferUploader.drawWithShader(bufferBuilder.end());
+            RenderHelper.resetShaderColor();
+        } finally {
+            if (drawContext != null) {
+                drawContext.afterExternalGlDraw();
+            }
+        }
     }
 
     public static void drawShadow(PoseStack poseStack, float x, float y, float width, float height, int blurRadius, int color) {
+        if (Renderer.isSkikoEnabled()) {
+            final float shadowX = x;
+            final float shadowY = y;
+            final float shadowWidth = width;
+            final float shadowHeight = height;
+            Renderer.renderWithPose(poseStack, drawContext ->
+                    drawContext.drawBlurredRoundedRect(RoundedRectangle.ofXYWHR(shadowX, shadowY, shadowWidth, shadowHeight, 0.0f),
+                            0.0f, 0.0f, Math.max(0.01f, blurRadius), blurRadius, color));
+            return;
+        }
         int cacheKey;
         x -= (float)blurRadius;
         y -= (float)blurRadius;

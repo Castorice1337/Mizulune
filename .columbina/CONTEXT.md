@@ -20,6 +20,7 @@ OpenZen 当前是一个已存在的 Minecraft Forge 1.20.1 client 仓库，Java/
 |---|---|---|---|---|---|
 | 0001 | project-init | complete | 初始化 Columbina 工作流 | `AGENTS.md`, `.columbina/INIT.md`, `.columbina/CONTEXT.md` | 未测试 |
 | 0002 | git-publication-setup | partial | 初始化本地 Git 仓库并提交公开源码；GitHub repo 创建因 `gh` token 失效暂未完成 | `.gitignore`, `.columbina/phase/0002_git-publication-setup/CONTEXT.md` | 未测试 |
+| 0003 | skiko-2d-backend | partial | 增加 Skiko 2D UI/HUD 渲染后端骨架、验证面板和开发期 Skiko native runtime 抽取，默认保留 legacy fallback | `Renderer.java`, `RenderBackendProbe.java`, `DrawContext.java`, `SkikoBackend.java`, `GlHelper.java`, `RenderUtil.java`, `build.gradle` | WAITING_USER_PASS |
 
 ## 已有核心模块
 
@@ -30,6 +31,7 @@ OpenZen 当前是一个已存在的 Minecraft Forge 1.20.1 client 仓库，Java/
 | Event system | `src/main/java/shit/zen/event` | reflection-based event bus，使用 `@EventTarget` |
 | Settings/config | `src/main/java/shit/zen/settings`, `src/main/java/shit/zen/config` | 模块设置与持久化配置 |
 | GUI/HUD | `src/main/java/shit/zen/gui`, `src/main/java/shit/zen/hud`, `src/main/resources/webui` | Click GUI、HUD、Web UI 静态资源 |
+| 2D render backend | `src/main/java/shit/zen/render`, `src/main/java/shit/zen/render/backend` | `Renderer`/`DrawContext` 上层 API 保持，新增 legacy 与 Skiko backend 切换 |
 | Patch system | `src/main/java/asm/patchify`, `src/main/java/shit/zen/patch` | Java agent patch annotation/transformer 和具体 patch 类 |
 | Native DLL | `native/dll` | 注入目标 JVM 并加载嵌入 jar |
 | Native loader | `native/loader` | Qt Widgets GUI loader，嵌入并注入 DLL |
@@ -41,6 +43,7 @@ OpenZen 当前是一个已存在的 Minecraft Forge 1.20.1 client 仓库，Java/
 - 事件分发已有 `EventBus`、`EventTarget`、`Cancellable` 体系。
 - 配置持久化已有 `ModulesConfig`、`ValuesConfig` 和 config manager 相关代码。
 - 渲染、游戏、数学、rotation、misc helper 已在 `shit.zen.utils.*` 下存在。
+- 2D UI/HUD 渲染后端已有 `RenderBackend`、`LegacyGlBackend`、`SkikoBackend`，不要再创建平行渲染入口。
 - GUI setting renderer 已在 `shit.zen.gui.panel.setting` 和 legacy/new click GUI 相关包中存在。
 - Patch annotation/agent/transformer 已在 `asm.patchify` 中存在。
 - Native 注入、manual map、resource embedding 已在 `native/dll` 和 `native/loader` 中存在。
@@ -49,5 +52,6 @@ OpenZen 当前是一个已存在的 Minecraft Forge 1.20.1 client 仓库，Java/
 
 - 当前本地 JDK 17、CMake、MSVC、vcpkg 是否都可用于完整 `.\gradlew.bat dll` 验证：未测试。
 - `runClient0` 在当前机器能否成功启动 Minecraft client：未测试。
+- Skiko backend 需用 `.\gradlew.bat runClient0 -PopenzenRenderBackend=SKIKO` 做游戏内视觉验收：未测试。
 - Web UI `http://127.0.0.1:8089` 的当前运行行为：未测试。
 - GitHub CLI 需要重新认证；`gh auth status` 显示 `Castorice1337` 的 token invalid。

@@ -73,8 +73,13 @@ public final class GlHelper {
         float hatU2 = 0.75f;
         float hatV2 = 0.25f;
         Matrix4f pose = drawContext.getPoseStack().last().pose();
-        roundedRectShader.drawTextured(pose, x, y, x + width, y + height, radius, radius, radius, radius, packedColor, glId, baseU1, baseV1, baseU2, baseV2);
-        roundedRectShader.drawTextured(pose, x, y, x + width, y + height, radius, radius, radius, radius, packedColor, glId, hatU1, hatV1, hatU2, hatV2);
+        drawContext.beforeExternalGlDraw();
+        try {
+            roundedRectShader.drawTextured(pose, x, y, x + width, y + height, radius, radius, radius, radius, packedColor, glId, baseU1, baseV1, baseU2, baseV2);
+            roundedRectShader.drawTextured(pose, x, y, x + width, y + height, radius, radius, radius, radius, packedColor, glId, hatU1, hatV1, hatU2, hatV2);
+        } finally {
+            drawContext.afterExternalGlDraw();
+        }
         if (player.hurtTime > 0) {
             int hurtColor = ColorUtil.withAlphaColor(new Color(255, 0, 0, player.hurtTime * 18), alpha).getRGB();
             Paint paint = new Paint().setColor(hurtColor);
