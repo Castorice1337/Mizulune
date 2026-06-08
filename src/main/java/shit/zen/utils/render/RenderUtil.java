@@ -41,9 +41,11 @@ import shit.zen.ClientBase;
 import shit.zen.render.DrawContext;
 import shit.zen.render.GaussianBlur;
 import shit.zen.render.Paint;
+import shit.zen.render.Rectangle;
 import shit.zen.render.Renderer;
 import shit.zen.render.ResourceLocationWrapper;
 import shit.zen.render.RoundedRectangle;
+import shit.zen.render.Texture;
 import shit.zen.render.shader.ShaderFormats;
 import shit.zen.render.shader.ShaderProgram;
 import shit.zen.utils.animation.Timer;
@@ -162,9 +164,14 @@ extends ClientBase {
     public static void drawRoundedRect(PoseStack poseStack, float x, float y, float width, float height, float radius, float smoothness, int color) {
         if (Renderer.canUseSkiko2D(poseStack)) {
             Renderer.renderWithPose(poseStack, drawContext -> {
-                try (Paint paint = new Paint()) {
-                    paint.setColor(color);
-                    drawContext.drawRoundedRect(RoundedRectangle.ofXYWHR(x, y, width, height, radius), paint);
+                if (smoothness > 1.01f) {
+                    drawContext.drawBlurredRoundedRect(RoundedRectangle.ofXYWHR(x, y, width, height, radius),
+                            0.0f, 0.0f, Math.max(0.01f, smoothness * 0.5f), 0.0f, color);
+                } else {
+                    try (Paint paint = new Paint()) {
+                        paint.setColor(color);
+                        drawContext.drawRoundedRect(RoundedRectangle.ofXYWHR(x, y, width, height, radius), paint);
+                    }
                 }
             });
             return;
@@ -265,6 +272,19 @@ extends ClientBase {
     }
 
     public static void drawBlurredRect(PoseStack poseStack, float x, float y, float width, float height, float radius, float blurRadius, float opacity, int color) {
+        if (Renderer.canUseSkiko2D(poseStack)) {
+            Renderer.renderWithPose(poseStack, drawContext -> {
+                boolean rendered = drawContext.getBackend().drawBackdropBlurredRect(drawContext, x, y, width, height, radius, blurRadius, opacity, color);
+                if (!rendered) {
+                    try (Paint paint = new Paint()) {
+                        int fallbackColor = color == 0 ? ColorUtil.fromARGB(24, 24, 24, 120) : color;
+                        paint.setColor(ColorUtil.withAlpha(fallbackColor, Math.max(0.0f, Math.min(1.0f, opacity))));
+                        drawContext.drawRoundedRect(RoundedRectangle.ofXYWHR(x, y, width, height, radius), paint);
+                    }
+                }
+            });
+            return;
+        }
         try {
             PoseStack blitPoseStack;
             boolean shouldBlur;
@@ -710,6 +730,16 @@ extends ClientBase {
     }
 
     public static void drawTexture(ResourceLocation resourceLocation, PoseStack poseStack, float x, float y, float width, float height, float alpha, int color) {
+        if (resourceLocation != null && Renderer.canUseSkiko2D(poseStack) && Renderer.getBackend().canDrawResourceTexture(resourceLocation)) {
+            Renderer.renderWithPose(poseStack, drawContext -> {
+                Paint paint = new Paint().setColor(ColorUtil.withAlpha(color, alpha));
+                drawContext.drawTexture(new Texture(resourceLocation, 0, 0),
+                        Rectangle.ofXYWH(0.0f, 0.0f, 0.0f, 0.0f),
+                        Rectangle.ofXYWH(x, y, width, height),
+                        paint);
+            });
+            return;
+        }
         RenderUtil.drawTexture(mc.getTextureManager().getTexture(resourceLocation).getId(), poseStack, x, y, width, height, alpha, color);
     }
 
@@ -749,7 +779,7 @@ extends ClientBase {
             final float shadowHeight = height;
             Renderer.renderWithPose(poseStack, drawContext ->
                     drawContext.drawBlurredRoundedRect(RoundedRectangle.ofXYWHR(shadowX, shadowY, shadowWidth, shadowHeight, 0.0f),
-                            0.0f, 0.0f, Math.max(0.01f, blurRadius), blurRadius, color));
+                            0.0f, 0.0f, Math.max(0.01f, blurRadius), 0.0f, color));
             return;
         }
         int cacheKey;

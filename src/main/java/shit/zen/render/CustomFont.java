@@ -12,9 +12,11 @@ import it.unimi.dsi.fastutil.objects.*;
 
 import java.awt.Color;
 import java.awt.Font;
+import java.awt.font.FontRenderContext;
+import java.awt.geom.AffineTransform;
+import java.awt.geom.Rectangle2D;
 import java.io.Closeable;
 import java.util.List;
-import java.util.Objects;
 import java.util.Random;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
@@ -68,6 +70,9 @@ implements Closeable {
     private final int pageSize;
     private final int charsPerPage;
     private final String preloadChars;
+    private final String fontResourceName;
+    private final Char2IntArrayMap metricWidthCache = new Char2IntArrayMap();
+    private final Char2IntArrayMap metricHeightCache = new Char2IntArrayMap();
     private int scale = 0;
     private Font scaledFont;
     private int guiScaleCache = -1;
@@ -79,16 +84,25 @@ implements Closeable {
     private FontMetricsImpl fontMetrics;
 
     public CustomFont(Font font, float fontSize, int pageSize, int charsPerPage, @Nullable String preloadChars) {
+        this(font, fontSize, pageSize, charsPerPage, preloadChars, null);
+    }
+
+    public CustomFont(Font font, float fontSize, int pageSize, int charsPerPage, @Nullable String preloadChars, @Nullable String fontResourceName) {
         this.fontSize = fontSize;
         this.pageSize = pageSize;
         this.charsPerPage = charsPerPage;
         this.preloadChars = preloadChars;
+        this.fontResourceName = fontResourceName;
         this.fontMetrics = new FontMetricsImpl(font);
         this.initFont(font, fontSize);
     }
 
     public CustomFont(Font font, float fontSize) {
         this(font, fontSize, 256, 5, null);
+    }
+
+    public CustomFont(Font font, float fontSize, @Nullable String fontResourceName) {
+        this(font, fontSize, 256, 5, null, fontResourceName);
     }
 
     private static int alignToPageBoundary(int value, int pageSize) {
@@ -109,6 +123,12 @@ implements Closeable {
         return result.toString();
     }
 
+    @Nullable
+    public static Integer getMinecraftColorCode(char code) {
+        char upper = Character.toUpperCase(code);
+        return MC_COLOR_CODES.containsKey(upper) ? MC_COLOR_CODES.get(upper) : null;
+    }
+
     private void checkGuiScaleChanged() {
         int guiScale = (int)ClientBase.mc.getWindow().getGuiScale();
         if (guiScale != this.guiScaleCache) {
@@ -126,6 +146,8 @@ implements Closeable {
         this.scale = Math.max(2, this.guiScaleCache * 2);
         this.scaledFont = font.deriveFont(fontSize * (float)this.scale);
         this.fontMetrics = new FontMetricsImpl(this.scaledFont);
+        this.metricWidthCache.clear();
+        this.metricHeightCache.clear();
         if (this.preloadChars != null && !this.preloadChars.isEmpty()) {
             this.preloadFuture = this.startPreload();
         }
@@ -199,6 +221,44 @@ implements Closeable {
         }
 
         this.checkGuiScaleChanged();
+        if (this.drawStringSkiko(poseStack, text, x, y, baseR, baseG, baseB, alpha, rainbow, rainbowOffset)) {
+            return;
+        }
+        DrawContext currentDrawContext = Renderer.getCanvas();
+        boolean externalGlDraw = currentDrawContext != null
+                && currentDrawContext.getBackend() != null
+                && currentDrawContext.getBackend().handles2D()
+                && !StencilHelper.isStencilActive();
+        if (externalGlDraw) {
+            currentDrawContext.beforeExternalGlDraw();
+        }
+        try {
+            this.drawStringRGBFullLegacy(poseStack, text, x, y, baseR, baseG, baseB, alpha, rainbow, rainbowOffset);
+        } finally {
+            if (externalGlDraw) {
+                currentDrawContext.afterExternalGlDraw();
+            }
+        }
+    }
+
+    private boolean drawStringSkiko(PoseStack poseStack, String text, float x, float y, float baseR, float baseG, float baseB, float alpha, boolean rainbow, int rainbowOffset) {
+        if (text == null || text.isEmpty() || StencilHelper.isStencilActive()) {
+            return text == null || text.isEmpty();
+        }
+        DrawContext currentDrawContext = Renderer.getCanvas();
+        if (currentDrawContext == null
+                || currentDrawContext.getBackend() == null
+                || !currentDrawContext.getBackend().handles2D()) {
+            return false;
+        }
+        try {
+            return currentDrawContext.getBackend().drawCustomFontText(currentDrawContext, this, text, poseStack, x, y, baseR, baseG, baseB, alpha, rainbow, rainbowOffset);
+        } catch (Throwable ignored) {
+            return false;
+        }
+    }
+
+    private void drawStringRGBFullLegacy(PoseStack poseStack, String text, float x, float y, float baseR, float baseG, float baseB, float alpha, boolean rainbow, int rainbowOffset) {
         float curR = baseR;
         float curG = baseG;
         float curB = baseB;
@@ -306,6 +366,7 @@ implements Closeable {
     }
 
     public float getStringWidth(String text) {
+        this.checkGuiScaleChanged();
         char[] chars = CustomFont.stripFormatting(text).toCharArray();
         float lineWidth = 0.0f;
         float maxWidth = 0.0f;
@@ -315,13 +376,13 @@ implements Closeable {
                 lineWidth = 0.0f;
                 continue;
             }
-            Glyph glyph = this.getOrLoadGlyph(c);
-            lineWidth += (glyph == null ? 0.0f : (float)glyph.width() / (float)this.scale) + this.letterSpacing;
+            lineWidth += this.getGlyphWidth(c) + this.letterSpacing;
         }
         return Math.max(lineWidth, maxWidth);
     }
 
     public float getStringHeight(String text) {
+        this.checkGuiScaleChanged();
         char[] chars = CustomFont.stripFormatting(text).toCharArray();
         if (chars.length == 0) {
             chars = new char[]{' '};
@@ -331,14 +392,13 @@ implements Closeable {
         for (char c : chars) {
             if (c == '\n') {
                 if (lineHeight == 0.0f) {
-                    lineHeight = this.getOrLoadGlyph(' ') == null ? 0.0f : (float)((Glyph)(Objects.requireNonNull((Object)(this.getOrLoadGlyph(' '))))).height() / (float)this.scale;
+                    lineHeight = this.getGlyphHeight(' ');
                 }
                 totalHeight += lineHeight;
                 lineHeight = 0.0f;
                 continue;
             }
-            Glyph glyph = this.getOrLoadGlyph(c);
-            lineHeight = Math.max(glyph == null ? 0.0f : (float)glyph.height() / (float)this.scale, lineHeight);
+            lineHeight = Math.max(this.getGlyphHeight(c), lineHeight);
         }
         return lineHeight + totalHeight;
     }
@@ -355,6 +415,50 @@ implements Closeable {
         return this.scale;
     }
 
+    public float getFontSize() {
+        return this.fontSize;
+    }
+
+    public float getLetterSpacing() {
+        return this.letterSpacing;
+    }
+
+    @Nullable
+    public String getFontResourceName() {
+        return this.fontResourceName;
+    }
+
+    public float getGlyphWidth(char c) {
+        return (float)this.getMetricWidthPixels(c) / (float)Math.max(1, this.scale);
+    }
+
+    public float getGlyphHeight(char c) {
+        return (float)this.getMetricHeightPixels(c) / (float)Math.max(1, this.scale);
+    }
+
+    private int getMetricWidthPixels(char c) {
+        if (this.metricWidthCache.containsKey(c)) {
+            return this.metricWidthCache.get(c);
+        }
+        int width = (int)Math.ceil(this.getBounds(c).getWidth());
+        this.metricWidthCache.put(c, width);
+        return width;
+    }
+
+    private int getMetricHeightPixels(char c) {
+        if (this.metricHeightCache.containsKey(c)) {
+            return this.metricHeightCache.get(c);
+        }
+        int height = (int)Math.ceil(this.getBounds(c).getHeight());
+        this.metricHeightCache.put(c, height);
+        return height;
+    }
+
+    private Rectangle2D getBounds(char c) {
+        FontRenderContext fontRenderContext = new FontRenderContext(new AffineTransform(), true, false);
+        return this.scaledFont.getStringBounds(String.valueOf(c), fontRenderContext);
+    }
+
     public void close() {
         try {
             if (this.preloadFuture != null && !this.preloadFuture.isDone() && !this.preloadFuture.isCancelled()) {
@@ -367,6 +471,8 @@ implements Closeable {
             }
             this.glyphPages.clear();
             this.glyphCache.clear();
+            this.metricWidthCache.clear();
+            this.metricHeightCache.clear();
             this.initialized = false;
         } catch (Exception exception) {
             // empty catch block
@@ -376,7 +482,7 @@ implements Closeable {
     @Contract(value="-> new", pure=true)
     @NotNull
     public static ResourceLocation getTempResourceLocation() {
-        return ResourceLocation.tryParse("zen:temp/" + CustomFont.generateRandomName());
+        return ResourceLocation.tryParse("mizulune:temp/" + CustomFont.generateRandomName());
     }
 
     private static String generateRandomName() {

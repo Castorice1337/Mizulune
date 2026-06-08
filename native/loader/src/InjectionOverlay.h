@@ -45,7 +45,7 @@ private:
 
     unsigned long pid_;
     QString       target_;
-    QString       statusText_       = QStringLiteral("Injecting OpenZen…");
+    QString       statusText_       = QStringLiteral("Injecting Mizulune Client…");
 
     qreal spinnerAngle_      = 0.0;
     qreal progress_          = 0.0;

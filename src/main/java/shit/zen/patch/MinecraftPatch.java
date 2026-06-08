@@ -138,5 +138,6 @@ public class MinecraftPatch {
     @Inject(method = "resizeDisplay", desc = "()V", at = @At(At.Type.TAIL))
     public static void onResizeDisplay(Minecraft minecraft, CallbackInfo callbackInfo) {
         Renderer.setGuiScaleVerified((float) minecraft.getWindow().getGuiScale());
+        Renderer.resetWindowFramebufferBounds(minecraft.getWindow().getWidth(), minecraft.getWindow().getHeight());
     }
 }

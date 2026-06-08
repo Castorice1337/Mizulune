@@ -63,6 +63,9 @@ public final class GlHelper {
         int glId = abstractTexture.getId();
         DrawContext drawContext = GlHelper.getCanvas();
         int packedColor = (int)Math.max(0.0f, Math.min(255.0f, alpha * 255.0f)) << 24 | 0xFFFFFF;
+        boolean drawnByBackend = drawContext.getBackend() != null
+                && drawContext.getBackend().handles2D()
+                && drawContext.getBackend().drawPlayerHead(drawContext, resourceLocation, x, y, width, height, alpha, radius);
         RoundedRectShader roundedRectShader = DrawContext.getRoundedRectShader();
         float baseU1 = 0.125f;
         float baseV1 = 0.125f;
@@ -72,13 +75,15 @@ public final class GlHelper {
         float hatV1 = 0.125f;
         float hatU2 = 0.75f;
         float hatV2 = 0.25f;
-        Matrix4f pose = drawContext.getPoseStack().last().pose();
-        drawContext.beforeExternalGlDraw();
-        try {
-            roundedRectShader.drawTextured(pose, x, y, x + width, y + height, radius, radius, radius, radius, packedColor, glId, baseU1, baseV1, baseU2, baseV2);
-            roundedRectShader.drawTextured(pose, x, y, x + width, y + height, radius, radius, radius, radius, packedColor, glId, hatU1, hatV1, hatU2, hatV2);
-        } finally {
-            drawContext.afterExternalGlDraw();
+        if (!drawnByBackend) {
+            Matrix4f pose = drawContext.getPoseStack().last().pose();
+            drawContext.beforeExternalGlDraw();
+            try {
+                roundedRectShader.drawTextured(pose, x, y, x + width, y + height, radius, radius, radius, radius, packedColor, glId, baseU1, baseV1, baseU2, baseV2);
+                roundedRectShader.drawTextured(pose, x, y, x + width, y + height, radius, radius, radius, radius, packedColor, glId, hatU1, hatV1, hatU2, hatV2);
+            } finally {
+                drawContext.afterExternalGlDraw();
+            }
         }
         if (player.hurtTime > 0) {
             int hurtColor = ColorUtil.withAlphaColor(new Color(255, 0, 0, player.hurtTime * 18), alpha).getRGB();

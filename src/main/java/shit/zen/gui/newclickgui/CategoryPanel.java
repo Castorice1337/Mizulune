@@ -16,7 +16,12 @@ import shit.zen.gui.newclickgui.SettingElement;
 import shit.zen.gui.newclickgui.UIElement;
 import shit.zen.modules.Category;
 import shit.zen.modules.Module;
+import shit.zen.render.DrawContext;
 import shit.zen.render.FontStore;
+import shit.zen.render.Paint;
+import shit.zen.render.Rectangle;
+import shit.zen.render.Renderer;
+import shit.zen.render.RoundedRectangle;
 import shit.zen.render.StencilHelper;
 import shit.zen.utils.animation.SmoothAnimationTimer;
 import shit.zen.utils.math.Easings;
@@ -119,26 +124,98 @@ extends UIElement {
         float shadowSize = 12.0f;
         RenderUtil.drawRoundedRect(poseStack, this.posX - shadowSize, this.posY - shadowSize, 120.0f + shadowSize * 2.0f, this.panelHeight + shadowSize * 2.0f, 6.0f + shadowSize / 2.0f, shadowSize, ColorUtil.fromARGB(0, 0, 0, (int)(80.0f * alpha * 1.0f)));
         RenderUtil.drawRoundedRect(poseStack, this.posX, this.posY, 120.0f, this.panelHeight, 6.0f, ColorUtil.withAlpha(BG_COLOR, alpha));
-        StencilHelper.beginWrite(false);
-        RenderUtil.drawRoundedRect(poseStack, this.posX + 0.5f, this.posY, 118.0f, 20.0f, 6.0f, -1);
-        StencilHelper.beginRead(true);
-        RenderUtil.drawGradientH(poseStack, this.posX, this.posY, 120.0f, 1.0f, ColorUtil.withAlpha(ColorUtil.animateColorOffset(-13768502, ACCENT_COLOR_DARK, 100L), alpha), ColorUtil.withAlpha(ColorUtil.animateColorOffset(-13768502, ACCENT_COLOR_DARK, 2000L), alpha));
-        StencilHelper.end();
+        if (Renderer.canUseSkiko2D(poseStack) && Renderer.getCanvas() != null) {
+            DrawContext drawContext = Renderer.getCanvas();
+            boolean pushedPose = false;
+            boolean saved = false;
+            try {
+                drawContext.getBackend().pushExternalPose(poseStack);
+                pushedPose = true;
+                drawContext.save();
+                saved = true;
+                drawContext.clipRoundedRect(RoundedRectangle.ofXYWHR(this.posX + 0.5f, this.posY, 118.0f, 20.0f, 6.0f), true);
+                Paint paint = new Paint().setGradCoords(new Paint.GradientCoords(
+                        this.posX, this.posY, this.posX + 120.0f, this.posY,
+                        ColorUtil.withAlpha(ColorUtil.animateColorOffset(-13768502, ACCENT_COLOR_DARK, 100L), alpha),
+                        ColorUtil.withAlpha(ColorUtil.animateColorOffset(-13768502, ACCENT_COLOR_DARK, 2000L), alpha)));
+                drawContext.drawRect(Rectangle.ofXYWH(this.posX, this.posY, 120.0f, 1.0f), paint);
+            } finally {
+                if (saved) {
+                    drawContext.restore();
+                }
+                if (pushedPose) {
+                    drawContext.getBackend().popExternalPose();
+                }
+            }
+        } else {
+            boolean headerStencilStarted = false;
+            try {
+                StencilHelper.beginWrite(false);
+                headerStencilStarted = true;
+                RenderUtil.drawRoundedRect(poseStack, this.posX + 0.5f, this.posY, 118.0f, 20.0f, 6.0f, -1);
+                StencilHelper.beginRead(true);
+                RenderUtil.drawGradientH(poseStack, this.posX, this.posY, 120.0f, 1.0f, ColorUtil.withAlpha(ColorUtil.animateColorOffset(-13768502, ACCENT_COLOR_DARK, 100L), alpha), ColorUtil.withAlpha(ColorUtil.animateColorOffset(-13768502, ACCENT_COLOR_DARK, 2000L), alpha));
+            } finally {
+                if (headerStencilStarted) {
+                    StencilHelper.end();
+                }
+            }
+        }
         FontStore.AXIFORMA_EXTRABOLD_18.drawString(poseStack, this.category.displayName, this.posX + 8.0f, this.posY + (20.0f - FontStore.AXIFORMA_EXTRABOLD_18.getFontHeight()) / 2.0f + 3.0f, ColorUtil.withAlpha(-1, alpha));
         float scrollOffset = this.scrollTimer.getValueF();
         float elementY = this.posY + 20.0f - scrollOffset;
-        StencilHelper.beginWrite(false);
-        RenderUtil.drawFilledRect(poseStack, this.posX + 0.5f, this.posY + 20.0f, 119.0f, 6.0f, -1);
-        RenderUtil.drawRoundedRect(poseStack, this.posX, this.posY + 20.0f, 120.0f, this.panelHeight - 20.0f - 0.5f, 6.0f, -1);
-        StencilHelper.beginRead(true);
-        for (ModuleElement moduleElement : this.moduleElements) {
-            moduleElement.setX(this.posX);
-            moduleElement.setY(elementY);
-            moduleElement.render(clickGui, guiGraphics, poseStack, mouseX, mouseY, alpha, partialTicks);
-            elementY += moduleElement.getHeight();
+        if (Renderer.canUseSkiko2D(poseStack) && Renderer.getCanvas() != null) {
+            DrawContext drawContext = Renderer.getCanvas();
+            PoseStack contentPoseStack = new PoseStack();
+            boolean pushedPose = false;
+            boolean saved = false;
+            try {
+                drawContext.getBackend().pushExternalPose(poseStack);
+                pushedPose = true;
+                drawContext.save();
+                saved = true;
+                drawContext.clipRoundedRect(RoundedRectangle.ofXYWHRadii(this.posX, this.posY + 20.0f, 120.0f, this.panelHeight - 20.0f - 0.5f, new float[]{0.0f, 0.0f, 6.0f, 6.0f}), true);
+                for (ModuleElement moduleElement : this.moduleElements) {
+                    moduleElement.setX(this.posX);
+                    moduleElement.setY(elementY);
+                    moduleElement.render(clickGui, guiGraphics, contentPoseStack, mouseX, mouseY, alpha, partialTicks);
+                    elementY += moduleElement.getHeight();
+                }
+                Paint fadePaint = new Paint().setGradCoords(new Paint.GradientCoords(
+                        this.posX + 0.5f, this.posY + 20.0f - 0.5f,
+                        this.posX + 0.5f, this.posY + 20.0f - 0.5f + 6.0f,
+                        ColorUtil.withAlpha(-16777216, 0.36f * alpha),
+                        ColorUtil.withAlpha(-16777216, 0.0f)));
+                drawContext.drawRect(Rectangle.ofXYWH(this.posX + 0.5f, this.posY + 20.0f - 0.5f, 119.0f, 6.0f), fadePaint);
+            } finally {
+                if (saved) {
+                    drawContext.restore();
+                }
+                if (pushedPose) {
+                    drawContext.getBackend().popExternalPose();
+                }
+            }
+        } else {
+            boolean bodyStencilStarted = false;
+            try {
+                StencilHelper.beginWrite(false);
+                bodyStencilStarted = true;
+                RenderUtil.drawFilledRect(poseStack, this.posX + 0.5f, this.posY + 20.0f, 119.0f, 6.0f, -1);
+                RenderUtil.drawRoundedRect(poseStack, this.posX, this.posY + 20.0f, 120.0f, this.panelHeight - 20.0f - 0.5f, 6.0f, -1);
+                StencilHelper.beginRead(true);
+                for (ModuleElement moduleElement : this.moduleElements) {
+                    moduleElement.setX(this.posX);
+                    moduleElement.setY(elementY);
+                    moduleElement.render(clickGui, guiGraphics, poseStack, mouseX, mouseY, alpha, partialTicks);
+                    elementY += moduleElement.getHeight();
+                }
+                RenderUtil.drawGradientV(poseStack, this.posX + 0.5f, this.posY + 20.0f - 0.5f, 119.0f, 6.0f, ColorUtil.withAlpha(-16777216, 0.36f * alpha), ColorUtil.withAlpha(-16777216, 0.0f));
+            } finally {
+                if (bodyStencilStarted) {
+                    StencilHelper.end();
+                }
+            }
         }
-        RenderUtil.drawGradientV(poseStack, this.posX + 0.5f, this.posY + 20.0f - 0.5f, 119.0f, 6.0f, ColorUtil.withAlpha(-16777216, 0.36f * alpha), ColorUtil.withAlpha(-16777216, 0.0f));
-        StencilHelper.end();
         float tooltipAmount = this.tooltipTimer.getValueF();
         if (tooltipAmount > 0.0f) {
             float tooltipWidth = FontStore.AXIFORMA_REGULAR_16.getStringWidth(this.tooltipText);
