@@ -121,13 +121,12 @@ minecraft {
             // own native loader does not reliably find the separate resource-only runtime
             // jar. Point it at an extracted runtime directory for dev client runs.
             jvmArgs.add "-Dskiko.library.path=${skikoRuntimeDir.get().asFile.absolutePath}".toString()
-            def renderBackend = project.findProperty('openzenRenderBackend') ?: System.getProperty('openzen.render.backend')
+            def renderBackend = project.findProperty('mizuluneRenderBackend')
+                    ?: project.findProperty('openzenRenderBackend')
+                    ?: System.getProperty('mizulune.render.backend')
+                    ?: System.getProperty('openzen.render.backend')
             if (renderBackend != null && renderBackend.toString().trim()) {
-                jvmArgs.add "-Dopenzen.render.backend=${renderBackend}".toString()
-            }
-            def renderProbe = project.findProperty('openzenRenderProbe') ?: System.getProperty('openzen.render.probe')
-            if (renderProbe != null && renderProbe.toString().trim()) {
-                jvmArgs.add "-Dopenzen.render.probe=${renderProbe}".toString()
+                jvmArgs.add "-Dmizulune.render.backend=${renderBackend}".toString()
             }
         }
 
@@ -193,8 +192,8 @@ dependencies {
     // Dev Auth
     runtimeOnly("me.djtheredstoner:DevAuth-forge-latest:1.2.2")
 
-    // Skiko/Skia 2D renderer backend. First target is Windows x64 runClient0;
-    // native DLL dependency loading is handled in a later phase.
+    // Skiko/Skia 2D renderer backend. The same resolved runtime jars are also
+    // embedded under openzen/dll-libs so the DLL injection path can expose them.
     implementation 'org.jetbrains.skiko:skiko-awt-runtime-windows-x64:0.148.1'
     implementation 'org.jetbrains.kotlin:kotlin-stdlib:2.3.20'
     minecraftLibrary 'org.jetbrains.skiko:skiko-awt-runtime-windows-x64:0.148.1'
@@ -238,6 +237,12 @@ tasks.named('processResources', ProcessResources).configure {
 
 // Example for how to get properties into the manifest for reading at runtime.
 tasks.named('jar', Jar).configure {
+    from({ configurations.skikoNativeRuntime }) {
+        into 'openzen/dll-libs'
+        include '*.jar'
+        duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    }
+
     manifest {
         attributes([
                 'Specification-Title'     : mod_id,

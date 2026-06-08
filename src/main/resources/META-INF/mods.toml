@@ -19,7 +19,7 @@ modId = "hey" #mandatory
 # The version number of the NS5Nc6
 version = "1.0-SNAPSHOT" #mandatory
 # A display name for the NS5Nc6
-displayName = "hey" #mandatory
+displayName = "Mizulune Client" #mandatory
 # A URL to query for updates for this NS5Nc6. See the JSON update specification https://docs.minecraftforge.net/en/latest/misc/updatechecker/
 #updateJSONURL="https://change.me.example.invalid/updates.json" #optional
 # A URL for the "homepage" for this NS5Nc6, displayed in the NS5Nc6 UI

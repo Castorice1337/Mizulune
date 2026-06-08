@@ -42,11 +42,19 @@ public class GameRendererPatch {
         if (ZenClient.isReady()) {
             ZenClient.getInstance().getEventBus().call(event);
             graphics.pose().pushPose();
-            Renderer.render(graphics, glEvent -> {
-                GlRenderEvent glRender = new GlRenderEvent(graphics, graphics.pose(), glEvent);
-                ZenClient.getInstance().getEventBus().call(glRender);
-            });
-            graphics.pose().popPose();
+            try {
+                Renderer.render(graphics, drawContext -> {
+                    drawContext.beforeExternalGlDraw();
+                    try {
+                        GlRenderEvent glRender = new GlRenderEvent(graphics, graphics.pose(), drawContext);
+                        ZenClient.getInstance().getEventBus().call(glRender);
+                    } finally {
+                        drawContext.afterExternalGlDraw();
+                    }
+                });
+            } finally {
+                graphics.pose().popPose();
+            }
         }
     }
 

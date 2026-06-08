@@ -24,7 +24,7 @@ extends ClientBase {
     private static DrawContext currentCanvas;
     private static final RenderBackend LEGACY_BACKEND = new LegacyGlBackend();
     private static boolean backendFailed = false;
-    private static BackendType configuredBackend = BackendType.fromProperty(System.getProperty("openzen.render.backend"));
+    private static BackendType configuredBackend = BackendType.fromProperty(System.getProperty("mizulune.render.backend"));
     private static RenderBackend backend = Renderer.createBackend(configuredBackend);
 
     public static DrawContext getCanvas() {
@@ -39,7 +39,13 @@ extends ClientBase {
         if (!Renderer.isSkikoEnabled()) {
             return false;
         }
-        return currentCanvas != null || Renderer.isGuiAffinePose(poseStack);
+        if (StencilHelper.isStencilActive()) {
+            return false;
+        }
+        if (currentCanvas != null) {
+            return currentCanvas.getBackend() == backend && currentCanvas.getBackend().handles2D();
+        }
+        return Renderer.isGuiAffinePose(poseStack);
     }
 
     public static RenderBackend getBackend() {
@@ -64,7 +70,11 @@ extends ClientBase {
     }
 
     public static void setBackend(BackendType type) {
-        configuredBackend = type == null ? BackendType.OPENGL_LEGACY : type;
+        BackendType nextBackend = type == null ? BackendType.SKIKO : type;
+        if (configuredBackend == nextBackend && !backendFailed && backend != null) {
+            return;
+        }
+        configuredBackend = nextBackend;
         backendFailed = false;
         backend = Renderer.createBackend(configuredBackend);
     }
@@ -99,6 +109,7 @@ extends ClientBase {
         RenderSystem.assertOnRenderThread();
         BufferUploader.reset();
         GL33.glBindSampler(0, 0);
+        Renderer.resetWindowFramebufferBounds();
         RenderSystem.disableBlend();
         GL11.glDisable(3042);
         RenderSystem.blendFunc(770, 771);
@@ -112,9 +123,25 @@ extends ClientBase {
         RenderSystem.disableScissor();
         RenderSystem.disableDepthTest();
         GL11.glDisable(2929);
+        GL11.glDisable(2960);
         GL13.glActiveTexture(33984);
         RenderSystem.activeTexture(33984);
         RenderSystem.disableCull();
+    }
+
+    public static void resetWindowFramebufferBounds() {
+        if (mc == null || mc.getWindow() == null) {
+            return;
+        }
+        Renderer.resetWindowFramebufferBounds(mc.getWindow().getWidth(), mc.getWindow().getHeight());
+    }
+
+    public static void resetWindowFramebufferBounds(int width, int height) {
+        width = Math.max(1, width);
+        height = Math.max(1, height);
+        GL11.glViewport(0, 0, width, height);
+        RenderSystem.disableScissor();
+        GL11.glDisable(GL11.GL_SCISSOR_TEST);
     }
 
     /*
@@ -136,11 +163,32 @@ extends ClientBase {
             }
         }
         if (currentCanvas != null) {
-            RenderBackend effectiveBackend = Renderer.getEffectiveBackend();
-            if (poseStack != null && effectiveBackend.handles2D()) {
-                effectiveBackend.pushExternalPose(poseStack);
+            PoseStack requestedPoseStack = poseStack != null
+                    ? poseStack
+                    : guiGraphics != null ? guiGraphics.pose() : null;
+            RenderBackend effectiveBackend = Renderer.getEffectiveBackend(requestedPoseStack);
+            if (effectiveBackend != currentCanvas.getBackend()) {
+                boolean ownsExternalGlSection = currentCanvas.getBackend() != null
+                        && currentCanvas.getBackend().handles2D()
+                        && !StencilHelper.isStencilActive();
+                if (ownsExternalGlSection) {
+                    currentCanvas.beforeExternalGlDraw();
+                }
                 try {
-                    consumer.accept(new DrawContext(guiGraphics, poseStack, effectiveBackend));
+                    PoseStack nestedPoseStack = requestedPoseStack != null ? requestedPoseStack : currentCanvas.getPoseStack();
+                    consumer.accept(new DrawContext(guiGraphics, nestedPoseStack, effectiveBackend));
+                } finally {
+                    if (ownsExternalGlSection) {
+                        currentCanvas.afterExternalGlDraw();
+                    }
+                }
+                return;
+            }
+            PoseStack nestedPoseStack = requestedPoseStack;
+            if (nestedPoseStack != null && effectiveBackend.handles2D()) {
+                effectiveBackend.pushExternalPose(nestedPoseStack);
+                try {
+                    consumer.accept(new DrawContext(guiGraphics, nestedPoseStack, effectiveBackend));
                 } finally {
                     effectiveBackend.popExternalPose();
                 }
@@ -153,8 +201,11 @@ extends ClientBase {
         RenderSystem.enableBlend();
         RenderSystem.defaultBlendFunc();
         RenderSystem.disableCull();
-        PoseStack effectivePoseStack = poseStack;
-        RenderBackend effectiveBackend = Renderer.getEffectiveBackend();
+        PoseStack effectivePoseStack = poseStack != null
+                ? poseStack
+                : guiGraphics != null ? guiGraphics.pose() : null;
+        RenderBackend effectiveBackend = Renderer.getEffectiveBackend(effectivePoseStack);
+        boolean applyInitialPose = effectivePoseStack != null && effectiveBackend.handles2D();
         DrawContext drawContext = effectivePoseStack == null
                 ? new DrawContext(guiGraphics, effectiveBackend)
                 : new DrawContext(guiGraphics, effectivePoseStack, effectiveBackend);
@@ -163,12 +214,11 @@ extends ClientBase {
         try {
             if (effectiveBackend.handles2D()) {
                 effectiveBackend.begin(guiGraphics, drawContext.getPoseStack());
-                if (poseStack != null) {
-                    effectiveBackend.pushExternalPose(poseStack);
+                if (applyInitialPose) {
+                    effectiveBackend.pushExternalPose(effectivePoseStack);
                 }
             }
             consumer.accept(drawContext);
-            RenderBackendProbe.render(drawContext);
         } catch (Throwable throwable) {
             if (effectiveBackend.handles2D()) {
                 logger.error("Render backend {} failed, falling back to legacy OpenGL", effectiveBackend.type(), throwable);
@@ -179,7 +229,7 @@ extends ClientBase {
         } finally {
             drawContext.clearClipStack();
             if (effectiveBackend.handles2D()) {
-                if (poseStack != null) {
+                if (applyInitialPose) {
                     try {
                         effectiveBackend.popExternalPose();
                     } catch (Throwable throwable) {
@@ -212,7 +262,14 @@ extends ClientBase {
     }
 
     private static RenderBackend getEffectiveBackend() {
+        return Renderer.getEffectiveBackend(null);
+    }
+
+    private static RenderBackend getEffectiveBackend(PoseStack poseStack) {
         if (backendFailed || backend == null) {
+            return LEGACY_BACKEND;
+        }
+        if (backend.handles2D() && !Renderer.canUseSkiko2D(poseStack)) {
             return LEGACY_BACKEND;
         }
         return backend;

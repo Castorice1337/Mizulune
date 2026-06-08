@@ -6,17 +6,20 @@ public enum BackendType {
 
     public static BackendType fromProperty(String value) {
         if (value == null || value.isBlank()) {
-            return OPENGL_LEGACY;
+            return SKIKO;
         }
-        String normalized = value.trim().replace('-', '_').toUpperCase();
+        String normalized = value.trim().replace('-', '_').replace(' ', '_').toUpperCase();
         if ("SKIA".equals(normalized)) {
             return SKIKO;
+        }
+        if ("LEGACY".equals(normalized) || "OPENGL".equals(normalized)) {
+            return OPENGL_LEGACY;
         }
         for (BackendType type : values()) {
             if (type.name().equals(normalized)) {
                 return type;
             }
         }
-        return OPENGL_LEGACY;
+        return SKIKO;
     }
 }

@@ -110,11 +110,12 @@ public class DrawContext {
     }
 
     public void restore() {
-        boolean useScissor;
-        if (!this.clipStack.isEmpty() && (useScissor = this.clipStack.pop()) && this.guiGraphics != null) {
+        boolean backendActive = this.useBackend();
+        boolean useScissor = !this.clipStack.isEmpty() && this.clipStack.pop();
+        if (!backendActive && useScissor && this.guiGraphics != null) {
             this.guiGraphics.disableScissor();
         }
-        if (this.useBackend()) {
+        if (backendActive) {
             this.backend.restore(this);
         }
         this.poseStack.popPose();
@@ -592,34 +593,45 @@ public class DrawContext {
         if (texture == null) {
             return;
         }
-        if (this.useBackend()) {
+        if (this.useBackend() && texture.getResourceLocation() != null && this.backend.canDrawResourceTexture(texture.getResourceLocation())) {
             this.backend.drawTexture(this, texture, srcRect, dstRect, paint);
             return;
         }
-        this.setupTexShader();
-        if (texture.getResourceLocation() != null) {
-            RenderSystem.setShaderTexture(0, texture.getResourceLocation());
-        } else {
-            RenderSystem.setShaderTexture(0, texture.getGlId());
+        if (this.useBackend()) {
+            this.beforeExternalGlDraw();
         }
-        Matrix4f pose = this.poseStack.last().pose();
-        float[] color = DrawContext.colorToFloats(paint.getColor());
-        float u1 = srcRect.getX() / (float)texture.getWidth();
-        float v1 = srcRect.getY() / (float)texture.getHeight();
-        float u2 = srcRect.getRight() / (float)texture.getWidth();
-        float v2 = srcRect.getBottom() / (float)texture.getHeight();
-        float dstX = dstRect.getX();
-        float dstY = dstRect.getY();
-        float dstWidth = dstRect.getWidth();
-        float dstHeight = dstRect.getHeight();
-        Tesselator tesselator = Tesselator.getInstance();
-        BufferBuilder bufferBuilder = tesselator.getBuilder();
-        bufferBuilder.begin(VertexFormat.Mode.QUADS, DefaultVertexFormat.POSITION_TEX_COLOR);
-        bufferBuilder.vertex(pose, dstX, dstY, 0.0f).uv(u1, v1).color(color[0], color[1], color[2], color[3]).endVertex();
-        bufferBuilder.vertex(pose, dstX, dstY + dstHeight, 0.0f).uv(u1, v2).color(color[0], color[1], color[2], color[3]).endVertex();
-        bufferBuilder.vertex(pose, dstX + dstWidth, dstY + dstHeight, 0.0f).uv(u2, v2).color(color[0], color[1], color[2], color[3]).endVertex();
-        bufferBuilder.vertex(pose, dstX + dstWidth, dstY, 0.0f).uv(u2, v1).color(color[0], color[1], color[2], color[3]).endVertex();
-        tesselator.end();
+        try {
+            this.setupTexShader();
+            if (texture.getResourceLocation() != null) {
+                RenderSystem.setShaderTexture(0, texture.getResourceLocation());
+            } else {
+                RenderSystem.setShaderTexture(0, texture.getGlId());
+            }
+            Matrix4f pose = this.poseStack.last().pose();
+            float[] color = DrawContext.colorToFloats(paint.getColor());
+            int textureWidth = Math.max(1, texture.getWidth());
+            int textureHeight = Math.max(1, texture.getHeight());
+            float u1 = srcRect.getX() / (float)textureWidth;
+            float v1 = srcRect.getY() / (float)textureHeight;
+            float u2 = srcRect.getRight() / (float)textureWidth;
+            float v2 = srcRect.getBottom() / (float)textureHeight;
+            float dstX = dstRect.getX();
+            float dstY = dstRect.getY();
+            float dstWidth = dstRect.getWidth();
+            float dstHeight = dstRect.getHeight();
+            Tesselator tesselator = Tesselator.getInstance();
+            BufferBuilder bufferBuilder = tesselator.getBuilder();
+            bufferBuilder.begin(VertexFormat.Mode.QUADS, DefaultVertexFormat.POSITION_TEX_COLOR);
+            bufferBuilder.vertex(pose, dstX, dstY, 0.0f).uv(u1, v1).color(color[0], color[1], color[2], color[3]).endVertex();
+            bufferBuilder.vertex(pose, dstX, dstY + dstHeight, 0.0f).uv(u1, v2).color(color[0], color[1], color[2], color[3]).endVertex();
+            bufferBuilder.vertex(pose, dstX + dstWidth, dstY + dstHeight, 0.0f).uv(u2, v2).color(color[0], color[1], color[2], color[3]).endVertex();
+            bufferBuilder.vertex(pose, dstX + dstWidth, dstY, 0.0f).uv(u2, v1).color(color[0], color[1], color[2], color[3]).endVertex();
+            tesselator.end();
+        } finally {
+            if (this.useBackend()) {
+                this.afterExternalGlDraw();
+            }
+        }
     }
 
     public void drawBlurredRoundedRect(RoundedRectangle roundedRectangle, float offsetX, float offsetY, float blurRadius, float spread, int color) {
@@ -650,12 +662,13 @@ public class DrawContext {
     }
 
     void clearClipStack() {
+        boolean backendActive = this.useBackend();
         while (!this.clipStack.isEmpty()) {
             boolean useScissor = this.clipStack.pop();
-            if (!useScissor || this.guiGraphics == null) continue;
+            if (backendActive || !useScissor || this.guiGraphics == null) continue;
             this.guiGraphics.disableScissor();
         }
-        if (this.useBackend()) {
+        if (backendActive) {
             this.backend.clearClipStack();
         }
     }

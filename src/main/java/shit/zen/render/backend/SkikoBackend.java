@@ -1,9 +1,11 @@
 package shit.zen.render.backend;
 
 import com.mojang.blaze3d.systems.RenderSystem;
+import com.mojang.blaze3d.vertex.BufferUploader;
 import com.mojang.blaze3d.vertex.PoseStack;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.resources.ResourceLocation;
 import org.jetbrains.skia.BackendRenderTarget;
 import org.jetbrains.skia.Canvas;
 import org.jetbrains.skia.Color4f;
@@ -22,6 +24,7 @@ import org.jetbrains.skia.PathBuilder;
 import org.jetbrains.skia.PathDirection;
 import org.jetbrains.skia.Rect;
 import org.jetbrains.skia.RRect;
+import org.jetbrains.skia.SamplingMode;
 import org.jetbrains.skia.Shader;
 import org.jetbrains.skia.Surface;
 import org.jetbrains.skia.SurfaceColorFormat;
@@ -34,6 +37,7 @@ import org.lwjgl.opengl.GL14;
 import org.lwjgl.opengl.GL15;
 import org.lwjgl.opengl.GL20;
 import org.lwjgl.opengl.GL30;
+import shit.zen.render.CustomFont;
 import shit.zen.render.DrawContext;
 import shit.zen.render.FontRenderer;
 import shit.zen.render.GlyphMetrics;
@@ -52,16 +56,25 @@ import java.util.Map;
 public final class SkikoBackend implements RenderBackend {
     private final Map<String, Typeface> typefaceCache = new HashMap<>();
     private final Map<String, Font> fontCache = new HashMap<>();
-    private final Map<String, Image> imageCache = new HashMap<>();
+    private final SkikoTextures textures = new SkikoTextures();
+    private final SkikoFonts customFonts = new SkikoFonts();
     private DirectContext directContext;
     private BackendRenderTarget renderTarget;
     private Surface surface;
+    private Image backdropSnapshot;
     private Canvas canvas;
     private GlStateGuard frameState;
     private int currentFbo = -1;
     private int currentWidth = -1;
     private int currentHeight = -1;
+    private int backdropSnapshotWidth = -1;
+    private int backdropSnapshotHeight = -1;
+    private int backdropBlurCount;
+    private int backdropBlurMissCount;
+    private float guiScale = 1.0f;
     private int beginDepth = 0;
+    private int externalGlDepth = 0;
+    private int externalGlVao;
     private boolean active;
 
     @Override
@@ -78,7 +91,12 @@ public final class SkikoBackend implements RenderBackend {
     public String debugSummary() {
         return "fbo=" + this.currentFbo
                 + " surface=" + this.currentWidth + "x" + this.currentHeight
-                + " active=" + this.active;
+                + " active=" + this.active
+                + " images=" + this.textures.getCachedImageCount()
+                + " imageMiss=" + this.textures.getMissingResourceCount()
+                + " backdrop=" + (this.backdropSnapshot != null)
+                + " blur=" + this.backdropBlurCount
+                + " blurMiss=" + this.backdropBlurMissCount;
     }
 
     @Override
@@ -92,20 +110,23 @@ public final class SkikoBackend implements RenderBackend {
         int width = Math.max(1, mc.getWindow().getWidth());
         int height = Math.max(1, mc.getWindow().getHeight());
         this.ensureSurface(fbo, width, height);
+        this.captureBackdropSnapshot(width, height);
         this.canvas = this.surface.getCanvas();
         this.canvas.save();
         this.beginDepth = 1;
-        float guiScale = (float) mc.getWindow().getGuiScale();
-        if (guiScale <= 0.0f) {
-            guiScale = 1.0f;
+        this.externalGlDepth = 0;
+        this.guiScale = (float) mc.getWindow().getGuiScale();
+        if (this.guiScale <= 0.0f) {
+            this.guiScale = 1.0f;
         }
-        this.canvas.scale(guiScale, guiScale);
+        this.canvas.scale(this.guiScale, this.guiScale);
         this.active = true;
     }
 
     @Override
     public void end() {
         if (!this.active) {
+            this.closeBackdropSnapshot();
             this.restoreFrameState();
             this.canvas = null;
             return;
@@ -117,9 +138,11 @@ public final class SkikoBackend implements RenderBackend {
             }
             this.flush();
         } finally {
+            this.closeBackdropSnapshot();
             this.restoreFrameState();
             this.active = false;
             this.canvas = null;
+            this.externalGlDepth = 0;
         }
     }
 
@@ -133,12 +156,24 @@ public final class SkikoBackend implements RenderBackend {
 
     @Override
     public void beforeExternalGlDraw() {
+        if (this.externalGlDepth++ > 0) {
+            return;
+        }
         this.flush();
         this.restoreCapturedState();
+        BufferUploader.reset();
+        this.ensureExternalGlVaoBound();
     }
 
     @Override
     public void afterExternalGlDraw() {
+        if (this.externalGlDepth <= 0) {
+            return;
+        }
+        if (--this.externalGlDepth > 0) {
+            return;
+        }
+        BufferUploader.reset();
         if (this.directContext != null) {
             this.directContext.resetGLAll();
         }
@@ -170,6 +205,16 @@ public final class SkikoBackend implements RenderBackend {
         if (this.frameState != null) {
             this.frameState.restore();
         }
+    }
+
+    private void ensureExternalGlVaoBound() {
+        if (GL11.glGetInteger(GL30.GL_VERTEX_ARRAY_BINDING) != 0) {
+            return;
+        }
+        if (this.externalGlVao == 0) {
+            this.externalGlVao = GL30.glGenVertexArrays();
+        }
+        GL30.glBindVertexArray(this.externalGlVao);
     }
 
     @Override
@@ -259,6 +304,46 @@ public final class SkikoBackend implements RenderBackend {
     }
 
     @Override
+    public boolean drawCustomFontText(DrawContext drawContext, CustomFont customFont, String text, PoseStack poseStack,
+                                      float x, float y, float baseR, float baseG, float baseB, float alpha,
+                                      boolean rainbow, int rainbowOffset) {
+        if (!this.active || !this.customFonts.canDraw(customFont)) {
+            return false;
+        }
+        Canvas currentCanvas = this.requireCanvas();
+        currentCanvas.save();
+        try {
+            if (poseStack != null) {
+                currentCanvas.concat(this.toSkiaMatrix(poseStack.last().pose()));
+            }
+            return this.customFonts.draw(currentCanvas, customFont, text, x, y, baseR, baseG, baseB, alpha, rainbow, rainbowOffset);
+        } finally {
+            currentCanvas.restore();
+        }
+    }
+
+    @Override
+    public float drawGlowText(DrawContext drawContext, String text, float x, float y, FontRenderer fontRenderer, int color, int glowColor, float radius) {
+        if (text == null || text.isEmpty() || fontRenderer == null) {
+            return x;
+        }
+        Font font = this.getSkFont(fontRenderer);
+        GlyphMetrics glyphMetrics = fontRenderer.getMetrics();
+        float baselineY = this.toLegacyTextBaseline(y, glyphMetrics);
+        float roundedX = this.roundLegacy(x);
+        try (org.jetbrains.skia.Paint glowPaint = this.toSkPaint(new Paint().setColor(glowColor))) {
+            if (radius > 0.001f && (glowColor >>> 24) != 0) {
+                glowPaint.setImageFilter(org.jetbrains.skia.ImageFilter.Companion.makeBlur(radius, radius, FilterTileMode.DECAL, null, null));
+                this.drawFormattedString(text, roundedX, baselineY, Math.max(1.0f, glyphMetrics.height()), font, glowPaint, glowColor);
+            }
+        }
+        try (org.jetbrains.skia.Paint textPaint = this.toSkPaint(new Paint().setColor(color))) {
+            this.drawFormattedString(text, roundedX, baselineY, Math.max(1.0f, glyphMetrics.height()), font, textPaint, color);
+        }
+        return roundedX + this.measureFormattedTextWidth(text, font);
+    }
+
+    @Override
     public float measureTextWidth(String text, FontRenderer fontRenderer) {
         if (text == null || text.isEmpty() || fontRenderer == null) {
             return 0.0f;
@@ -296,10 +381,40 @@ public final class SkikoBackend implements RenderBackend {
         }
         try (org.jetbrains.skia.Paint skPaint = this.toSkPaint(paint)) {
             this.requireCanvas().drawImageRect(image,
-                    Rect.makeXYWH(srcRect.getX(), srcRect.getY(), srcRect.getWidth(), srcRect.getHeight()),
+                    this.toImageSourceRect(image, srcRect),
                     Rect.makeXYWH(dstRect.getX(), dstRect.getY(), dstRect.getWidth(), dstRect.getHeight()),
-                    skPaint, true);
+                    SamplingMode.Companion.getLINEAR(), skPaint, true);
         }
+    }
+
+    @Override
+    public boolean canDrawResourceTexture(ResourceLocation resourceLocation) {
+        return this.textures.getResourceImage(resourceLocation) != null;
+    }
+
+    @Override
+    public boolean drawPlayerHead(DrawContext drawContext, ResourceLocation skinTexture, float x, float y, float width, float height, float alpha, float radius) {
+        Image image = this.textures.getResourceImage(skinTexture);
+        if (image == null) {
+            return false;
+        }
+        Canvas currentCanvas = this.requireCanvas();
+        RRect clip = this.toRRect(RoundedRectangle.ofXYWHR(x, y, width, height, radius));
+        Rect dst = Rect.makeXYWH(x, y, width, height);
+        int clampedAlpha = (int)Math.max(0.0f, Math.min(255.0f, alpha * 255.0f));
+        try (org.jetbrains.skia.Paint paint = new org.jetbrains.skia.Paint()) {
+            paint.setAntiAlias(true);
+            paint.setColor(clampedAlpha << 24 | 0xFFFFFF);
+            currentCanvas.save();
+            try {
+                currentCanvas.clipRRect(clip, true);
+                this.drawSkinLayer(currentCanvas, image, dst, paint, 8.0f, 8.0f, 8.0f, 8.0f);
+                this.drawSkinLayer(currentCanvas, image, dst, paint, 40.0f, 8.0f, 8.0f, 8.0f);
+            } finally {
+                currentCanvas.restore();
+            }
+        }
+        return true;
     }
 
     @Override
@@ -316,24 +431,28 @@ public final class SkikoBackend implements RenderBackend {
                         Math.max(0.0f, roundedRectangle.bottomRightRadius + spread),
                         Math.max(0.0f, roundedRectangle.bottomLeftRadius + spread)
                 });
-        Paint shadowPaint = new Paint().setColor(color).setMaskFilter(new Paint.BlurMaskFilter(Math.max(0.01f, blurRadius)));
-        try (org.jetbrains.skia.Paint skPaint = this.toSkPaint(shadowPaint)) {
-            this.requireCanvas().drawRRect(this.toRRect(expanded), skPaint);
+        SkikoEffects.drawBlurredRRect(this.requireCanvas(), this.toRRect(expanded), Math.max(0.01f, blurRadius), color);
+    }
+
+    @Override
+    public boolean drawBackdropBlurredRect(DrawContext drawContext, float x, float y, float width, float height,
+                                           float radius, float blurRadius, float opacity, int color) {
+        if (this.backdropSnapshot == null || this.backdropSnapshotWidth <= 0 || this.backdropSnapshotHeight <= 0) {
+            this.backdropBlurMissCount++;
+            return false;
         }
+        this.backdropBlurCount++;
+        SkikoEffects.drawBackdropBlurredRect(this.requireCanvas(), this.backdropSnapshot,
+                this.toRRect(RoundedRectangle.ofXYWHR(x, y, width, height, radius)),
+                Rect.makeXYWH(x, y, width, height),
+                Math.max(0.0f, blurRadius), opacity, color,
+                this.guiScale, this.backdropSnapshotWidth, this.backdropSnapshotHeight);
+        return true;
     }
 
     @Override
     public void drawBlur(DrawContext drawContext, float x, float y, float width, float height, float radius, Runnable runnable) {
-        if (radius <= 0.001f) {
-            runnable.run();
-            return;
-        }
-        this.save(drawContext);
-        try {
-            runnable.run();
-        } finally {
-            this.restore(drawContext);
-        }
+        SkikoEffects.drawSelfBlur(this.requireCanvas(), Rect.makeXYWH(x, y, width, height), radius, runnable);
     }
 
     private void ensureContext() {
@@ -358,7 +477,33 @@ public final class SkikoBackend implements RenderBackend {
         this.currentHeight = height;
     }
 
+    private void captureBackdropSnapshot(int width, int height) {
+        this.closeBackdropSnapshot();
+        if (this.surface == null) {
+            this.backdropBlurMissCount++;
+            return;
+        }
+        this.backdropSnapshot = this.surface.makeImageSnapshot();
+        this.backdropSnapshotWidth = width;
+        this.backdropSnapshotHeight = height;
+        if (this.backdropSnapshot == null) {
+            this.backdropSnapshotWidth = -1;
+            this.backdropSnapshotHeight = -1;
+            this.backdropBlurMissCount++;
+        }
+    }
+
+    private void closeBackdropSnapshot() {
+        if (this.backdropSnapshot != null) {
+            this.backdropSnapshot.close();
+            this.backdropSnapshot = null;
+        }
+        this.backdropSnapshotWidth = -1;
+        this.backdropSnapshotHeight = -1;
+    }
+
     private void closeSurface() {
+        this.closeBackdropSnapshot();
         if (this.surface != null) {
             this.surface.close();
             this.surface = null;
@@ -402,13 +547,18 @@ public final class SkikoBackend implements RenderBackend {
 
     private RRect toRRect(RoundedRectangle roundedRectangle) {
         Rect rect = Rect.makeLTRB(roundedRectangle.x1, roundedRectangle.y1, roundedRectangle.x2, roundedRectangle.y2);
+        float maxRadius = Math.max(0.0f, Math.min(Math.abs(roundedRectangle.getWidth()), Math.abs(roundedRectangle.getHeight())) * 0.5f);
         return RRect.makeComplexLTRB(rect.getLeft(), rect.getTop(), rect.getRight(), rect.getBottom(),
                 new float[]{
-                        roundedRectangle.topLeftRadius, roundedRectangle.topLeftRadius,
-                        roundedRectangle.topRightRadius, roundedRectangle.topRightRadius,
-                        roundedRectangle.bottomRightRadius, roundedRectangle.bottomRightRadius,
-                        roundedRectangle.bottomLeftRadius, roundedRectangle.bottomLeftRadius
+                        this.clampRadius(roundedRectangle.topLeftRadius, maxRadius), this.clampRadius(roundedRectangle.topLeftRadius, maxRadius),
+                        this.clampRadius(roundedRectangle.topRightRadius, maxRadius), this.clampRadius(roundedRectangle.topRightRadius, maxRadius),
+                        this.clampRadius(roundedRectangle.bottomRightRadius, maxRadius), this.clampRadius(roundedRectangle.bottomRightRadius, maxRadius),
+                        this.clampRadius(roundedRectangle.bottomLeftRadius, maxRadius), this.clampRadius(roundedRectangle.bottomLeftRadius, maxRadius)
                 });
+    }
+
+    private float clampRadius(float radius, float maxRadius) {
+        return Math.max(0.0f, Math.min(radius, maxRadius));
     }
 
     private org.jetbrains.skia.Path toSkPath(Path path) {
@@ -489,7 +639,7 @@ public final class SkikoBackend implements RenderBackend {
     private Typeface getTypeface(String fontName) {
         return this.typefaceCache.computeIfAbsent(fontName, ignored -> {
             FontMgr fontMgr = FontMgr.Companion.getDefault();
-            try (InputStream stream = Assets.open("/assets/zen/fonts/" + fontName)) {
+            try (InputStream stream = Assets.open("/assets/mizulune/fonts/" + fontName)) {
                 if (stream == null) {
                     return this.getFallbackTypeface(fontMgr);
                 }
@@ -511,17 +661,21 @@ public final class SkikoBackend implements RenderBackend {
         if (texture == null || texture.getResourceLocation() == null) {
             return null;
         }
-        String key = texture.getResourceLocation().toString();
-        return this.imageCache.computeIfAbsent(key, ignored -> {
-            try {
-                Minecraft mc = Minecraft.getInstance();
-                try (InputStream stream = mc.getResourceManager().open(texture.getResourceLocation())) {
-                    return Image.Companion.makeFromEncoded(stream.readAllBytes());
-                }
-            } catch (Exception ignoredException) {
-                return null;
-            }
-        });
+        return this.textures.getResourceImage(texture.getResourceLocation());
+    }
+
+    private Rect toImageSourceRect(Image image, Rectangle srcRect) {
+        if (srcRect == null || srcRect.getWidth() <= 0.0f || srcRect.getHeight() <= 0.0f) {
+            return Rect.makeXYWH(0.0f, 0.0f, image.getWidth(), image.getHeight());
+        }
+        return Rect.makeXYWH(srcRect.getX(), srcRect.getY(), srcRect.getWidth(), srcRect.getHeight());
+    }
+
+    private void drawSkinLayer(Canvas canvas, Image image, Rect dst, org.jetbrains.skia.Paint paint, float u, float v, float width, float height) {
+        float scaleX = image.getWidth() / 64.0f;
+        float scaleY = image.getHeight() / 64.0f;
+        Rect src = Rect.makeXYWH(u * scaleX, v * scaleY, width * scaleX, height * scaleY);
+        canvas.drawImageRect(image, src, dst, SamplingMode.Companion.getLINEAR(), paint, true);
     }
 
     private void drawFormattedString(String text, float x, float baselineY, float lineHeight,

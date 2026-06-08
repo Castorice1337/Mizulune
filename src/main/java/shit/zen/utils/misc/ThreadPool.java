@@ -12,7 +12,7 @@ public class ThreadPool {
     private static class ExecutorFactory implements ThreadFactory {
         private final AtomicInteger counter = new AtomicInteger();
         public Thread newThread(Runnable r) {
-            Thread t = new Thread(r, "Zen-Executor-" + counter.getAndIncrement());
+            Thread t = new Thread(r, "Mizulune-Executor-" + counter.getAndIncrement());
             t.setDaemon(true);
             return t;
         }
@@ -21,7 +21,7 @@ public class ThreadPool {
     private static class SchedulerFactory implements ThreadFactory {
         private final AtomicInteger counter = new AtomicInteger();
         public Thread newThread(Runnable r) {
-            Thread t = new Thread(r, "Zen-Scheduler-" + counter.getAndIncrement());
+            Thread t = new Thread(r, "Mizulune-Scheduler-" + counter.getAndIncrement());
             t.setDaemon(true);
             return t;
         }
