@@ -78,8 +78,8 @@ extends ClientBase {
         }
         FontRenderer scaledZFont = FontPresets.axiformaBold(64.0f * zScale);
         FontRenderer baseFont = FontPresets.axiformaBold(64.0f);
-        float zWidth = GlHelper.getStringWidth("Z", scaledZFont);
-        float enWidth = GlHelper.getStringWidth("EN", baseFont);
+        float zWidth = GlHelper.getStringWidth("M", scaledZFont);
+        float enWidth = GlHelper.getStringWidth("izulune", baseFont);
         float zCenterX = centerX - zWidth / 2.0f;
         float zSlideX = centerX - (zWidth + 0.0f + enWidth) / 2.0f;
         float zRenderX = IntroAnimation.lerp(zCenterX, zSlideX, slideProgress);
@@ -99,12 +99,12 @@ extends ClientBase {
             fadeFactor = 1.0f - IntroAnimation.clamp01((float)(elapsed - fadeOutStart) / 700.0f);
         }
         int zColor = new Color(1.0f, 1.0f, 1.0f, IntroAnimation.clamp01(zAlpha * fadeFactor)).getRGB();
-        GlHelper.drawText("Z", zRenderX, zRenderY, scaledZFont, zColor);
+        GlHelper.drawText("M", zRenderX, zRenderY, scaledZFont, zColor);
         if (enAlpha > 0.0f) {
             float enX = zRenderX + zWidth + 0.0f;
             float enY = centerY - baseFont.getMetrics().capHeight() / 2.0f + enOffsetY;
             int enColor = new Color(1.0f, 1.0f, 1.0f, IntroAnimation.clamp01(enAlpha * fadeFactor)).getRGB();
-            GlHelper.drawText("EN", enX, enY, baseFont, enColor);
+            GlHelper.drawText("izulune", enX, enY, baseFont, enColor);
         }
     }
 

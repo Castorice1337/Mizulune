@@ -27,6 +27,9 @@ public class StencilHelper {
     private static final Supplier<TextureTarget> maskTarget = Suppliers.memoize(() -> new TextureTarget(360, 360, false, Minecraft.ON_OSX));
     private static final Supplier<TextureTarget> contentTarget = Suppliers.memoize(() -> new TextureTarget(360, 360, false, Minecraft.ON_OSX));
     private static final RenderTarget mainRenderTarget = ClientBase.mc.getMainRenderTarget();
+    private static int stencilDepth;
+    private static boolean stencilWriting;
+    private static boolean stencilReading;
 
     public static void applyStencil(PoseStack poseStack, Runnable drawMask, Runnable drawContent, float opacity) {
         if (!stencilShader.isValid()) {
@@ -78,6 +81,12 @@ public class StencilHelper {
     }
 
     public static void beginWriteFull(boolean keepColor, RenderTarget renderTarget, boolean clearStencil, boolean invertMask) {
+        if (stencilDepth == 0) {
+            StencilHelper.beginExternalGlSection();
+        }
+        stencilDepth++;
+        stencilWriting = true;
+        stencilReading = false;
         renderTarget.bindWrite(false);
         StencilHelper.setupFBO(renderTarget);
         GL11.glEnable(2960);
@@ -93,6 +102,8 @@ public class StencilHelper {
     }
 
     public static void beginRead(boolean inside) {
+        stencilWriting = false;
+        stencilReading = true;
         GL11.glStencilFunc(inside ? 514 : 517, 1, 255);
         GL11.glStencilOp(7680, 7680, 7681);
         GlStateManager._colorMask(true, true, true, true);
@@ -101,6 +112,38 @@ public class StencilHelper {
 
     public static void end() {
         GL11.glDisable(2960);
+        stencilDepth = Math.max(0, stencilDepth - 1);
+        if (stencilDepth == 0) {
+            stencilWriting = false;
+            stencilReading = false;
+            StencilHelper.endExternalGlSection();
+        }
+    }
+
+    public static boolean isStencilActive() {
+        return stencilDepth > 0;
+    }
+
+    public static boolean isStencilWriting() {
+        return stencilWriting;
+    }
+
+    public static boolean isStencilReading() {
+        return stencilReading;
+    }
+
+    private static void beginExternalGlSection() {
+        DrawContext drawContext = Renderer.getCanvas();
+        if (drawContext != null && drawContext.getBackend() != null && drawContext.getBackend().handles2D()) {
+            drawContext.beforeExternalGlDraw();
+        }
+    }
+
+    private static void endExternalGlSection() {
+        DrawContext drawContext = Renderer.getCanvas();
+        if (drawContext != null && drawContext.getBackend() != null && drawContext.getBackend().handles2D()) {
+            drawContext.afterExternalGlDraw();
+        }
     }
 
     public static void setupFBO(RenderTarget renderTarget) {

@@ -17,7 +17,7 @@ extends ClientBase {
     }
 
     public static void print(boolean withPrefix, String message) {
-        ChatUtil.addMessage(Component.nullToEmpty((withPrefix ? "§7[§b§7] " : "") + message));
+        ChatUtil.addMessage(Component.nullToEmpty((withPrefix ? "§7[§bMizulune§7] " : "") + message));
     }
 
     @Generated

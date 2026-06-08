@@ -63,6 +63,9 @@ public final class GlHelper {
         int glId = abstractTexture.getId();
         DrawContext drawContext = GlHelper.getCanvas();
         int packedColor = (int)Math.max(0.0f, Math.min(255.0f, alpha * 255.0f)) << 24 | 0xFFFFFF;
+        boolean drawnByBackend = drawContext.getBackend() != null
+                && drawContext.getBackend().handles2D()
+                && drawContext.getBackend().drawPlayerHead(drawContext, resourceLocation, x, y, width, height, alpha, radius);
         RoundedRectShader roundedRectShader = DrawContext.getRoundedRectShader();
         float baseU1 = 0.125f;
         float baseV1 = 0.125f;
@@ -72,9 +75,16 @@ public final class GlHelper {
         float hatV1 = 0.125f;
         float hatU2 = 0.75f;
         float hatV2 = 0.25f;
-        Matrix4f pose = drawContext.getPoseStack().last().pose();
-        roundedRectShader.drawTextured(pose, x, y, x + width, y + height, radius, radius, radius, radius, packedColor, glId, baseU1, baseV1, baseU2, baseV2);
-        roundedRectShader.drawTextured(pose, x, y, x + width, y + height, radius, radius, radius, radius, packedColor, glId, hatU1, hatV1, hatU2, hatV2);
+        if (!drawnByBackend) {
+            Matrix4f pose = drawContext.getPoseStack().last().pose();
+            drawContext.beforeExternalGlDraw();
+            try {
+                roundedRectShader.drawTextured(pose, x, y, x + width, y + height, radius, radius, radius, radius, packedColor, glId, baseU1, baseV1, baseU2, baseV2);
+                roundedRectShader.drawTextured(pose, x, y, x + width, y + height, radius, radius, radius, radius, packedColor, glId, hatU1, hatV1, hatU2, hatV2);
+            } finally {
+                drawContext.afterExternalGlDraw();
+            }
+        }
         if (player.hurtTime > 0) {
             int hurtColor = ColorUtil.withAlphaColor(new Color(255, 0, 0, player.hurtTime * 18), alpha).getRGB();
             Paint paint = new Paint().setColor(hurtColor);
@@ -126,7 +136,7 @@ public final class GlHelper {
             return x;
         }
         DrawContext drawContext = GlHelper.getCanvas();
-        float width = fontRenderer.getWidth(text);
+        float width = GlHelper.getStringWidth(text, fontRenderer);
         float height = fontRenderer.getFont() != null ? fontRenderer.getFont().getFontHeight() : fontRenderer.getSize();
         float halfBlur = Math.max(0.01f, radius * 0.5f);
         drawContext.drawBlur(x, y - height, width, height * 2.0f, halfBlur, () -> drawContext.drawString(text, x, y, fontRenderer, GlHelper.toPaint(blurColor)));
@@ -134,7 +144,7 @@ public final class GlHelper {
     }
 
     public static float drawTextCentered(float centerX, float centerY, String text, FontRenderer fontRenderer, Paint paint) {
-        float width = fontRenderer.getWidth(text);
+        float width = GlHelper.getStringWidth(text, fontRenderer);
         float height = fontRenderer.getFont() != null ? fontRenderer.getFont().getFontHeight() : fontRenderer.getSize();
         return GlHelper.drawTextFormatted(text, centerX - width / 2.0f, centerY - height / 2.0f, fontRenderer, paint, false);
     }
@@ -154,6 +164,10 @@ public final class GlHelper {
     public static float getStringWidth(String text, FontRenderer fontRenderer) {
         if (text == null || text.isEmpty()) {
             return 0.0f;
+        }
+        DrawContext drawContext = Renderer.getCanvas();
+        if (drawContext != null && drawContext.getBackend() != null && drawContext.getBackend().handles2D()) {
+            return drawContext.getBackend().measureTextWidth(text, fontRenderer);
         }
         return stringWidthCache.computeIfAbsent(fontRenderer, key -> new HashMap<>()).computeIfAbsent(text, key -> key != null ? fontRenderer.getWidth(key.replaceAll("§.", "")) : 0.0f);
     }

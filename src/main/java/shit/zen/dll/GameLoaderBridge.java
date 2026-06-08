@@ -1,17 +1,24 @@
 package shit.zen.dll;
 
 import asm.patchify.loader.PatchAgent;
+import java.io.IOException;
 import java.io.InputStream;
 import java.lang.instrument.Instrumentation;
 import java.lang.reflect.Method;
+import java.nio.file.StandardCopyOption;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.Enumeration;
 import java.util.LinkedHashMap;
 import java.util.Iterator;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.jar.JarFile;
+import java.util.stream.Stream;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
 import org.apache.logging.log4j.LogManager;
@@ -38,7 +45,8 @@ import org.apache.logging.log4j.Logger;
  *       {@code ClassLoader.defineClass} works without JVM args.</li>
  *   <li>Walk the jar. {@code .class} entries get re-defined on the game
  *       loader; everything else is extracted to a temp directory and exposed
- *       via the {@code openzen.resources} system property so
+ *       via the {@code mizulune.resources} system property, with legacy
+ *       {@code openzen.resources} kept as a compatibility alias, so
  *       {@code Bootstrap} and {@code ZenClient} can still find their
  *       resources (mapping.srg, cloud assets, webui static files).</li>
  *   <li>Hand off to {@link DllBootstrap#start(String)} loaded through the
@@ -47,7 +55,15 @@ import org.apache.logging.log4j.Logger;
  */
 public final class GameLoaderBridge {
     private static final Logger LOGGER = LogManager.getLogger(GameLoaderBridge.class);
-    public static final String RESOURCES_PROP = "openzen.resources";
+    public static final String RESOURCES_PROP = "mizulune.resources";
+    private static final String LEGACY_RESOURCES_PROP = "openzen.resources";
+    private static final String DLL_LIBS_DIR = "openzen/dll-libs";
+    private static final String SKIKO_LIBRARY_PATH_PROP = "skiko.library.path";
+    private static final Set<String> SKIKO_NATIVE_FILES = Set.of(
+            "skiko-windows-x64.dll",
+            "skiko-windows-x64.dll.sha256",
+            "icudtl.dat");
+    private static final List<JarFile> APPENDED_JARS = new ArrayList<>();
 
     private GameLoaderBridge() {
     }
@@ -121,7 +137,10 @@ public final class GameLoaderBridge {
             }
         }
 
-        System.setProperty(RESOURCES_PROP, resourceDir.toAbsolutePath().toString());
+        String resourcePath = resourceDir.toAbsolutePath().toString();
+        System.setProperty(RESOURCES_PROP, resourcePath);
+        System.setProperty(LEGACY_RESOURCES_PROP, resourcePath);
+        configureDllRuntimeDependencies(inst, gameLoader, defineClass, resourceDir);
 
         long ms = (System.nanoTime() - t0) / 1_000_000L;
         LOGGER.info("Defined {} classes, extracted {} resources to {} ({} ms)",
@@ -131,6 +150,148 @@ public final class GameLoaderBridge {
         LOGGER.info("bootstrap loader (should be gameLoader): {}", bootstrapCls.getClassLoader());
         Method start = bootstrapCls.getMethod("start", String.class);
         start.invoke(null, jarPath);
+    }
+
+    private static void configureDllRuntimeDependencies(Instrumentation inst,
+                                                        ClassLoader gameLoader,
+                                                        Method defineClass,
+                                                        Path resourceDir) {
+        Path libsDir = resourceDir.resolve(DLL_LIBS_DIR);
+        if (!Files.isDirectory(libsDir)) {
+            LOGGER.warn("DLL runtime libs directory not found: {}", libsDir);
+            return;
+        }
+
+        List<Path> jars;
+        try (Stream<Path> stream = Files.list(libsDir)) {
+            jars = stream
+                    .filter(path -> path.getFileName().toString().endsWith(".jar"))
+                    .sorted(Comparator.comparing(path -> path.getFileName().toString()))
+                    .toList();
+        } catch (IOException e) {
+            LOGGER.warn("Failed to list DLL runtime libs in {}", libsDir, e);
+            return;
+        }
+
+        if (jars.isEmpty()) {
+            LOGGER.warn("No DLL runtime dependency jars found in {}", libsDir);
+            return;
+        }
+
+        int appended = appendRuntimeJarsToSystemLoader(inst, jars);
+        int nativeFiles = extractSkikoNativeRuntime(jars,
+                resourceDir.resolve("skiko-runtime").resolve("windows-x64"));
+
+        if (!isClassVisible("org.jetbrains.skia.DirectContext", gameLoader)
+                || !isClassVisible("kotlin.jvm.internal.Intrinsics", gameLoader)) {
+            int defined = defineRuntimeDependencyClasses(defineClass, gameLoader, jars);
+            LOGGER.info("Defined {} DLL runtime dependency classes on gameLoader", defined);
+        }
+
+        boolean skiaVisible = isClassVisible("org.jetbrains.skia.DirectContext", gameLoader);
+        boolean kotlinVisible = isClassVisible("kotlin.jvm.internal.Intrinsics", gameLoader);
+        LOGGER.info("DLL runtime dependencies prepared: jars={}, appended={}, nativeFiles={}, "
+                        + "skiaVisible={}, kotlinVisible={}, {}={}",
+                jars.size(), appended, nativeFiles, skiaVisible, kotlinVisible,
+                SKIKO_LIBRARY_PATH_PROP, System.getProperty(SKIKO_LIBRARY_PATH_PROP));
+    }
+
+    private static int appendRuntimeJarsToSystemLoader(Instrumentation inst, List<Path> jars) {
+        int appended = 0;
+        for (Path jar : jars) {
+            try {
+                JarFile jarFile = new JarFile(jar.toFile());
+                inst.appendToSystemClassLoaderSearch(jarFile);
+                APPENDED_JARS.add(jarFile);
+                appended++;
+            } catch (Throwable t) {
+                LOGGER.warn("Failed to append DLL runtime jar to system loader: {}",
+                        jar, t);
+            }
+        }
+        return appended;
+    }
+
+    private static int extractSkikoNativeRuntime(List<Path> jars, Path targetDir) {
+        int copied = 0;
+        try {
+            Files.createDirectories(targetDir);
+        } catch (IOException e) {
+            LOGGER.warn("Failed to create Skiko native runtime directory {}", targetDir, e);
+            return 0;
+        }
+
+        for (Path jar : jars) {
+            try (ZipFile zip = new ZipFile(jar.toFile())) {
+                Enumeration<? extends ZipEntry> entries = zip.entries();
+                while (entries.hasMoreElements()) {
+                    ZipEntry entry = entries.nextElement();
+                    if (entry.isDirectory()) continue;
+                    String fileName = Paths.get(entry.getName()).getFileName().toString();
+                    if (!SKIKO_NATIVE_FILES.contains(fileName)) continue;
+                    Path target = targetDir.resolve(fileName);
+                    try (InputStream is = zip.getInputStream(entry)) {
+                        Files.copy(is, target, StandardCopyOption.REPLACE_EXISTING);
+                    }
+                    copied++;
+                }
+            } catch (IOException e) {
+                LOGGER.warn("Failed to extract Skiko native runtime from {}", jar, e);
+            }
+        }
+
+        if (copied > 0) {
+            System.setProperty(SKIKO_LIBRARY_PATH_PROP, targetDir.toAbsolutePath().toString());
+        }
+        return copied;
+    }
+
+    private static int defineRuntimeDependencyClasses(Method defineClass,
+                                                      ClassLoader gameLoader,
+                                                      List<Path> jars) {
+        LinkedHashMap<String, byte[]> pending = new LinkedHashMap<>();
+        for (Path jar : jars) {
+            try (ZipFile zip = new ZipFile(jar.toFile())) {
+                Enumeration<? extends ZipEntry> entries = zip.entries();
+                while (entries.hasMoreElements()) {
+                    ZipEntry entry = entries.nextElement();
+                    if (entry.isDirectory()) continue;
+                    String name = entry.getName();
+                    if (!name.endsWith(".class")
+                            || name.equals("module-info.class")
+                            || name.startsWith("META-INF/versions/")) {
+                        continue;
+                    }
+                    String className = name.substring(0, name.length() - 6).replace('/', '.');
+                    if (isClassVisible(className, gameLoader) || pending.containsKey(className)) {
+                        continue;
+                    }
+                    try (InputStream is = zip.getInputStream(entry)) {
+                        pending.put(className, is.readAllBytes());
+                    }
+                }
+            } catch (IOException e) {
+                LOGGER.warn("Failed to read DLL runtime dependency jar {}", jar, e);
+            }
+        }
+
+        int defined = definePassUntilFixedPoint(defineClass, gameLoader, pending);
+        if (!pending.isEmpty()) {
+            LOGGER.warn("{} DLL runtime dependency class(es) could not be defined:", pending.size());
+            for (String className : pending.keySet()) {
+                LOGGER.warn("  {}", className);
+            }
+        }
+        return defined;
+    }
+
+    private static boolean isClassVisible(String className, ClassLoader loader) {
+        try {
+            Class.forName(className, false, loader);
+            return true;
+        } catch (Throwable ignored) {
+            return false;
+        }
     }
 
     /**
