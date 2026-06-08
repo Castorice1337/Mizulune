@@ -16,6 +16,7 @@ import org.jetbrains.skia.FontStyle;
 import org.jetbrains.skia.FramebufferFormat;
 import org.jetbrains.skia.Gradient;
 import org.jetbrains.skia.Image;
+import org.jetbrains.skia.Matrix33;
 import org.jetbrains.skia.PaintMode;
 import org.jetbrains.skia.PathBuilder;
 import org.jetbrains.skia.PathDirection;
@@ -26,7 +27,12 @@ import org.jetbrains.skia.Surface;
 import org.jetbrains.skia.SurfaceColorFormat;
 import org.jetbrains.skia.SurfaceOrigin;
 import org.jetbrains.skia.Typeface;
+import org.lwjgl.BufferUtils;
 import org.lwjgl.opengl.GL11;
+import org.lwjgl.opengl.GL13;
+import org.lwjgl.opengl.GL14;
+import org.lwjgl.opengl.GL15;
+import org.lwjgl.opengl.GL20;
 import org.lwjgl.opengl.GL30;
 import shit.zen.render.DrawContext;
 import shit.zen.render.FontRenderer;
@@ -39,6 +45,7 @@ import shit.zen.render.Texture;
 import shit.zen.utils.misc.Assets;
 
 import java.io.InputStream;
+import java.nio.ByteBuffer;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -50,6 +57,7 @@ public final class SkikoBackend implements RenderBackend {
     private BackendRenderTarget renderTarget;
     private Surface surface;
     private Canvas canvas;
+    private GlStateGuard frameState;
     private int currentFbo = -1;
     private int currentWidth = -1;
     private int currentHeight = -1;
@@ -76,9 +84,11 @@ public final class SkikoBackend implements RenderBackend {
     @Override
     public void begin(GuiGraphics guiGraphics, PoseStack poseStack) {
         RenderSystem.assertOnRenderThread();
-        this.ensureContext();
-        Minecraft mc = Minecraft.getInstance();
+        this.frameState = GlStateGuard.capture();
         int fbo = GL11.glGetInteger(GL30.GL_FRAMEBUFFER_BINDING);
+        this.ensureContext();
+        this.directContext.resetGLAll();
+        Minecraft mc = Minecraft.getInstance();
         int width = Math.max(1, mc.getWindow().getWidth());
         int height = Math.max(1, mc.getWindow().getHeight());
         this.ensureSurface(fbo, width, height);
@@ -96,15 +106,21 @@ public final class SkikoBackend implements RenderBackend {
     @Override
     public void end() {
         if (!this.active) {
+            this.restoreFrameState();
+            this.canvas = null;
             return;
         }
-        while (this.beginDepth > 0) {
-            this.canvas.restore();
-            this.beginDepth--;
+        try {
+            while (this.beginDepth > 0) {
+                this.canvas.restore();
+                this.beginDepth--;
+            }
+            this.flush();
+        } finally {
+            this.restoreFrameState();
+            this.active = false;
+            this.canvas = null;
         }
-        this.flush();
-        this.active = false;
-        this.canvas = null;
     }
 
     @Override
@@ -112,14 +128,47 @@ public final class SkikoBackend implements RenderBackend {
         if (!this.active || this.surface == null || this.directContext == null) {
             return;
         }
-        this.surface.flushAndSubmit();
-        this.directContext.flush(this.surface);
+        this.directContext.flushAndSubmit(this.surface, true);
+    }
+
+    @Override
+    public void beforeExternalGlDraw() {
+        this.flush();
+        this.restoreCapturedState();
     }
 
     @Override
     public void afterExternalGlDraw() {
         if (this.directContext != null) {
             this.directContext.resetGLAll();
+        }
+    }
+
+    @Override
+    public void pushExternalPose(PoseStack poseStack) {
+        Canvas currentCanvas = this.requireCanvas();
+        currentCanvas.save();
+        if (poseStack != null) {
+            currentCanvas.concat(this.toSkiaMatrix(poseStack.last().pose()));
+        }
+    }
+
+    @Override
+    public void popExternalPose() {
+        this.requireCanvas().restore();
+    }
+
+    private void restoreFrameState() {
+        this.restoreCapturedState();
+        this.frameState = null;
+        if (this.directContext != null) {
+            this.directContext.resetGLAll();
+        }
+    }
+
+    private void restoreCapturedState() {
+        if (this.frameState != null) {
+            this.frameState.restore();
         }
     }
 
@@ -204,9 +253,17 @@ public final class SkikoBackend implements RenderBackend {
         try (org.jetbrains.skia.Paint skPaint = this.toSkPaint(paint)) {
             Font font = this.getSkFont(fontRenderer);
             GlyphMetrics glyphMetrics = fontRenderer.getMetrics();
-            float baselineY = this.toSkiaBaseline(y + glyphMetrics.ascent() - 1.0f, font);
-            this.drawFormattedString(text, x, baselineY, glyphMetrics.height(), fontRenderer, font, skPaint, paint.getColor());
+            float baselineY = this.toLegacyTextBaseline(y, glyphMetrics);
+            this.drawFormattedString(text, this.roundLegacy(x), baselineY, Math.max(1.0f, glyphMetrics.height()), font, skPaint, paint.getColor());
         }
+    }
+
+    @Override
+    public float measureTextWidth(String text, FontRenderer fontRenderer) {
+        if (text == null || text.isEmpty() || fontRenderer == null) {
+            return 0.0f;
+        }
+        return this.measureFormattedTextWidth(text, this.getSkFont(fontRenderer));
     }
 
     @Override
@@ -377,9 +434,24 @@ public final class SkikoBackend implements RenderBackend {
         return this.fontCache.computeIfAbsent(key, ignored -> {
             Typeface typeface = this.getTypeface(fontRenderer.getFontName());
             Font font = new Font(typeface, skiaSize);
-            font.setSubpixel(true);
+            this.configureFont(font);
             return font;
         });
+    }
+
+    private Matrix33 toSkiaMatrix(org.joml.Matrix4f matrix) {
+        return new Matrix33(
+                matrix.m00(), matrix.m10(), matrix.m30(),
+                matrix.m01(), matrix.m11(), matrix.m31(),
+                0.0f, 0.0f, 1.0f);
+    }
+
+    private void configureFont(Font font) {
+        if (font != null) {
+            font.setSubpixel(true);
+            font.setLinearMetrics(false);
+            font.setBaselineSnapped(false);
+        }
     }
 
     private float getSkiaFontSize(FontRenderer fontRenderer) {
@@ -389,8 +461,29 @@ public final class SkikoBackend implements RenderBackend {
         return Math.max(1.0f, fontRenderer.getSize() * 0.5f);
     }
 
-    private float toSkiaBaseline(float legacyAtlasTopY, Font font) {
-        return legacyAtlasTopY - font.getMetrics().getAscent();
+    private float toLegacyTextBaseline(float y, GlyphMetrics glyphMetrics) {
+        float legacyAtlasTopY = this.roundLegacy(y + glyphMetrics.ascent() - 1.0f);
+        return legacyAtlasTopY - glyphMetrics.ascent();
+    }
+
+    private float roundLegacy(float value) {
+        return (float)Math.round(value * 10.0f) / 10.0f;
+    }
+
+    private String stripFormatting(String text) {
+        if (text == null || text.isEmpty()) {
+            return "";
+        }
+        StringBuilder result = new StringBuilder(text.length());
+        for (int i = 0; i < text.length(); i++) {
+            char ch = text.charAt(i);
+            if (ch == '\u00a7' && i + 1 < text.length()) {
+                i++;
+                continue;
+            }
+            result.append(ch);
+        }
+        return result.toString();
     }
 
     private Typeface getTypeface(String fontName) {
@@ -432,7 +525,7 @@ public final class SkikoBackend implements RenderBackend {
     }
 
     private void drawFormattedString(String text, float x, float baselineY, float lineHeight,
-                                     FontRenderer fontRenderer, Font font, org.jetbrains.skia.Paint skPaint, int baseColor) {
+                                     Font font, org.jetbrains.skia.Paint skPaint, int baseColor) {
         Canvas currentCanvas = this.requireCanvas();
         StringBuilder segment = new StringBuilder();
         float penX = x;
@@ -442,14 +535,14 @@ public final class SkikoBackend implements RenderBackend {
         for (int i = 0; i < text.length(); i++) {
             char ch = text.charAt(i);
             if (ch == '\n') {
-                penX = this.drawTextSegment(currentCanvas, segment, penX, penY, fontRenderer, font, skPaint, currentColor);
+                penX = this.drawTextSegment(currentCanvas, segment, penX, penY, font, skPaint, currentColor);
                 segment.setLength(0);
                 penX = x;
                 penY += Math.max(1.0f, lineHeight);
                 continue;
             }
             if (ch == '\u00a7' && i + 1 < text.length()) {
-                penX = this.drawTextSegment(currentCanvas, segment, penX, penY, fontRenderer, font, skPaint, currentColor);
+                penX = this.drawTextSegment(currentCanvas, segment, penX, penY, font, skPaint, currentColor);
                 segment.setLength(0);
                 char code = Character.toUpperCase(text.charAt(++i));
                 Integer rgb = this.getMinecraftTextColor(code);
@@ -462,40 +555,128 @@ public final class SkikoBackend implements RenderBackend {
             }
             segment.append(ch);
         }
-        this.drawTextSegment(currentCanvas, segment, penX, penY, fontRenderer, font, skPaint, currentColor);
+        this.drawTextSegment(currentCanvas, segment, penX, penY, font, skPaint, currentColor);
+    }
+
+    private float measureFormattedTextWidth(String text, Font font) {
+        String stripped = this.stripFormatting(text);
+        float lineWidth = 0.0f;
+        float maxWidth = 0.0f;
+        int lineStart = 0;
+        for (int i = 0; i <= stripped.length(); i++) {
+            if (i == stripped.length() || stripped.charAt(i) == '\n') {
+                if (i > lineStart) {
+                    lineWidth += Math.max(0.0f, font.measureTextWidth(stripped.substring(lineStart, i)));
+                }
+                maxWidth = Math.max(maxWidth, lineWidth);
+                lineWidth = 0.0f;
+                lineStart = i + 1;
+            }
+        }
+        return maxWidth;
     }
 
     private float drawTextSegment(Canvas currentCanvas, StringBuilder segment, float x, float y,
-                                  FontRenderer fontRenderer, Font font, org.jetbrains.skia.Paint skPaint, int color) {
+                                  Font font, org.jetbrains.skia.Paint skPaint, int color) {
         if (segment.length() == 0) {
             return x;
         }
         String value = segment.toString();
-        float advance = this.measureLegacyTextWidth(fontRenderer, value);
-        float skiaWidth = Math.max(0.001f, font.measureTextWidth(value, skPaint));
-        float scaleX = Math.max(0.25f, Math.min(4.0f, advance / skiaWidth));
         skPaint.setColor(color);
-        if (Math.abs(scaleX - 1.0f) <= 0.01f) {
-            currentCanvas.drawString(value, x, y, font, skPaint);
-        } else {
-            currentCanvas.save();
-            try {
-                currentCanvas.translate(x, y);
-                currentCanvas.scale(scaleX, 1.0f);
-                currentCanvas.drawString(value, 0.0f, 0.0f, font, skPaint);
-            } finally {
-                currentCanvas.restore();
-            }
-        }
-        return x + advance;
+        currentCanvas.drawString(value, x, y, font, skPaint);
+        return x + Math.max(0.0f, font.measureTextWidth(value, skPaint));
     }
 
-    private float measureLegacyTextWidth(FontRenderer fontRenderer, String value) {
-        this.flush();
-        try {
-            return fontRenderer.getWidth(value);
-        } finally {
-            this.afterExternalGlDraw();
+    private static final class GlStateGuard {
+        private final int vertexArray;
+        private final int arrayBuffer;
+        private final int elementArrayBuffer;
+        private final int currentProgram;
+        private final int activeTexture;
+        private final int texture2d;
+        private final int readFramebuffer;
+        private final int drawFramebuffer;
+        private final int[] viewport = new int[4];
+        private final int[] scissorBox = new int[4];
+        private final boolean[] colorMask = new boolean[4];
+        private final boolean blend;
+        private final boolean depthTest;
+        private final boolean cullFace;
+        private final boolean scissorTest;
+        private final boolean depthMask;
+        private final int blendSrcRgb;
+        private final int blendDstRgb;
+        private final int blendSrcAlpha;
+        private final int blendDstAlpha;
+        private final int blendEquationRgb;
+        private final int blendEquationAlpha;
+
+        private GlStateGuard() {
+            this.vertexArray = GL11.glGetInteger(GL30.GL_VERTEX_ARRAY_BINDING);
+            this.arrayBuffer = GL11.glGetInteger(GL15.GL_ARRAY_BUFFER_BINDING);
+            this.elementArrayBuffer = GL11.glGetInteger(GL15.GL_ELEMENT_ARRAY_BUFFER_BINDING);
+            this.currentProgram = GL11.glGetInteger(GL20.GL_CURRENT_PROGRAM);
+            this.activeTexture = GL11.glGetInteger(GL13.GL_ACTIVE_TEXTURE);
+            this.texture2d = GL11.glGetInteger(GL11.GL_TEXTURE_BINDING_2D);
+            this.readFramebuffer = GL11.glGetInteger(GL30.GL_READ_FRAMEBUFFER_BINDING);
+            this.drawFramebuffer = GL11.glGetInteger(GL30.GL_DRAW_FRAMEBUFFER_BINDING);
+            GL11.glGetIntegerv(GL11.GL_VIEWPORT, this.viewport);
+            GL11.glGetIntegerv(GL11.GL_SCISSOR_BOX, this.scissorBox);
+            this.getBooleanVector(GL11.GL_COLOR_WRITEMASK, this.colorMask);
+            this.blend = GL11.glIsEnabled(GL11.GL_BLEND);
+            this.depthTest = GL11.glIsEnabled(GL11.GL_DEPTH_TEST);
+            this.cullFace = GL11.glIsEnabled(GL11.GL_CULL_FACE);
+            this.scissorTest = GL11.glIsEnabled(GL11.GL_SCISSOR_TEST);
+            this.depthMask = GL11.glGetBoolean(GL11.GL_DEPTH_WRITEMASK);
+            this.blendSrcRgb = GL11.glGetInteger(GL14.GL_BLEND_SRC_RGB);
+            this.blendDstRgb = GL11.glGetInteger(GL14.GL_BLEND_DST_RGB);
+            this.blendSrcAlpha = GL11.glGetInteger(GL14.GL_BLEND_SRC_ALPHA);
+            this.blendDstAlpha = GL11.glGetInteger(GL14.GL_BLEND_DST_ALPHA);
+            this.blendEquationRgb = GL11.glGetInteger(GL20.GL_BLEND_EQUATION_RGB);
+            this.blendEquationAlpha = GL11.glGetInteger(GL20.GL_BLEND_EQUATION_ALPHA);
+        }
+
+        private static GlStateGuard capture() {
+            return new GlStateGuard();
+        }
+
+        private void restore() {
+            GL30.glBindFramebuffer(GL30.GL_READ_FRAMEBUFFER, this.readFramebuffer);
+            GL30.glBindFramebuffer(GL30.GL_DRAW_FRAMEBUFFER, this.drawFramebuffer);
+            GL30.glBindVertexArray(this.vertexArray);
+            GL15.glBindBuffer(GL15.GL_ARRAY_BUFFER, this.arrayBuffer);
+            if (this.vertexArray != 0) {
+                GL15.glBindBuffer(GL15.GL_ELEMENT_ARRAY_BUFFER, this.elementArrayBuffer);
+            }
+            GL20.glUseProgram(this.currentProgram);
+            GL13.glActiveTexture(this.activeTexture);
+            GL11.glBindTexture(GL11.GL_TEXTURE_2D, this.texture2d);
+            GL11.glViewport(this.viewport[0], this.viewport[1], this.viewport[2], this.viewport[3]);
+            GL11.glScissor(this.scissorBox[0], this.scissorBox[1], this.scissorBox[2], this.scissorBox[3]);
+            GL14.glBlendFuncSeparate(this.blendSrcRgb, this.blendDstRgb, this.blendSrcAlpha, this.blendDstAlpha);
+            GL20.glBlendEquationSeparate(this.blendEquationRgb, this.blendEquationAlpha);
+            GL11.glColorMask(this.colorMask[0], this.colorMask[1], this.colorMask[2], this.colorMask[3]);
+            GL11.glDepthMask(this.depthMask);
+            this.setEnabled(GL11.GL_BLEND, this.blend);
+            this.setEnabled(GL11.GL_DEPTH_TEST, this.depthTest);
+            this.setEnabled(GL11.GL_CULL_FACE, this.cullFace);
+            this.setEnabled(GL11.GL_SCISSOR_TEST, this.scissorTest);
+        }
+
+        private void getBooleanVector(int pname, boolean[] target) {
+            ByteBuffer buffer = BufferUtils.createByteBuffer(target.length);
+            GL11.glGetBooleanv(pname, buffer);
+            for (int i = 0; i < target.length; i++) {
+                target[i] = buffer.get(i) != 0;
+            }
+        }
+
+        private void setEnabled(int cap, boolean enabled) {
+            if (enabled) {
+                GL11.glEnable(cap);
+            } else {
+                GL11.glDisable(cap);
+            }
         }
     }
 

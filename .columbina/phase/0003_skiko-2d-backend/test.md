@@ -2,7 +2,7 @@
 
 ## 测试状态
 
-WAITING_USER_PASS
+PASS
 
 ## 测试目标
 
@@ -28,6 +28,16 @@ WAITING_USER_PASS
 - 已修复 `SkikoBackend` 的 Skia font size 换算和 `§` 分段文字测宽推进。
 - 字体尺寸/测宽修复后已运行 `.\gradlew.bat jar`。
 - 已补充 `FontRenderer.getWidth(...)` 测宽前后 Skia flush / GL reset 保护，并再次运行 `.\gradlew.bat jar`。
+- 用户继续截图确认：Skiko active 后字体/图标仍与 legacy 存在位置偏移，且 Watermark 圆角背景会间歇消失。
+- 已移除 Skiko 文本绘制阶段的 legacy `FontRenderer.getWidth(...)`、per-segment `flush()` / `resetGLAll()` 和 `scaleX`。
+- 用户反馈上一轮修复后出现严重状态污染：字和图形不渲染、世界出现大块半透明三角/扇形、MC 原版物品栏也被污染。
+- 已检查 `run/logs/latest.log`，日志持续出现 `Array object is not active`、`Invalid VAO/VBO/pointer usage`、`Invalid offset and/or size`。
+- 已回撤上一轮高风险的全局 `FontRenderer.getWidth(...)` / `getBounds(...)` CPU AWT 测宽改动和 `GlHelper` GUI scale 缓存 key 改动。
+- 已新增 `GlStateGuard` 恢复 FBO、VAO/VBO、shader、texture、viewport、scissor、blend/depth/color mask 等状态。
+- 已新增 `RenderBackend.measureTextWidth(...)`，并让 `GlHelper.getStringWidth(...)` 在 Skiko active 时走后端安全测宽。
+- 已新增外部 `PoseStack` concat/restore，并让 `RenderUtil` 通过 `Renderer.canUseSkiko2D(poseStack)` 限制 Skiko 分流。
+- 本轮 GL 状态隔离和 2D/3D 分流修复后已运行 `.\gradlew.bat jar`。
+- 已运行 `.\gradlew.bat runClient0 -PopenzenRenderBackend=SKIKO -PopenzenRenderProbe=true --dry-run`。
 
 ## 期望结果
 
@@ -38,6 +48,10 @@ WAITING_USER_PASS
 - Skiko backend 可通过 `-PopenzenRenderBackend=SKIKO` 进入后续人工验证。
 - 启动前 Skiko native runtime 文件已存在，避免 `Cannot find skiko-windows-x64.dll.sha256`。
 - Skiko active 后文字尺寸接近 legacy，且按旧 `FontRenderer.getWidth/getMetrics` 布局。
+- Skiko active 后 Watermark / DynamicIsland / KeyBinds 的字体和图标位置更接近 legacy。
+- Skiko active 后不再因文字布局测宽触发 legacy glyph atlas GL 上传。
+- Skiko active 后 world/3D pose 不会误进 Skia 2D surface。
+- Skiko active 后打开 MC 原版物品栏不应出现大块半透明几何、遮罩或 VAO/VBO 状态污染。
 
 ## 实际结果
 
@@ -57,10 +71,14 @@ WAITING_USER_PASS
 - 已将 Skia font size 改为 `fontRenderer.getSize() * 0.5f`，并用 `fontRenderer.getWidth(...)` 推进分段文字。
 - 字体尺寸/测宽修复后 `.\gradlew.bat jar` 成功。
 - 测宽 flush/reset 保护补充后 `.\gradlew.bat jar` 成功。
-- 未启动完整 `runClient0`，未做字体修复后的实际游戏内视觉验收。
+- 用户反馈上一轮修复后完整游戏内视觉失败，现象为严重 GL 状态污染。
+- 本轮 GL 状态隔离、后端安全测宽和 2D/3D 分流修复后，`.\gradlew.bat jar` 成功。
+- 本轮修复后，`.\gradlew.bat runClient0 -PopenzenRenderBackend=SKIKO -PopenzenRenderProbe=true --dry-run` 成功。
+- 用户完整运行 `.\gradlew.bat runClient0 -PopenzenRenderBackend=SKIKO` 后确认 `active=SKIKO`，游戏内渲染正常。
+- 本轮 GL 状态污染修复后的实际游戏内视觉验收：PASS。
 
 ## 用户确认
 
-- 结果：WAITING
-- 用户输入：
-- 确认时间：
+- 结果：PASS
+- 用户输入：PASS，active=skia，正常了
+- 确认时间：2026-06-08

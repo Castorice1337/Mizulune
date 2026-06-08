@@ -165,6 +165,8 @@ skikoActive=true fallback=false
 - `SkikoBackend.drawTextSegment(...)` 改用 `fontRenderer.getWidth(value)` 推进 `§` 分段文字光标，避免 Skia measure 与旧布局系统分叉。
 - `FontRenderer.getWidth(...)` 可能首次触发旧 glyph atlas 上传，因此测宽前先 flush Skia，测宽后调用 `DirectContext.resetGLAll()`，避免外部 GL 操作污染 Skia 上下文状态。
 
+注意：上述“分段文字继续调用 `fontRenderer.getWidth(...)` 并 flush/reset”的方案后续被“Skiko 字体/图标偏移与圆角背景间歇消失”修复取代；不要再把它作为当前推荐路径。
+
 ### 证据
 
 | 证据 | 说明 |
@@ -194,3 +196,94 @@ skikoActive=true fallback=false
 - 如果后续还有 `NoClassDefFoundError: org/jetbrains/skia/...`，优先检查 `minecraftLibrary` 是否被移除或依赖解析是否失败。
 - 如果后续还有 `Cannot find skiko-windows-x64.dll.sha256`，优先检查 `-Dskiko.library.path` 和 `build/skiko-runtime/windows-x64`。
 - 如果后续文字仍有轻微垂直偏移，优先微调 `SkikoBackend.drawString(...)` 的 baseline，而不是改 HUD/GUI 层布局公式。
+
+## Skiko 字体/图标偏移与圆角背景间歇消失
+
+### 症状
+
+用户继续截图对比 Skiko 与 legacy 后发现：
+
+- DynamicIsland / Watermark 中 `Z` icon、`beta`、`b1`、server/ping 文本与圆角背景相对位置偏移，字号和 legacy 不一致。
+- KeyBinds 中 `Hotkeys` 文本、material icon、行文字和右侧数值/开关与圆角块位置不一致。
+- Watermark 圆角背景有时会持续消失一段时间，文字仍然显示，之后背景又恢复。
+
+### 根因
+
+Skiko 后端的上一轮文字修复仍在 `SkikoBackend.drawTextSegment(...)` 中调用 legacy `FontRenderer.getWidth(...)`，并在每个文字 segment 前后执行 `flush()` / `DirectContext.resetGLAll()`。这会在同一 Skia frame 中间触发旧 `CustomFont` glyph atlas 路径和 GL state 修改，容易污染 Skia 当前 framebuffer/surface 状态；同时 per-segment `scaleX` 为了强行贴合 legacy advance 拉伸/压缩 Skia glyph，导致 material icon 和 Zen icon 的视觉中心继续偏移。
+
+此外，`GlHelper.getStringWidth(...)` 和部分 HUD 直接调用 `FontRenderer.getWidth(...)` 时，命名字体测宽仍可能触发旧 glyph atlas 上传；这类布局测宽发生在 Skiko 绘制期间时，也属于状态污染入口。
+
+### 修复
+
+- `SkikoBackend.drawString(...)` 按旧 `DrawContext -> CustomFont` 路径的语义计算 baseline：`DrawContext` 先加 `GlyphMetrics.ascent()`，`CustomFont` 内部 `--y`，再按 atlas ascent 回到真实 baseline；Skiko 现在用 `toLegacyTextBaseline(...)` 复刻该过程，并保留 0.1 像素取整。
+- 移除 `SkikoBackend.drawTextSegment(...)` 内的 legacy `FontRenderer.getWidth(...)`、中途 `flush()` / `resetGLAll()` 和 per-segment `scaleX`。
+- 回撤上一轮高风险的全局 `FontRenderer.getWidth(...)` / `getBounds(...)` CPU AWT 测宽改动和 `GlHelper` GUI scale 缓存 key 改动，避免改变 legacy 布局基线。
+- 新增 `RenderBackend.measureTextWidth(...)`；`GlHelper.getStringWidth(...)` 在 Skiko active 的 `DrawContext` 内走 Skiko font 测宽，避免 `GlHelper.drawTextFormatted(...)` 每段文字后触发旧 `CustomFont.getStringWidth(...)` 和 glyph atlas 上传。
+- `SkikoBackend.flush()` 改为 `directContext.flushAndSubmit(surface, true)`，统一提交当前 Skia surface。
+
+### 证据
+
+| 证据 | 说明 |
+|---|---|
+| 用户截图 | Skiko 与 legacy 的 Watermark / KeyBinds 文字、图标、背景对齐差异明显 |
+| `SkikoBackend.drawTextSegment(...)` 修复前源码 | 每个 segment 调用 `measureLegacyTextWidth(...)`，内部执行 `flush()` 和 `afterExternalGlDraw()` |
+| `FontRenderer.getWidth(...)` 修复前源码 | 命名字体测宽会进入 `CustomFont.getStringWidth(...)`，可能触发 glyph atlas 构建和 texture 上传 |
+| `.\gradlew.bat jar` | 修复后完整 jar 构建成功 |
+| `.\gradlew.bat runClient0 -PopenzenRenderBackend=SKIKO -PopenzenRenderProbe=true --dry-run` | Skiko 开关下任务链配置成功，未启动游戏 |
+
+### 回归状态
+
+- `.\gradlew.bat jar`：PASS。
+- `.\gradlew.bat runClient0 -PopenzenRenderBackend=SKIKO -PopenzenRenderProbe=true --dry-run`：PASS。
+- Skiko 实机视觉验收：PASS，用户确认 `active=SKIKO` 且渲染正常。
+
+## Skiko GL 状态污染导致 MC 原生渲染异常
+
+### 症状
+
+用户反馈上一轮修复后问题加重：
+
+- OpenZen 字和图形大量不显示或错位。
+- 世界画面出现大块半透明彩色三角/扇形覆盖。
+- 打开 MC 原版物品栏后原版 GUI 也被遮罩和错误几何污染。
+
+`run/logs/latest.log` 中持续出现 OpenGL debug error：
+
+```text
+GL_INVALID_OPERATION error generated. Array object is not active.
+GL_INVALID_OPERATION error generated. Invalid VAO/VBO/pointer usage.
+GL_INVALID_VALUE error generated. Invalid offset and/or size.
+```
+
+### 根因
+
+Skiko GPU surface 绘制和旧 Minecraft/OpenGL 绘制共用同一个 GL context。上一轮只做了局部 flush/reset，未在 Skiko begin/end 和 legacy GL 混画边界完整恢复 Minecraft 期望的 FBO、VAO/VBO、shader program、texture unit、viewport、scissor、blend/depth/color mask 等状态，导致后续 `BufferBuilder` / vanilla GUI 读取到被 Skia 修改过的 GL 管线状态。
+
+同时 `RenderUtil` 的 Skiko 分流只检查 `Renderer.isSkikoEnabled()`，没有检查传入 `PoseStack` 是否属于 2D GUI；这会让非 2D 或带外部矩阵的调用误进入 Skia 2D surface。`GlHelper.drawTextFormatted(...)` 仍会在 Skiko 绘制期间调用旧 `FontRenderer.getWidth(...)` 推进分段文字，也可能触发 glyph atlas 上传。
+
+### 修复
+
+- `SkikoBackend` 增加 `GlStateGuard`，在 begin 捕获状态，在 end 和 `beforeExternalGlDraw()` 后恢复状态。
+- `GlStateGuard` 覆盖 FBO、VAO、array/element buffer、shader program、active texture、texture binding、viewport、scissor、blend function/equation、depth mask、color mask、blend/depth/cull/scissor enable。
+- `RenderBackend` 增加 `pushExternalPose(...)` / `popExternalPose()`；`SkikoBackend` 用 Skia `Matrix33` concat 外部 `PoseStack`，并在 `Renderer.renderWithPose(...)` 嵌套和独立路径中配对 save/restore。
+- `Renderer.canUseSkiko2D(PoseStack)` 用 2D affine pose 判定限制 `RenderUtil` 的 Skiko 分流，避免 world/3D pose 误入 Skia。
+- `RenderBackend.measureTextWidth(...)` + `SkikoBackend.measureTextWidth(...)` 提供 Skiko 帧内安全测宽；`GlHelper.getStringWidth(...)` 在 Skiko active 时不再触发 legacy glyph atlas 上传。
+- 保留 legacy OpenGL 3D/world 渲染路径，不把 `drawSolidBox`、`drawOutlineBox`、`drawColoredBox`、`drawFilledColoredBox`、`drawSpiralEffect`、`drawBoxVerts` 迁到 Skiko。
+
+### 证据
+
+| 证据 | 说明 |
+|---|---|
+| 用户截图 | 世界和原版物品栏均被大块半透明几何污染 |
+| `run/logs/latest.log` | 出现 VAO/VBO/pointer 和 offset/size OpenGL error |
+| `SkikoBackend` | 新增 `GlStateGuard`、`pushExternalPose(...)`、`measureTextWidth(...)` |
+| `Renderer` | 新增 `canUseSkiko2D(PoseStack)` 和外部 pose 配对应用 |
+| `RenderUtil` | Skiko 分流从 `isSkikoEnabled()` 改为 `canUseSkiko2D(poseStack)` |
+| `GlHelper` | Skiko active 时 `getStringWidth(...)` 走后端安全测宽 |
+
+### 回归状态
+
+- `.\gradlew.bat jar`：PASS。
+- `.\gradlew.bat runClient0 -PopenzenRenderBackend=SKIKO -PopenzenRenderProbe=true --dry-run`：PASS。
+- 完整 `runClient0` 游戏内视觉验收：PASS，用户确认 `active=SKIKO` 且渲染正常。
+- 后续仍需在新增渲染迁移时继续检查：世界/物品栏不出现大块半透明几何，`run/logs/latest.log` 不刷 VAO/VBO/pointer error，Watermark 圆角背景不间歇消失。

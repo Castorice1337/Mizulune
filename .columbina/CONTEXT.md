@@ -20,7 +20,7 @@ OpenZen 当前是一个已存在的 Minecraft Forge 1.20.1 client 仓库，Java/
 |---|---|---|---|---|---|
 | 0001 | project-init | complete | 初始化 Columbina 工作流 | `AGENTS.md`, `.columbina/INIT.md`, `.columbina/CONTEXT.md` | 未测试 |
 | 0002 | git-publication-setup | partial | 初始化本地 Git 仓库并提交公开源码；GitHub repo 创建因 `gh` token 失效暂未完成 | `.gitignore`, `.columbina/phase/0002_git-publication-setup/CONTEXT.md` | 未测试 |
-| 0003 | skiko-2d-backend | partial | 增加 Skiko 2D UI/HUD 渲染后端骨架、验证面板和开发期 Skiko native runtime 抽取，默认保留 legacy fallback | `Renderer.java`, `RenderBackendProbe.java`, `DrawContext.java`, `SkikoBackend.java`, `GlHelper.java`, `RenderUtil.java`, `build.gradle` | WAITING_USER_PASS |
+| 0003 | skiko-2d-backend | partial | 增加 Skiko 2D UI/HUD 渲染后端骨架、验证面板和开发期 Skiko native runtime 抽取；修复 Skiko GL 状态污染、PoseStack 映射和 RenderUtil 2D/3D 分流边界 | `Renderer.java`, `RenderBackend.java`, `RenderBackendProbe.java`, `DrawContext.java`, `SkikoBackend.java`, `GlHelper.java`, `RenderUtil.java`, `build.gradle` | PASS |
 
 ## 已有核心模块
 
