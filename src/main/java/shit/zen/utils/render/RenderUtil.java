@@ -79,7 +79,7 @@ extends ClientBase {
     private static float zLevel;
 
     public static void drawGradientV(PoseStack poseStack, float x, float y, float width, float height, int colorTop, int colorBottom) {
-        if (Renderer.isSkikoEnabled()) {
+        if (Renderer.canUseSkiko2D(poseStack)) {
             Renderer.renderWithPose(poseStack, drawContext -> {
                 try (Paint paint = new Paint()) {
                     paint.setColor(colorTop).setGradCoords(new Paint.GradientCoords(x, y, x, y + height, colorTop, colorBottom));
@@ -104,7 +104,7 @@ extends ClientBase {
     }
 
     public static void drawGradientH(PoseStack poseStack, float x, float y, float width, float height, int colorLeft, int colorRight) {
-        if (Renderer.isSkikoEnabled()) {
+        if (Renderer.canUseSkiko2D(poseStack)) {
             Renderer.renderWithPose(poseStack, drawContext -> {
                 try (Paint paint = new Paint()) {
                     paint.setColor(colorLeft).setGradCoords(new Paint.GradientCoords(x, y, x + width, y, colorLeft, colorRight));
@@ -160,7 +160,7 @@ extends ClientBase {
     }
 
     public static void drawRoundedRect(PoseStack poseStack, float x, float y, float width, float height, float radius, float smoothness, int color) {
-        if (Renderer.isSkikoEnabled()) {
+        if (Renderer.canUseSkiko2D(poseStack)) {
             Renderer.renderWithPose(poseStack, drawContext -> {
                 try (Paint paint = new Paint()) {
                     paint.setColor(color);
@@ -197,7 +197,7 @@ extends ClientBase {
     }
 
     public static void drawRoundedRectCorners(PoseStack poseStack, float x, float y, float width, float height, float radius, boolean topLeft, boolean topRight, boolean bottomLeft, boolean bottomRight, int color) {
-        if (Renderer.isSkikoEnabled()) {
+        if (Renderer.canUseSkiko2D(poseStack)) {
             float clampedRadius = Math.max(0.0f, Math.min(radius, Math.min(width, height) / 2.0f));
             float[] radii = new float[]{
                     topLeft ? clampedRadius : 0.0f,
@@ -383,7 +383,7 @@ extends ClientBase {
     }
 
     public static void drawFilledRect(PoseStack poseStack, float x, float y, float width, float height, int color) {
-        if (Renderer.isSkikoEnabled()) {
+        if (Renderer.canUseSkiko2D(poseStack)) {
             Renderer.renderWithPose(poseStack, drawContext -> {
                 try (Paint paint = new Paint()) {
                     paint.setColor(color);
@@ -742,7 +742,7 @@ extends ClientBase {
     }
 
     public static void drawShadow(PoseStack poseStack, float x, float y, float width, float height, int blurRadius, int color) {
-        if (Renderer.isSkikoEnabled()) {
+        if (Renderer.canUseSkiko2D(poseStack)) {
             final float shadowX = x;
             final float shadowY = y;
             final float shadowWidth = width;

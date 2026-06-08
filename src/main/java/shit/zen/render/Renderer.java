@@ -5,6 +5,7 @@ import com.mojang.blaze3d.vertex.BufferUploader;
 import java.lang.reflect.Field;
 import java.util.function.Consumer;
 import net.minecraft.client.gui.GuiGraphics;
+import org.joml.Matrix4f;
 import org.lwjgl.opengl.GL11;
 import org.lwjgl.opengl.GL13;
 import org.lwjgl.opengl.GL14;
@@ -32,6 +33,13 @@ extends ClientBase {
 
     public static boolean isSkikoEnabled() {
         return configuredBackend == BackendType.SKIKO && !backendFailed && backend.handles2D();
+    }
+
+    public static boolean canUseSkiko2D(PoseStack poseStack) {
+        if (!Renderer.isSkikoEnabled()) {
+            return false;
+        }
+        return currentCanvas != null || Renderer.isGuiAffinePose(poseStack);
     }
 
     public static RenderBackend getBackend() {
@@ -130,7 +138,12 @@ extends ClientBase {
         if (currentCanvas != null) {
             RenderBackend effectiveBackend = Renderer.getEffectiveBackend();
             if (poseStack != null && effectiveBackend.handles2D()) {
-                consumer.accept(new DrawContext(guiGraphics, poseStack, effectiveBackend));
+                effectiveBackend.pushExternalPose(poseStack);
+                try {
+                    consumer.accept(new DrawContext(guiGraphics, poseStack, effectiveBackend));
+                } finally {
+                    effectiveBackend.popExternalPose();
+                }
             } else {
                 consumer.accept(currentCanvas);
             }
@@ -150,6 +163,9 @@ extends ClientBase {
         try {
             if (effectiveBackend.handles2D()) {
                 effectiveBackend.begin(guiGraphics, drawContext.getPoseStack());
+                if (poseStack != null) {
+                    effectiveBackend.pushExternalPose(poseStack);
+                }
             }
             consumer.accept(drawContext);
             RenderBackendProbe.render(drawContext);
@@ -163,6 +179,14 @@ extends ClientBase {
         } finally {
             drawContext.clearClipStack();
             if (effectiveBackend.handles2D()) {
+                if (poseStack != null) {
+                    try {
+                        effectiveBackend.popExternalPose();
+                    } catch (Throwable throwable) {
+                        logger.error("Render backend {} failed while restoring external pose", effectiveBackend.type(), throwable);
+                        backendFailed = true;
+                    }
+                }
                 try {
                     effectiveBackend.end();
                 } catch (Throwable throwable) {
@@ -204,5 +228,20 @@ extends ClientBase {
             }
         }
         return LEGACY_BACKEND;
+    }
+
+    private static boolean isGuiAffinePose(PoseStack poseStack) {
+        if (poseStack == null) {
+            return true;
+        }
+        Matrix4f matrix = poseStack.last().pose();
+        float epsilon = 1.0E-4f;
+        return Math.abs(matrix.m02()) <= epsilon
+                && Math.abs(matrix.m12()) <= epsilon
+                && Math.abs(matrix.m20()) <= epsilon
+                && Math.abs(matrix.m21()) <= epsilon
+                && Math.abs(matrix.m23()) <= epsilon
+                && Math.abs(matrix.m32()) <= 1024.0f
+                && Math.abs(matrix.m22() - 1.0f) <= 1.0E-3f;
     }
 }

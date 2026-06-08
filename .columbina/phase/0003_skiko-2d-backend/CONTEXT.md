@@ -20,7 +20,13 @@ partial
 - 新增 `RenderBackendProbe` 测试面板，可用 `-PopenzenRenderProbe=true` 在游戏内显示 configured/active backend、fallback 状态和 Skiko debug summary。
 - `build.gradle` 增加 Windows x64 Skiko runtime 和 Kotlin stdlib 依赖，同时挂到 `minecraftLibrary`，让 Forge/ModLauncher 游戏运行期可见；`runClient0` 可通过 `-PopenzenRenderBackend=SKIKO` 转发后端开关到游戏 JVM。
 - `build.gradle` 新增 `skikoNativeRuntime` 配置和 `extractSkikoRuntime` 任务，将 `skiko-windows-x64.dll`、`skiko-windows-x64.dll.sha256`、`icudtl.dat` 解到 `build/skiko-runtime/windows-x64`，并给 client JVM 设置 `-Dskiko.library.path=...`。
-- 修复 Skiko active 后文字与图形割裂的问题：Skia font size 对齐 legacy atlas 的 `size / 2.0f` 行为，分段文字光标推进继续使用 `FontRenderer.getWidth(...)`。
+- 修复 Skiko active 后文字与图形割裂的首轮问题：Skia font size 对齐 legacy atlas 的 `size / 2.0f` 行为。
+- 继续修复 Skiko 字体/图标基线偏移：`SkikoBackend.drawString(...)` 按旧 `DrawContext -> CustomFont` 的 atlas top、`--y` 和 0.1 像素取整语义计算 baseline，不再用 Skia font-wide ascent 反推。
+- 移除 Skiko 文本绘制中的 per-segment legacy `FontRenderer.getWidth(...)`、中途 `flush()` / `resetGLAll()` 和横向 `scaleX`，避免文字绘制阶段污染 Skia/GL 状态。
+- 回撤上一轮高风险的全局 `FontRenderer.getWidth(...)` / `getBounds(...)` CPU AWT 测宽改动和 `GlHelper` GUI scale 缓存 key 改动，避免改变 legacy 布局基线。
+- 新增 `RenderBackend.measureTextWidth(...)`；Skiko active 时 `GlHelper.getStringWidth(...)` 走 Skia font 测宽，legacy 路径继续用旧缓存和旧 `FontRenderer`。
+- `SkikoBackend` 增加 `GlStateGuard`，在 begin/end 和 legacy GL 混画边界恢复 FBO、VAO/VBO、shader program、texture unit、viewport、scissor、blend/depth/color mask 等关键 OpenGL 状态。
+- `Renderer.renderWithPose(...)` 在 Skiko 路径下临时 concat 外部 `PoseStack`；`RenderUtil` 通过 `Renderer.canUseSkiko2D(poseStack)` 限制 Skiko 分流，避免 world/3D pose 误进入 Skia 2D surface。
 
 ## 改动文件
 
@@ -30,12 +36,12 @@ partial
 | `src/main/java/shit/zen/render/Renderer.java` | 增加后端选择、fallback、`renderWithPose(...)` 和 begin/end 调度 |
 | `src/main/java/shit/zen/render/RenderBackendProbe.java` | 可开关的游戏内后端验证面板 |
 | `src/main/java/shit/zen/render/DrawContext.java` | 保留旧实现，增加可选 `RenderBackend` 委托 |
-| `src/main/java/shit/zen/render/GlHelper.java` | 玩家头像 legacy GL 绘制前后通知后端 flush/reset |
+| `src/main/java/shit/zen/render/GlHelper.java` | 玩家头像 legacy GL 绘制前后通知后端 flush/reset；Skiko active 时用后端安全测宽，避免触发旧 glyph atlas 上传 |
 | `src/main/java/shit/zen/utils/render/RenderUtil.java` | 部分 2D helper 在 Skiko 后端开启时走 `DrawContext` |
 | `src/main/java/shit/zen/render/backend/BackendType.java` | 后端类型枚举和 system property 解析 |
-| `src/main/java/shit/zen/render/backend/RenderBackend.java` | 后端接口 |
+| `src/main/java/shit/zen/render/backend/RenderBackend.java` | 后端接口，包含外部 `PoseStack` 临时应用和安全测宽入口 |
 | `src/main/java/shit/zen/render/backend/LegacyGlBackend.java` | legacy fallback 后端 |
-| `src/main/java/shit/zen/render/backend/SkikoBackend.java` | Skiko/Skia OpenGL framebuffer 绑定和 2D draw 实现 |
+| `src/main/java/shit/zen/render/backend/SkikoBackend.java` | Skiko/Skia OpenGL framebuffer 绑定、2D draw 实现、字体基线适配、GL state guard 和 PoseStack concat |
 
 ## 新增/修改的核心类
 
@@ -56,7 +62,9 @@ partial
 - 测试面板开关通过 `openzen.render.probe=true` 读取；Gradle 开发期可用 `-PopenzenRenderProbe=true` 传入。
 - Skiko/Kotlin 依赖必须同时在 `implementation` 和 `minecraftLibrary` 中声明；仅有 `implementation` 会编译通过，但游戏运行期 `ModuleClassLoader` 看不到 `org.jetbrains.skia.DirectContext`。
 - `minecraftLibrary` 只能解决 Java class 可见性；Skiko native loader 在 ModLauncher 环境下仍可能读不到 runtime jar 根目录资源，开发期通过 `-Dskiko.library.path=build/skiko-runtime/windows-x64` 指向已抽取 native 文件。
-- Skiko 字体不能直接使用 `FontRenderer.getSize()`；legacy `Fonts.getCustomFont(...)` 会按 `size / 2.0f` 创建 `CustomFont`，Skiko 需要沿用这个视觉尺寸并复用 `FontRenderer.getWidth/getMetrics` 语义。
+- Skiko 字体不能直接使用 `FontRenderer.getSize()`；legacy `Fonts.getCustomFont(...)` 会按 `size / 2.0f` 创建 `CustomFont`，Skiko 字号先按该行为对齐。
+- Skiko 文本绘制和 `GlHelper` 分段布局期间不能调用可能上传 glyph atlas 的 legacy 测宽路径；Skiko 帧内测宽必须走 `RenderBackend.measureTextWidth(...)`。
+- `RenderUtil` 的 2D helper 不能只看 `Renderer.isSkikoEnabled()`，必须带 `PoseStack` 边界判定，防止 3D/world pose 被画到 Skia 2D surface。
 - Skiko 后端失败只影响后续帧，`Renderer` 会标记失败并回退 legacy。
 - Skiko 与 legacy GL texture/player head 混画时先 flush Skia，再执行 legacy GL，之后调用 `DirectContext.resetGLAll()`。
 - 文字首版实现 `§` 颜色码分段绘制和换行推进；text glow 仍保持“先画普通文字”的首版语义。
@@ -77,11 +85,12 @@ partial
 - 如需改 blur，区分元素自身 blur/shadow 与背景毛玻璃 blur；后者需要 framebuffer snapshot/readback 或继续 legacy。
 - 如果后续还有 `Cannot find skiko-windows-x64.dll.sha256` 或 `LibraryLoadException`，优先检查 `extractSkikoRuntime` 是否执行、`build/skiko-runtime/windows-x64` 是否包含 Skiko native 文件，以及 client JVM 是否带有 `-Dskiko.library.path=...`。
 - 如果后续文字仍偏移，先调 `SkikoBackend` 的字体尺寸、baseline 和 measure 适配，不要改各 HUD/GUI 调用点的布局参数。
+- 如果后续出现圆角背景间歇消失，先检查是否又在 Skiko frame 中间引入了 legacy GL 测宽、texture 上传、重复 flush 或未配对的 scissor/clip，而不是把相关 HUD 背景切回 legacy。
 
 ## 未完成内容
 
 - 用户已确认 `runClient0` 下 Skiko probe 可显示 `active=SKIKO`。
-- 字体尺寸/位置修复后仍待重新截图验收。
+- 用户已确认 `runClient0 -PopenzenRenderBackend=SKIKO` 下 `active=SKIKO` 且渲染正常；字体/图标基线、测宽和 Skiko 状态隔离当前人工验收 PASS。
 - Skiko texture interop 只是普通 `ResourceLocation` 解码尝试；GL id / player skin 动态贴图当前通过 legacy GL 混画保留，后续仍需要 backend texture 包装。
 - 背景毛玻璃 blur 尚未用 Skia snapshot 实现。
 - DLL 注入路径尚未处理 Skiko runtime jar/native resource 可见性。
@@ -89,4 +98,4 @@ partial
 
 ## 测试状态
 
-WAITING_USER_PASS
+PASS

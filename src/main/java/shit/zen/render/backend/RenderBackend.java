@@ -37,6 +37,12 @@ public interface RenderBackend {
     default void afterExternalGlDraw() {
     }
 
+    default void pushExternalPose(PoseStack poseStack) {
+    }
+
+    default void popExternalPose() {
+    }
+
     default void save(DrawContext drawContext) {
     }
 
@@ -71,6 +77,10 @@ public interface RenderBackend {
     }
 
     default void drawString(DrawContext drawContext, String text, float x, float y, FontRenderer fontRenderer, Paint paint) {
+    }
+
+    default float measureTextWidth(String text, FontRenderer fontRenderer) {
+        return fontRenderer == null || text == null ? 0.0f : fontRenderer.getWidth(text);
     }
 
     default void drawArc(DrawContext drawContext, float x1, float y1, float x2, float y2, float startAngle, float sweepAngle, Paint paint) {

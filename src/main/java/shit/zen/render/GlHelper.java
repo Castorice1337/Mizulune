@@ -131,7 +131,7 @@ public final class GlHelper {
             return x;
         }
         DrawContext drawContext = GlHelper.getCanvas();
-        float width = fontRenderer.getWidth(text);
+        float width = GlHelper.getStringWidth(text, fontRenderer);
         float height = fontRenderer.getFont() != null ? fontRenderer.getFont().getFontHeight() : fontRenderer.getSize();
         float halfBlur = Math.max(0.01f, radius * 0.5f);
         drawContext.drawBlur(x, y - height, width, height * 2.0f, halfBlur, () -> drawContext.drawString(text, x, y, fontRenderer, GlHelper.toPaint(blurColor)));
@@ -139,7 +139,7 @@ public final class GlHelper {
     }
 
     public static float drawTextCentered(float centerX, float centerY, String text, FontRenderer fontRenderer, Paint paint) {
-        float width = fontRenderer.getWidth(text);
+        float width = GlHelper.getStringWidth(text, fontRenderer);
         float height = fontRenderer.getFont() != null ? fontRenderer.getFont().getFontHeight() : fontRenderer.getSize();
         return GlHelper.drawTextFormatted(text, centerX - width / 2.0f, centerY - height / 2.0f, fontRenderer, paint, false);
     }
@@ -159,6 +159,10 @@ public final class GlHelper {
     public static float getStringWidth(String text, FontRenderer fontRenderer) {
         if (text == null || text.isEmpty()) {
             return 0.0f;
+        }
+        DrawContext drawContext = Renderer.getCanvas();
+        if (drawContext != null && drawContext.getBackend() != null && drawContext.getBackend().handles2D()) {
+            return drawContext.getBackend().measureTextWidth(text, fontRenderer);
         }
         return stringWidthCache.computeIfAbsent(fontRenderer, key -> new HashMap<>()).computeIfAbsent(text, key -> key != null ? fontRenderer.getWidth(key.replaceAll("§.", "")) : 0.0f);
     }
