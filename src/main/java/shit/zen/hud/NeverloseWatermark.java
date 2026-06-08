@@ -36,7 +36,7 @@ public class NeverloseWatermark {
         float gap = 6.0f;
         float cornerRadius = 4.5f;
         float blurRadius = 15.0f;
-        float zenWidth = this.measureText("ZEN", this.boldFont);
+        float zenWidth = this.measureText("MIZULUNE", this.boldFont);
         currentX += zenWidth + gap;
         currentX = this.renderSectionLegacy(render2DEvent.poseStack(), currentX, y, this.getServerName(), this.smallFont, "\uE8A6", cornerRadius, blurRadius, gap);
         currentX = this.renderSectionLegacy(render2DEvent.poseStack(), currentX, y, this.getPingText(), this.regularFont, "\uE8B8", cornerRadius, blurRadius, gap);
@@ -60,7 +60,7 @@ public class NeverloseWatermark {
         float y = 10.0f;
         float gap = 6.0f;
         float cornerRadius = 4.5f;
-        currentX = this.renderSection(glRenderEvent.drawContext(), currentX, y, "ZEN", this.boldFont, cornerRadius, gap);
+        currentX = this.renderSection(glRenderEvent.drawContext(), currentX, y, "MIZULUNE", this.boldFont, cornerRadius, gap);
         currentX = this.renderSectionWithSub(glRenderEvent.drawContext(), currentX, y, this.getServerName(), this.smallFont, "", cornerRadius, gap);
         currentX = this.renderSectionWithSub(glRenderEvent.drawContext(), currentX, y, this.getPingText(), this.regularFont, "", cornerRadius, gap);
         currentX = this.renderSectionWithSub(glRenderEvent.drawContext(), currentX, y, this.getFpsText(), this.regularFont, "", cornerRadius, gap);
@@ -102,7 +102,7 @@ public class NeverloseWatermark {
     private float getTotalWidth() {
         float total = 0.0f;
         float gap = 6.0f;
-        total += this.measureText("ZEN", this.boldFont) + gap;
+        total += this.measureText("MIZULUNE", this.boldFont) + gap;
         total += this.measureTextWithSub(this.getServerName(), this.smallFont, "") + gap;
         total += this.measureTextWithSub(this.getPingText(), this.regularFont, "") + gap;
         total += this.measureTextWithSub(this.getFpsText(), this.regularFont, "") + gap;

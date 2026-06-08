@@ -4,6 +4,7 @@ set(CMAKE_AUTORCC ON)
 set(CMAKE_AUTOUIC ON)
 
 find_package(Qt6 6.4 COMPONENTS Widgets REQUIRED)
+find_package(unofficial-webview2 CONFIG REQUIRED)
 
 # Stage the freshly-built OpenZen.dll into the loader's binary dir so rc.exe
 # can pick it up as an RCDATA resource (embedded in the .exe).
@@ -21,16 +22,10 @@ qt_add_executable(OpenZenLoader WIN32
     src/main.cpp
     src/MainWindow.cpp
     src/MainWindow.h
-    src/SplashScreen.cpp
-    src/SplashScreen.h
-    src/TitleBar.cpp
-    src/TitleBar.h
-    src/InstanceList.cpp
-    src/InstanceList.h
-    src/InstanceRow.cpp
-    src/InstanceRow.h
-    src/InjectionOverlay.cpp
-    src/InjectionOverlay.h
+    src/ProfileStore.cpp
+    src/ProfileStore.h
+    src/UpdateClient.cpp
+    src/UpdateClient.h
     src/process_list.cpp
     src/injector.cpp
     src/manual_map.cpp
@@ -54,9 +49,11 @@ set_source_files_properties(res/loader.rc PROPERTIES
 
 target_link_libraries(OpenZenLoader PRIVATE
     Qt6::Widgets
+    unofficial::webview2::webview2
     psapi
     shlwapi
     user32
+    winhttp
     dwmapi   # DwmSetWindowAttribute for Win11 rounded corners on frameless window
 )
 
@@ -67,6 +64,11 @@ if(DEFINED OPENZEN_BUILD_REVISION AND NOT OPENZEN_BUILD_REVISION STREQUAL "")
     target_compile_definitions(OpenZenLoader PRIVATE
         OPENZEN_BUILD_REVISION="${OPENZEN_BUILD_REVISION}")
 endif()
+
+target_compile_definitions(OpenZenLoader PRIVATE
+    OPENZEN_LOADER_RES_DIR="${CMAKE_CURRENT_SOURCE_DIR}/res"
+    OPENZEN_LOADER_WEBUI_DIR="${CMAKE_CURRENT_SOURCE_DIR}/webui"
+)
 
 set_target_properties(OpenZenLoader PROPERTIES
     OUTPUT_NAME "OpenZenLoader"

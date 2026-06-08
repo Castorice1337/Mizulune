@@ -414,7 +414,7 @@ extends ClientBase {
         int toggleX = panelX + panelWidth - toggleHeight * 2 - toggleRightPadding;
         int toggleY = panelY + (headerHeight - toggleHeight) / 2;
         if (button == 0 && mouseX >= toggleX && mouseX <= toggleX + toggleHeight * 2 && mouseY >= toggleY && mouseY <= toggleY + toggleHeight) {
-            this.currentModule.toggle();
+            this.currentModule.toggleFromUser();
             String stateLabel = this.currentModule.isEnabled() ? "On" : "Off";
             PanelClickGui.panelClickGui.addToast(this.currentModule.getName() + " Module " + stateLabel);
             return true;

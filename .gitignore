@@ -45,3 +45,6 @@ native/dll.zip
 
 # Temporarily keep GitHub Actions workflow local until gh has workflow scope
 .github/workflows/build-loader.yml
+
+# Test Server for development testing
+/test-server/

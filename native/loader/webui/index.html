@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Mizulune Launcher</title>
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <div id="intro-overlay">
+    <div class="gate gate-top"></div>
+    <div class="gate gate-bottom"></div>
+    <div class="intro-container">
+      <div class="intro-dot"></div>
+      <div class="intro-line">
+        <div class="line-half line-top"></div>
+        <div class="line-half line-bottom"></div>
+      </div>
+      <img src="./res/logo.png" alt="" class="intro-logo" />
+      <div class="intro-brand">
+        <span class="intro-letter-m">M</span>
+        <span class="intro-text-izulune">izulune</span>
+      </div>
+    </div>
+  </div>
+
+  <main class="window">
+    <header class="titlebar">
+      <div class="brand">
+        <img src="./res/logo.png" alt="" class="brand-icon" />
+        <span>Mizulune Launcher</span>
+      </div>
+      <div class="window-actions">
+        <button class="dot dot-min" data-action="minimize" aria-label="Minimize"></button>
+        <button class="dot dot-close" data-action="close" aria-label="Close"></button>
+      </div>
+    </header>
+
+    <section class="workspace">
+      <nav class="sidebar">
+        <button class="nav active" data-page="notice"><span class="icon">☰</span><span>公告</span></button>
+        <button class="nav" data-page="version"><span class="icon">◫</span><span>版本</span></button>
+        <button class="nav" data-page="launch"><span class="icon">▷</span><span>启动</span></button>
+        <button class="nav nav-bottom" data-page="settings"><span class="icon">⚙</span><span>设置</span></button>
+      </nav>
+
+      <div class="content-shell">
+        <section class="page active" id="page-notice">
+          <article class="glass-card notice-card">
+            <div class="page-heading">
+              <span class="heading-icon">▤</span>
+              <h1>公告</h1>
+            </div>
+            <p class="muted" id="notice-status">正在同步 GitHub Release 公告...</p>
+            <pre id="notice-body">正在载入公告。</pre>
+          </article>
+          <aside class="glass-card side-card">
+            <img src="./res/logo_text.png" alt="Mizulune" class="logo-text" />
+            <div class="pill" id="profile-pill">Profile loading</div>
+            <p class="muted">公告文本来自 GitHub latest Release body。</p>
+          </aside>
+        </section>
+
+        <section class="page" id="page-version">
+          <aside class="glass-card version-list">
+            <button class="version-item selected">
+              <strong>1.0</strong>
+              <span>Current</span>
+            </button>
+            <button class="version-item">
+              <strong id="remote-version-short">Latest</strong>
+              <span>GitHub Release</span>
+            </button>
+            <button class="version-item">
+              <strong>Updates</strong>
+              <span>.mizulune/updates</span>
+            </button>
+          </aside>
+          <article class="glass-card version-detail">
+            <div class="page-heading">
+              <span class="heading-icon">▧</span>
+              <h1 id="version-title">版本</h1>
+            </div>
+            <p class="muted" id="version-meta">等待 Release 检查...</p>
+            <p class="status-line" id="version-state">Ready</p>
+            <div class="actions">
+              <button class="primary" id="check-update">校准同步</button>
+              <button class="secondary" id="download-update" disabled>直接下载</button>
+            </div>
+            <div class="progress hidden" id="download-progress"><span></span></div>
+          </article>
+        </section>
+
+        <section class="page" id="page-launch">
+          <article class="glass-card launch-card">
+            <div class="page-heading">
+              <span class="heading-icon">▶</span>
+              <h1>启动</h1>
+            </div>
+            <p class="muted">选择正在运行的 Minecraft 窗口并注入 Mizulune Client。</p>
+            <div class="instances" id="instances"></div>
+            <p class="status-line" id="launch-state">正在扫描 Minecraft 实例...</p>
+          </article>
+          <aside class="glass-card side-card">
+            <img src="./res/logo.png" alt="Mizulune" class="logo-icon" />
+            <h2>Mizulune</h2>
+            <div class="pill" id="instance-count">0 instance</div>
+            <button class="secondary wide" id="rescan">重新扫描</button>
+          </aside>
+        </section>
+
+        <section class="page" id="page-settings">
+          <article class="glass-card settings-card">
+            <div class="page-heading">
+              <span class="heading-icon">⚙</span>
+              <h1>设置</h1>
+            </div>
+            <label class="field">
+              <span>显示名</span>
+              <input id="display-name" maxlength="32" placeholder="Mizulune display name" />
+            </label>
+            <label class="check-row">
+              <input type="checkbox" id="close-after" />
+              <span>注入完成后关闭启动器</span>
+            </label>
+            <button class="primary save" id="save-profile">保存设置</button>
+            <p class="status-line" id="settings-state">Ready</p>
+          </article>
+        </section>
+      </div>
+    </section>
+  </main>
+  <script src="./app.js"></script>
+</body>
+</html>

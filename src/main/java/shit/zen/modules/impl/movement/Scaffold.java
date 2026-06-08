@@ -39,6 +39,7 @@ import shit.zen.event.impl.TickEvent;
 import shit.zen.event.impl.UpdateHeldItemEvent;
 import shit.zen.modules.Category;
 import shit.zen.modules.Module;
+import shit.zen.modules.impl.render.DynamicIsland;
 import shit.zen.settings.impl.BooleanSetting;
 import shit.zen.settings.impl.ModeSetting;
 import shit.zen.settings.impl.NumberSetting;
@@ -63,6 +64,7 @@ public class Scaffold extends Module {
     public final BooleanSetting sneak = new BooleanSetting("Sneak", true);
     public final BooleanSetting snap = new BooleanSetting("Snap", true, () -> this.mode.is("Normal"));
     public final BooleanSetting renderItemSpoof = new BooleanSetting("Render Item Spoof", true);
+    public final BooleanSetting scaffoldCounterOnIsland = new BooleanSetting("Scaffold Counter On Island", false);
     public final NumberSetting rotationTick = new NumberSetting("Rotation Tick", 3, 1, 6, 1);
     public final BooleanSetting clutch = new BooleanSetting("Clutch", true);
 
@@ -341,6 +343,7 @@ public class Scaffold extends Module {
     @EventTarget
     public void onRender2D(Render2DEvent event) {
         if (mc.player == null || mc.level == null) return;
+        if (DynamicIsland.shouldRenderScaffoldCounter()) return;
         int blockCount = this.getBlockSlot();
         if (blockCount == 0) return;
         String countText = String.valueOf(blockCount);
@@ -354,6 +357,35 @@ public class Scaffold extends Module {
         int x = (int) (centerX - textWidth / 2.0f);
         graphics.drawString(mc.font, countText, x, (int) y, -11890462);
         graphics.drawString(mc.font, suffix, x + mc.font.width(countText), (int) y, -1);
+    }
+
+    public boolean isCounterOnIslandActive() {
+        return this.isEnabled() && this.scaffoldCounterOnIsland.getValue() && this.getPlaceableBlockCount() > 0;
+    }
+
+    public int getPlaceableBlockCount() {
+        return this.getBlockSlot();
+    }
+
+    public ItemStack getCounterBlockItem() {
+        if (mc.player == null) return ItemStack.EMPTY;
+        ItemStack selected = mc.player.getMainHandItem();
+        if (selected.getItem() instanceof BlockItem && BlockUtil.isPlaceable(selected)) {
+            return selected;
+        }
+        for (int i = 0; i < 9; i++) {
+            ItemStack stack = mc.player.getInventory().getItem(i);
+            if (stack.getItem() instanceof BlockItem && BlockUtil.isPlaceable(stack)) {
+                return stack;
+            }
+        }
+        for (int i = 9; i < 36; i++) {
+            ItemStack stack = mc.player.getInventory().getItem(i);
+            if (stack.getItem() instanceof BlockItem && BlockUtil.isPlaceable(stack)) {
+                return stack;
+            }
+        }
+        return ItemStack.EMPTY;
     }
 
     private int getBlockSlot() {

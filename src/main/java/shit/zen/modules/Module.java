@@ -10,6 +10,7 @@ import shit.zen.ZenClient;
 import shit.zen.hud.ModuleListHud;
 import shit.zen.modules.Category;
 import shit.zen.modules.KeyBind;
+import shit.zen.modules.impl.render.Notification;
 import shit.zen.settings.Setting;
 
 public abstract class Module
@@ -81,6 +82,18 @@ extends ClientBase {
 
     public void toggle() {
         this.setEnabled(!this.isEnabled());
+    }
+
+    public void setEnabledFromUser(boolean enabled) {
+        if (this.enabled == enabled) {
+            return;
+        }
+        this.setEnabled(enabled);
+        Notification.submitModuleToggle(this, enabled);
+    }
+
+    public void toggleFromUser() {
+        this.setEnabledFromUser(!this.isEnabled());
     }
 
     protected void onEnable() {
