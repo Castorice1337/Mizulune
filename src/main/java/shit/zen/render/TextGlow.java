@@ -18,6 +18,13 @@ public final class TextGlow {
     }
 
     public static float drawGlowText(String text, float x, float y, FontRenderer fontRenderer, int color, int glowColor, float radius) {
+        DrawContext drawContext = Renderer.getCanvas();
+        if (drawContext != null && drawContext.getBackend() != null && drawContext.getBackend().handles2D()) {
+            float result = drawContext.getBackend().drawGlowText(drawContext, text, x, y, fontRenderer, color, glowColor, radius);
+            if (!Float.isNaN(result)) {
+                return result;
+            }
+        }
         return GlHelper.drawText(text, x, y, fontRenderer, color);
     }
 

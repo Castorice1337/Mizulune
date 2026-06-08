@@ -39,6 +39,8 @@ base {
 // Mojang ships Java 17 to end users in 1.18+, so your mod should target Java 17.
 java.toolchain.languageVersion = JavaLanguageVersion.of(17)
 
+def skikoRuntimeDir = layout.buildDirectory.dir('skiko-runtime/windows-x64')
+
 println "Java: ${System.getProperty 'java.version'}, JVM: ${System.getProperty 'java.vm.version'} (${System.getProperty 'java.vendor'}), Arch: ${System.getProperty 'os.arch'}"
 minecraft {
     // The mappings can be changed at any time and must be in the following format.
@@ -115,6 +117,17 @@ minecraft {
             // Allow the agent to attach to itself if PatchAgent.installPatchesAndRetransform
             // needs to fall back to the Attach API.
             jvmArgs.add "-Djdk.attach.allowAttachSelf=true".toString()
+            // Forge/ModLauncher can load Skiko classes from minecraftLibrary but Skiko's
+            // own native loader does not reliably find the separate resource-only runtime
+            // jar. Point it at an extracted runtime directory for dev client runs.
+            jvmArgs.add "-Dskiko.library.path=${skikoRuntimeDir.get().asFile.absolutePath}".toString()
+            def renderBackend = project.findProperty('mizuluneRenderBackend')
+                    ?: project.findProperty('openzenRenderBackend')
+                    ?: System.getProperty('mizulune.render.backend')
+                    ?: System.getProperty('openzen.render.backend')
+            if (renderBackend != null && renderBackend.toString().trim()) {
+                jvmArgs.add "-Dmizulune.render.backend=${renderBackend}".toString()
+            }
         }
 
         server {
@@ -155,6 +168,10 @@ repositories {
     maven { url = "https://pkgs.dev.azure.com/djtheredstoner/DevAuth/_packaging/public/maven/v1" }
 }
 
+configurations {
+    skikoNativeRuntime
+}
+
 dependencies {
     // Specify the version of Minecraft to use.
     // Any artifact can be supplied so long as it has a "userdev" classifier artifact and is a compatible patcher artifact.
@@ -174,6 +191,14 @@ dependencies {
 
     // Dev Auth
     runtimeOnly("me.djtheredstoner:DevAuth-forge-latest:1.2.2")
+
+    // Skiko/Skia 2D renderer backend. The same resolved runtime jars are also
+    // embedded under openzen/dll-libs so the DLL injection path can expose them.
+    implementation 'org.jetbrains.skiko:skiko-awt-runtime-windows-x64:0.148.1'
+    implementation 'org.jetbrains.kotlin:kotlin-stdlib:2.3.20'
+    minecraftLibrary 'org.jetbrains.skiko:skiko-awt-runtime-windows-x64:0.148.1'
+    minecraftLibrary 'org.jetbrains.kotlin:kotlin-stdlib:2.3.20'
+    skikoNativeRuntime 'org.jetbrains.skiko:skiko-awt-runtime-windows-x64:0.148.1'
 
     // Example mod dependency with JEI - using fg.deobf() ensures the dependency is remapped to your development mappings
     // The JEI API is declared for compile time use, while the full JEI artifact is used at runtime
@@ -212,6 +237,12 @@ tasks.named('processResources', ProcessResources).configure {
 
 // Example for how to get properties into the manifest for reading at runtime.
 tasks.named('jar', Jar).configure {
+    from({ configurations.skikoNativeRuntime }) {
+        into 'openzen/dll-libs'
+        include '*.jar'
+        duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    }
+
     manifest {
         attributes([
                 'Specification-Title'     : mod_id,
@@ -416,10 +447,26 @@ tasks.matching { it.name == 'reobfJar' }.configureEach { finalizedBy 'obfuscateC
 
 // IZMK-style entry point: build the jar first (so the -javaagent path exists) and then launch
 // the client. The client run config above already references tasks.jar via archiveFile.
+tasks.register('extractSkikoRuntime', Copy) {
+    group = 'openzen'
+    description = 'Extract Skiko Windows x64 native runtime files for Forge dev runs.'
+    from({ configurations.skikoNativeRuntime.collect { zipTree(it) } }) {
+        include 'skiko-windows-x64.dll'
+        include 'skiko-windows-x64.dll.sha256'
+        include 'icudtl.dat'
+    }
+    into skikoRuntimeDir
+}
+
+tasks.matching { it.name == 'runClient' }.configureEach {
+    dependsOn tasks.named('extractSkikoRuntime')
+}
+
 tasks.register('runClient0') {
     group = 'forgegradle runs'
     description = 'Build the mod jar (used as -javaagent) and start the client.'
     dependsOn tasks.jar
+    dependsOn tasks.named('extractSkikoRuntime')
     finalizedBy tasks.runClient
 }
 

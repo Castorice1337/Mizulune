@@ -14,7 +14,7 @@ public class FontStore {
     public static CustomFont ICON_30 = loadFont(30.0f, "icon.ttf");
     public static CustomFont MATERIAL_20 = loadFontWithFallback(20.0f, "material.ttf");
     public static CustomFont MATERIAL_14 = loadFontWithFallback(14.0f, "material.ttf");
-    public static CustomFont ZENICON_28 = loadFont(28.0f, "zenicon-Regular.ttf");
+    public static CustomFont ZENICON_28 = loadFont(28.0f, "mizulune-Regular.ttf");
     public static CustomFont AXIFORMA_REGULAR_14 = loadFont(14.0f, "axiforma_regular.ttf");
     public static CustomFont AXIFORMA_REGULAR_16 = loadFont(16.0f, "axiforma_regular.ttf");
     public static CustomFont AXIFORMA_REGULAR_18 = loadFont(18.0f, "axiforma_regular.ttf");
@@ -26,11 +26,11 @@ public class FontStore {
 
     @NotNull
     public static CustomFont loadFont(float size, String name) {
-        try (InputStream stream = Assets.open("/assets/zen/fonts/" + name)) {
+        try (InputStream stream = Assets.open("/assets/mizulune/fonts/" + name)) {
             if (stream == null) {
                 throw new java.io.IOException("Font not found: " + name);
             }
-            return new CustomFont(Font.createFont(Font.TRUETYPE_FONT, stream).deriveFont(0, size / 2.0f), size / 2.0f);
+            return new CustomFont(Font.createFont(Font.TRUETYPE_FONT, stream).deriveFont(0, size / 2.0f), size / 2.0f, name);
         } catch (Exception e) {
             return new CustomFont(new Font("SansSerif", 0, (int)(size / 2)), size / 2.0f);
         }

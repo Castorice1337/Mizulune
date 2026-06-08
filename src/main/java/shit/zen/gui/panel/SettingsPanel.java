@@ -12,8 +12,10 @@ import shit.zen.modules.Module;
 import shit.zen.render.FontPresets;
 import shit.zen.render.FontRenderer;
 import shit.zen.render.GlHelper;
+import shit.zen.render.DrawContext;
 import shit.zen.render.Rectangle;
 import shit.zen.render.Renderer;
+import shit.zen.render.RoundedRectangle;
 import shit.zen.render.StencilHelper;
 import shit.zen.render.TextGlow;
 import shit.zen.settings.Setting;
@@ -109,68 +111,30 @@ extends ClientBase {
             int stencilY = panelY + headerHeight;
             int stencilWidth = panelWidth;
             int stencilHeight = panelHeight - headerHeight;
-            StencilHelper.beginWrite(false);
-            RenderUtil.drawRoundedRect(guiGraphics.pose(), stencilX, stencilY, stencilWidth, stencilHeight, 4.0f * scale, Color.WHITE.getRGB());
-            StencilHelper.beginRead(true);
-            Renderer.renderConsumer(drawContext -> {
-                this.calculateTotalHeight(this.currentModule, scale);
-                drawContext.save();
-                drawContext.clip(Rectangle.ofXYWH(panelX, panelY, panelWidth, panelHeight));
-                Module renderModule = this.animationState == SettingsPanel.AnimationState.FADE_OUT ? this.prevModule : this.currentModule;
-                float titleAlpha = this.animationState == SettingsPanel.AnimationState.FADE_OUT ? (1.0f - this.transitionProgress) * alpha : alpha;
-                if (renderModule != null) {
-                    FontRenderer titleFont = FontPresets.axiformaBold(20.0f * scale);
-                    String title = renderModule.getName();
-                    if (renderModule.isEnabled()) {
-                        int glowColor = this.applyAlpha(new Color(255, 255, 255, 150).getRGB(), titleAlpha);
-                        TextGlow.drawGlowText(title, (float)panelX + 10.0f * scale, (float)panelY + 12.0f * scale, titleFont, this.applyAlpha(-1, titleAlpha), glowColor, 12.0f * scale);
-                    } else {
-                        GlHelper.drawText(title, (float)panelX + 10.0f * scale, (float)panelY + 12.0f * scale, titleFont, this.applyAlpha(-1, titleAlpha));
-                    }
-                }
-                drawContext.restore();
-                drawContext.save();
-                drawContext.clip(Rectangle.ofXYWH(panelX, panelY + headerHeight, panelWidth, panelHeight - headerHeight));
-                float slideY = 0.0f;
-                float bodyAlpha = alpha;
-                Module bodyModule;
-                if (this.animationState == SettingsPanel.AnimationState.FADE_OUT && this.prevModule != null) {
-                    bodyModule = this.prevModule;
-                    slideY = this.transitionProgress * 30.0f * scale;
-                    bodyAlpha = (1.0f - this.transitionProgress) * alpha;
-                } else if (this.animationState == SettingsPanel.AnimationState.FADE_IN && this.currentModule != null) {
-                    bodyModule = this.currentModule;
-                    slideY = (1.0f - this.transitionProgress) * -30.0f * scale;
-                    bodyAlpha = this.transitionProgress * alpha;
-                } else {
-                    bodyModule = this.currentModule;
-                }
-                if (bodyModule != null && bodyAlpha > 0.01f) {
+            if (Renderer.canUseSkiko2D(guiGraphics.pose())) {
+                Renderer.renderConsumer(drawContext -> {
                     drawContext.save();
-                    drawContext.translate(0.0f, slideY);
-                    guiGraphics.pose().pushPose();
-                    guiGraphics.pose().translate(0.0f, slideY, 0.0f);
-                    List<Setting<?>> settings = bodyModule.getSettings();
-                    if (settings != null && !settings.isEmpty()) {
-                        int settingY = panelY + headerHeight - (int)this.scrollOffset;
-                        for (Setting<?> setting : settings) {
-                            if (setting.getVisibility() != null && !setting.getVisibility().displayable()) continue;
-                            int dy = SettingRendererRegistry.getInstance().render(guiGraphics, setting, panelX + (int)(10.0f * scale), settingY, panelWidth - (int)(20.0f * scale), mouseX, mouseY, bodyAlpha, scale);
-                            settingY += dy;
-                        }
-                    } else {
-                        String description = this.getModuleDescription(bodyModule);
-                        if (description != null && !description.isEmpty()) {
-                            FontRenderer descFont = FontPresets.axiformaRegular(12.0f * scale);
-                            this.renderWrappedText(description, panelX + (int)(10.0f * scale), panelY + headerHeight + (int)(10.0f * scale), panelWidth - (int)(20.0f * scale), descFont, -5592406, bodyAlpha, scale);
-                        }
+                    drawContext.clipRoundedRect(RoundedRectangle.ofXYWHR(panelX, panelY, panelWidth, panelHeight, 4.0f * scale), true);
+                    try {
+                        this.renderPanelContent(drawContext, guiGraphics, panelX, panelY, panelWidth, panelHeight, headerHeight, mouseX, mouseY, alpha, scale);
+                    } finally {
+                        drawContext.restore();
                     }
-                    guiGraphics.pose().popPose();
-                    drawContext.restore();
+                });
+            } else {
+                boolean stencilStarted = false;
+                try {
+                    StencilHelper.beginWrite(false);
+                    stencilStarted = true;
+                    RenderUtil.drawRoundedRect(guiGraphics.pose(), stencilX, stencilY, stencilWidth, stencilHeight, 4.0f * scale, Color.WHITE.getRGB());
+                    StencilHelper.beginRead(true);
+                    Renderer.renderConsumer(drawContext -> this.renderPanelContent(drawContext, guiGraphics, panelX, panelY, panelWidth, panelHeight, headerHeight, mouseX, mouseY, alpha, scale));
+                } finally {
+                    if (stencilStarted) {
+                        StencilHelper.end();
+                    }
                 }
-                drawContext.restore();
-            });
-            StencilHelper.end();
+            }
             int contentHeight = baseSize - 2 * marginX - (int)(20.0f * scale);
             float visibleHeight = contentHeight - headerHeight - bottomPadding;
             if (this.totalContentHeight > visibleHeight) {
@@ -190,6 +154,67 @@ extends ClientBase {
         } catch (Exception exception) {
             // empty catch block
         }
+    }
+
+    private void renderPanelContent(DrawContext drawContext, GuiGraphics guiGraphics, int panelX, int panelY,
+                                    int panelWidth, int panelHeight, int headerHeight,
+                                    int mouseX, int mouseY, float alpha, float scale) {
+        this.calculateTotalHeight(this.currentModule, scale);
+        drawContext.save();
+        drawContext.clip(Rectangle.ofXYWH(panelX, panelY, panelWidth, panelHeight));
+        Module renderModule = this.animationState == SettingsPanel.AnimationState.FADE_OUT ? this.prevModule : this.currentModule;
+        float titleAlpha = this.animationState == SettingsPanel.AnimationState.FADE_OUT ? (1.0f - this.transitionProgress) * alpha : alpha;
+        if (renderModule != null) {
+            FontRenderer titleFont = FontPresets.axiformaBold(20.0f * scale);
+            String title = renderModule.getName();
+            if (renderModule.isEnabled()) {
+                int glowColor = this.applyAlpha(new Color(255, 255, 255, 150).getRGB(), titleAlpha);
+                TextGlow.drawGlowText(title, (float)panelX + 10.0f * scale, (float)panelY + 12.0f * scale, titleFont, this.applyAlpha(-1, titleAlpha), glowColor, 12.0f * scale);
+            } else {
+                GlHelper.drawText(title, (float)panelX + 10.0f * scale, (float)panelY + 12.0f * scale, titleFont, this.applyAlpha(-1, titleAlpha));
+            }
+        }
+        drawContext.restore();
+        drawContext.save();
+        drawContext.clip(Rectangle.ofXYWH(panelX, panelY + headerHeight, panelWidth, panelHeight - headerHeight));
+        float slideY = 0.0f;
+        float bodyAlpha = alpha;
+        Module bodyModule;
+        if (this.animationState == SettingsPanel.AnimationState.FADE_OUT && this.prevModule != null) {
+            bodyModule = this.prevModule;
+            slideY = this.transitionProgress * 30.0f * scale;
+            bodyAlpha = (1.0f - this.transitionProgress) * alpha;
+        } else if (this.animationState == SettingsPanel.AnimationState.FADE_IN && this.currentModule != null) {
+            bodyModule = this.currentModule;
+            slideY = (1.0f - this.transitionProgress) * -30.0f * scale;
+            bodyAlpha = this.transitionProgress * alpha;
+        } else {
+            bodyModule = this.currentModule;
+        }
+        if (bodyModule != null && bodyAlpha > 0.01f) {
+            drawContext.save();
+            drawContext.translate(0.0f, slideY);
+            guiGraphics.pose().pushPose();
+            guiGraphics.pose().translate(0.0f, slideY, 0.0f);
+            List<Setting<?>> settings = bodyModule.getSettings();
+            if (settings != null && !settings.isEmpty()) {
+                int settingY = panelY + headerHeight - (int)this.scrollOffset;
+                for (Setting<?> setting : settings) {
+                    if (setting.getVisibility() != null && !setting.getVisibility().displayable()) continue;
+                    int dy = SettingRendererRegistry.getInstance().render(guiGraphics, setting, panelX + (int)(10.0f * scale), settingY, panelWidth - (int)(20.0f * scale), mouseX, mouseY, bodyAlpha, scale);
+                    settingY += dy;
+                }
+            } else {
+                String description = this.getModuleDescription(bodyModule);
+                if (description != null && !description.isEmpty()) {
+                    FontRenderer descFont = FontPresets.axiformaRegular(12.0f * scale);
+                    this.renderWrappedText(description, panelX + (int)(10.0f * scale), panelY + headerHeight + (int)(10.0f * scale), panelWidth - (int)(20.0f * scale), descFont, -5592406, bodyAlpha, scale);
+                }
+            }
+            guiGraphics.pose().popPose();
+            drawContext.restore();
+        }
+        drawContext.restore();
     }
 
     private void renderScrollbar(GuiGraphics guiGraphics, int panelX, int panelY, int panelHeight, float scale, float alpha) {

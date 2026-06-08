@@ -6,14 +6,14 @@ import java.io.IOException;
 import java.io.InputStream;
 
 /**
- * Unified resource opener for the OpenZen jar.
+ * Unified resource opener for the Mizulune jar.
  *
  * <p>Resolution order:
  * <ol>
  *   <li>{@code Assets.class.getResourceAsStream(classpath)} — works whenever
  *       the jar is on a class loader's search path (Forge mod path, dev
  *       {@code -javaagent}, etc.).</li>
- *   <li>The directory pointed to by the {@code openzen.resources} system
+ *   <li>The directory pointed to by the {@code mizulune.resources} system
  *       property — populated by {@code GameLoaderBridge} on the DLL injection
  *       path because the jar is not on any class loader URL search there
  *       (classes are defined directly onto the game loader).</li>
@@ -29,7 +29,7 @@ public final class Assets {
     public static InputStream open(String classpath) {
         InputStream cp = Assets.class.getResourceAsStream(classpath);
         if (cp != null) return cp;
-        String dir = System.getProperty("openzen.resources");
+        String dir = System.getProperty("mizulune.resources");
         if (dir != null) {
             String relative = classpath.startsWith("/") ? classpath.substring(1) : classpath;
             File f = new File(dir, relative);

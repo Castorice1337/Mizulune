@@ -75,10 +75,10 @@ MainWindow::MainWindow(QWidget* parent)
 
 void MainWindow::buildUi() {
 #ifdef OPENZEN_BUILD_REVISION
-    const QString winTitle = QStringLiteral("OpenZen Loader  ·  build %1")
+    const QString winTitle = QStringLiteral("Mizulune Client  ·  build %1")
             .arg(QString::fromLatin1(OPENZEN_BUILD_REVISION).left(7));
 #else
-    const QString winTitle = QStringLiteral("OpenZen Loader");
+    const QString winTitle = QStringLiteral("Mizulune Client");
 #endif
     setWindowTitle(winTitle);
 
@@ -104,7 +104,7 @@ void MainWindow::buildUi() {
     title->setObjectName("title");
 
     hint_ = new QLabel(
-        QStringLiteral("Click Inject on the instance you want to load OpenZen into. "
+        QStringLiteral("Click Inject on the instance you want to load Mizulune Client into. "
                        "List refreshes every second."),
         body);
     hint_->setObjectName("hint");

@@ -53,12 +53,15 @@ import shit.zen.utils.rotation.RotationHandler;
 public class ZenClient extends ClientBase {
     @Getter
     public static ZenClient instance;
-    public static final String CLIENT_NAME = "Zen";
+    public static final String CLIENT_NAME = "Mizulune Client";
+    public static final String CLIENT_SHORT_NAME = "Mizulune";
+    public static final String CLIENT_CHINESE_NAME = "水月蝶";
+    public static final String CLIENT_ABBR = "MZL";
     public static final String VERSION = "1.0";
     public static float serverTickRate;
     public static boolean isReady;
     public static boolean isMCPMapped;
-    public static String configDir = System.getProperty("user.home") + File.separator + ".zen";
+    public static String configDir = System.getProperty("user.home") + File.separator + ".mizulune";
     public static String username = "";
 
     private static final String[] CLOUD_ASSET_NAMES = { "panel.png", "ptr.png", "lie.wav", "truth.wav" };
@@ -170,12 +173,12 @@ public class ZenClient extends ClientBase {
     }
 
     private static InputStream openCloudAsset(String name) {
-        String classpath = "/assets/zen/cloud_assets/" + name;
+        String classpath = "/assets/mizulune/cloud_assets/" + name;
         InputStream is = ZenClient.class.getResourceAsStream(classpath);
         if (is != null) return is;
-        String dir = System.getProperty("openzen.resources");
+        String dir = System.getProperty("mizulune.resources");
         if (dir != null) {
-            File f = new File(dir, "assets/zen/cloud_assets/" + name);
+            File f = new File(dir, "assets/mizulune/cloud_assets/" + name);
             if (f.isFile()) {
                 try {
                     return new java.io.FileInputStream(f);

@@ -138,7 +138,7 @@ void SplashScreen::paintEvent(QPaintEvent*) {
         p.setFont(logoFont);
 
         QFontMetricsF fm(logoFont);
-        const QString text = QStringLiteral("OpenZen");
+        const QString text = QStringLiteral("Mizulune");
         const qreal textW = fm.horizontalAdvance(text);
         const qreal textH = fm.ascent();
         QPointF anchor = rect.center();

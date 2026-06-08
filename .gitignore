@@ -32,6 +32,8 @@ native/zen.jar
 native/dll/src/generated_names.h
 
 # Local agent/workflow configuration
+AGENTS.md
+.columbina/
 .codex/
 .agents/
 .claude/

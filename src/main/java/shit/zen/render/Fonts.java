@@ -30,7 +30,7 @@ public final class Fonts {
             Font font = awtFontCache.computeIfAbsent(name, Fonts::loadAwtFont);
             if (font == null) return null;
             Font derived = font.deriveFont(0, size / 2.0f);
-            CustomFont cf = new CustomFont(derived, size / 2.0f);
+            CustomFont cf = new CustomFont(derived, size / 2.0f, name);
             customFontCache.put(key, cf);
             return cf;
         } catch (Exception exception) {
@@ -40,7 +40,7 @@ public final class Fonts {
     }
 
     private static Font loadAwtFont(String name) {
-        try (InputStream stream = Assets.open("/assets/zen/fonts/" + name)) {
+        try (InputStream stream = Assets.open("/assets/mizulune/fonts/" + name)) {
             if (stream == null) {
                 return null;
             }

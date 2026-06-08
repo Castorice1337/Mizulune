@@ -29,7 +29,7 @@ public final class FontPresets {
     }
 
     public static FontRenderer zenIcon(float size) {
-        return Fonts.getRenderer("zenicon-Regular.ttf", size);
+        return Fonts.getRenderer("mizulune-Regular.ttf", size);
     }
 
     public static FontRenderer museoSans(float size) {

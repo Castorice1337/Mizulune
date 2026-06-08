@@ -5,24 +5,78 @@ import com.mojang.blaze3d.vertex.BufferUploader;
 import java.lang.reflect.Field;
 import java.util.function.Consumer;
 import net.minecraft.client.gui.GuiGraphics;
+import org.joml.Matrix4f;
 import org.lwjgl.opengl.GL11;
 import org.lwjgl.opengl.GL13;
 import org.lwjgl.opengl.GL14;
 import org.lwjgl.opengl.GL33;
 import shit.zen.ClientBase;
-import shit.zen.ZenClient;
-import shit.zen.render.DrawContext;
-import shit.zen.utils.misc.ReflectionUtil;
-import sun.misc.Unsafe;
+import com.mojang.blaze3d.vertex.PoseStack;
+import shit.zen.render.backend.BackendType;
+import shit.zen.render.backend.LegacyGlBackend;
+import shit.zen.render.backend.RenderBackend;
+import shit.zen.render.backend.SkikoBackend;
 
 public class Renderer
 extends ClientBase {
     private static float guiScale = 1.0f;
     private static boolean verified = false;
     private static DrawContext currentCanvas;
+    private static final RenderBackend LEGACY_BACKEND = new LegacyGlBackend();
+    private static boolean backendFailed = false;
+    private static BackendType configuredBackend = BackendType.fromProperty(System.getProperty("mizulune.render.backend"));
+    private static RenderBackend backend = Renderer.createBackend(configuredBackend);
 
     public static DrawContext getCanvas() {
         return currentCanvas;
+    }
+
+    public static boolean isSkikoEnabled() {
+        return configuredBackend == BackendType.SKIKO && !backendFailed && backend.handles2D();
+    }
+
+    public static boolean canUseSkiko2D(PoseStack poseStack) {
+        if (!Renderer.isSkikoEnabled()) {
+            return false;
+        }
+        if (StencilHelper.isStencilActive()) {
+            return false;
+        }
+        if (currentCanvas != null) {
+            return currentCanvas.getBackend() == backend && currentCanvas.getBackend().handles2D();
+        }
+        return Renderer.isGuiAffinePose(poseStack);
+    }
+
+    public static RenderBackend getBackend() {
+        return backend;
+    }
+
+    public static BackendType getBackendType() {
+        return configuredBackend;
+    }
+
+    public static BackendType getActiveBackendType() {
+        return Renderer.getEffectiveBackend().type();
+    }
+
+    public static boolean isBackendFailed() {
+        return backendFailed;
+    }
+
+    public static String getBackendDebugSummary() {
+        RenderBackend effectiveBackend = Renderer.getEffectiveBackend();
+        return effectiveBackend.getClass().getSimpleName() + " " + effectiveBackend.debugSummary();
+    }
+
+    public static void setBackend(BackendType type) {
+        BackendType nextBackend = type == null ? BackendType.SKIKO : type;
+        if (configuredBackend == nextBackend && !backendFailed && backend != null) {
+            return;
+        }
+        configuredBackend = nextBackend;
+        backendFailed = false;
+        backend = Renderer.createBackend(configuredBackend);
     }
 
     public static float getGuiScale() {
@@ -55,6 +109,7 @@ extends ClientBase {
         RenderSystem.assertOnRenderThread();
         BufferUploader.reset();
         GL33.glBindSampler(0, 0);
+        Renderer.resetWindowFramebufferBounds();
         RenderSystem.disableBlend();
         GL11.glDisable(3042);
         RenderSystem.blendFunc(770, 771);
@@ -68,15 +123,39 @@ extends ClientBase {
         RenderSystem.disableScissor();
         RenderSystem.disableDepthTest();
         GL11.glDisable(2929);
+        GL11.glDisable(2960);
         GL13.glActiveTexture(33984);
         RenderSystem.activeTexture(33984);
         RenderSystem.disableCull();
+    }
+
+    public static void resetWindowFramebufferBounds() {
+        if (mc == null || mc.getWindow() == null) {
+            return;
+        }
+        Renderer.resetWindowFramebufferBounds(mc.getWindow().getWidth(), mc.getWindow().getHeight());
+    }
+
+    public static void resetWindowFramebufferBounds(int width, int height) {
+        width = Math.max(1, width);
+        height = Math.max(1, height);
+        GL11.glViewport(0, 0, width, height);
+        RenderSystem.disableScissor();
+        GL11.glDisable(GL11.GL_SCISSOR_TEST);
     }
 
     /*
      * WARNING - Removed try catching itself - possible behaviour change.
      */
     public static void render(GuiGraphics guiGraphics, Consumer<DrawContext> consumer) {
+        Renderer.renderInternal(guiGraphics, null, consumer);
+    }
+
+    public static void renderWithPose(PoseStack poseStack, Consumer<DrawContext> consumer) {
+        Renderer.renderInternal(null, poseStack, consumer);
+    }
+
+    private static void renderInternal(GuiGraphics guiGraphics, PoseStack poseStack, Consumer<DrawContext> consumer) {
         if (!verified) {
             Renderer.verify();
             if (!verified) {
@@ -84,21 +163,88 @@ extends ClientBase {
             }
         }
         if (currentCanvas != null) {
-            consumer.accept(currentCanvas);
+            PoseStack requestedPoseStack = poseStack != null
+                    ? poseStack
+                    : guiGraphics != null ? guiGraphics.pose() : null;
+            RenderBackend effectiveBackend = Renderer.getEffectiveBackend(requestedPoseStack);
+            if (effectiveBackend != currentCanvas.getBackend()) {
+                boolean ownsExternalGlSection = currentCanvas.getBackend() != null
+                        && currentCanvas.getBackend().handles2D()
+                        && !StencilHelper.isStencilActive();
+                if (ownsExternalGlSection) {
+                    currentCanvas.beforeExternalGlDraw();
+                }
+                try {
+                    PoseStack nestedPoseStack = requestedPoseStack != null ? requestedPoseStack : currentCanvas.getPoseStack();
+                    consumer.accept(new DrawContext(guiGraphics, nestedPoseStack, effectiveBackend));
+                } finally {
+                    if (ownsExternalGlSection) {
+                        currentCanvas.afterExternalGlDraw();
+                    }
+                }
+                return;
+            }
+            PoseStack nestedPoseStack = requestedPoseStack;
+            if (nestedPoseStack != null && effectiveBackend.handles2D()) {
+                effectiveBackend.pushExternalPose(nestedPoseStack);
+                try {
+                    consumer.accept(new DrawContext(guiGraphics, nestedPoseStack, effectiveBackend));
+                } finally {
+                    effectiveBackend.popExternalPose();
+                }
+            } else {
+                consumer.accept(currentCanvas);
+            }
             return;
         }
         Renderer.resetPixelStore();
         RenderSystem.enableBlend();
         RenderSystem.defaultBlendFunc();
         RenderSystem.disableCull();
-        DrawContext drawContext = new DrawContext(guiGraphics);
+        PoseStack effectivePoseStack = poseStack != null
+                ? poseStack
+                : guiGraphics != null ? guiGraphics.pose() : null;
+        RenderBackend effectiveBackend = Renderer.getEffectiveBackend(effectivePoseStack);
+        boolean applyInitialPose = effectivePoseStack != null && effectiveBackend.handles2D();
+        DrawContext drawContext = effectivePoseStack == null
+                ? new DrawContext(guiGraphics, effectiveBackend)
+                : new DrawContext(guiGraphics, effectivePoseStack, effectiveBackend);
         DrawContext previousCanvas = currentCanvas;
         currentCanvas = drawContext;
         try {
+            if (effectiveBackend.handles2D()) {
+                effectiveBackend.begin(guiGraphics, drawContext.getPoseStack());
+                if (applyInitialPose) {
+                    effectiveBackend.pushExternalPose(effectivePoseStack);
+                }
+            }
             consumer.accept(drawContext);
+        } catch (Throwable throwable) {
+            if (effectiveBackend.handles2D()) {
+                logger.error("Render backend {} failed, falling back to legacy OpenGL", effectiveBackend.type(), throwable);
+                backendFailed = true;
+            } else {
+                throw new RuntimeException(throwable);
+            }
         } finally {
-            currentCanvas = previousCanvas;
             drawContext.clearClipStack();
+            if (effectiveBackend.handles2D()) {
+                if (applyInitialPose) {
+                    try {
+                        effectiveBackend.popExternalPose();
+                    } catch (Throwable throwable) {
+                        logger.error("Render backend {} failed while restoring external pose", effectiveBackend.type(), throwable);
+                        backendFailed = true;
+                    }
+                }
+                try {
+                    effectiveBackend.end();
+                } catch (Throwable throwable) {
+                    logger.error("Render backend {} failed during end, falling back to legacy OpenGL", effectiveBackend.type(), throwable);
+                    backendFailed = true;
+                }
+            }
+            currentCanvas = previousCanvas;
         }
         Renderer.resetRenderState();
     }
@@ -113,5 +259,46 @@ extends ClientBase {
 
     public static void setGuiScaleVerified(float scale) {
         Renderer.setGuiScale(scale);
+    }
+
+    private static RenderBackend getEffectiveBackend() {
+        return Renderer.getEffectiveBackend(null);
+    }
+
+    private static RenderBackend getEffectiveBackend(PoseStack poseStack) {
+        if (backendFailed || backend == null) {
+            return LEGACY_BACKEND;
+        }
+        if (backend.handles2D() && !Renderer.canUseSkiko2D(poseStack)) {
+            return LEGACY_BACKEND;
+        }
+        return backend;
+    }
+
+    private static RenderBackend createBackend(BackendType type) {
+        if (type == BackendType.SKIKO) {
+            try {
+                return new SkikoBackend();
+            } catch (Throwable throwable) {
+                logger.error("Failed to create Skiko backend, using legacy OpenGL", throwable);
+                backendFailed = true;
+            }
+        }
+        return LEGACY_BACKEND;
+    }
+
+    private static boolean isGuiAffinePose(PoseStack poseStack) {
+        if (poseStack == null) {
+            return true;
+        }
+        Matrix4f matrix = poseStack.last().pose();
+        float epsilon = 1.0E-4f;
+        return Math.abs(matrix.m02()) <= epsilon
+                && Math.abs(matrix.m12()) <= epsilon
+                && Math.abs(matrix.m20()) <= epsilon
+                && Math.abs(matrix.m21()) <= epsilon
+                && Math.abs(matrix.m23()) <= epsilon
+                && Math.abs(matrix.m32()) <= 1024.0f
+                && Math.abs(matrix.m22() - 1.0f) <= 1.0E-3f;
     }
 }
