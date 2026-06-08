@@ -19,7 +19,7 @@ extends Command {
             try {
                 Module module = ZenClient.getInstance().getModuleManager().getModule(string);
                 if (module != null) {
-                    module.setEnabled(!module.isEnabled());
+                    module.toggleFromUser();
                     ChatUtil.print("Toggled " + module.getName() + ".");
                 } else {
                     ChatUtil.print("Invalid module.");

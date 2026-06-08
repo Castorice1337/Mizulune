@@ -694,6 +694,15 @@ tasks.register('packageDist') {
             from src
             into "$buildDir/dist"
         }
+        copy {
+            from "$nativeDir/loader/res"
+            into "$buildDir/dist/res"
+            include '*.png'
+        }
+        copy {
+            from "$nativeDir/loader/webui"
+            into "$buildDir/dist/webui"
+        }
         logger.lifecycle("Packaged ${src.length()} bytes -> ${buildDir}/dist/${src.name}")
     }
 }
