@@ -15,6 +15,8 @@ import shit.zen.settings.impl.BooleanSetting;
 import shit.zen.settings.impl.ModeSetting;
 import shit.zen.settings.impl.MultiSelectSetting;
 import shit.zen.settings.impl.NumberSetting;
+import shit.zen.value.Value;
+import shit.zen.value.ValueJsonCodec;
 
 public class ValuesConfig
 extends Config {
@@ -86,6 +88,14 @@ extends Config {
                             LOGGER.error("Unknown value type of {}!", string3);
                     }
                 });
+                Value<?> value = module.findValue(string4);
+                if (value != null) {
+                    switch (string2) {
+                        case "B", "F", "M", "MV" -> ValueJsonCodec.readStringInto(value, string5, LOGGER, module.getId() + "." + value.getId());
+                        default -> {
+                        }
+                    }
+                }
             } catch (Exception exception) {
                 LOGGER.error("Failed to read value {}!: {}", string, exception);
             }

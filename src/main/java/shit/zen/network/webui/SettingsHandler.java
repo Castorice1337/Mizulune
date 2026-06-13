@@ -12,11 +12,12 @@ import java.util.Map;
 import shit.zen.ZenClient;
 import shit.zen.exception.ModuleNotFoundException;
 import shit.zen.modules.Module;
-import shit.zen.settings.Setting;
-import shit.zen.settings.impl.BooleanSetting;
-import shit.zen.settings.impl.ModeSetting;
-import shit.zen.settings.impl.NumberSetting;
 import shit.zen.utils.render.TextureUtil;
+import shit.zen.value.ModeValueGroup;
+import shit.zen.value.ToggleValueGroup;
+import shit.zen.value.Value;
+import shit.zen.value.ValueGroup;
+import shit.zen.value.ValueJsonCodec;
 
 public class SettingsHandler extends AbstractHttpHandler {
 
@@ -30,29 +31,11 @@ public class SettingsHandler extends AbstractHttpHandler {
             try {
                 Module module = lookupModule(query.get("module"));
                 if (module == null) {
-                    reason = "找不到模块";
+                    reason = "module not found";
                 } else {
-                    List<Setting<?>> settings = module.getSettings();
                     List<Map<String, Object>> entries = new ArrayList<>();
-                    for (Setting<?> setting : settings) {
-                        Map<String, Object> entry = new HashMap<>();
-                        entry.put("name", setting.getName());
-                        entry.put("displayName", setting.getName());
-                        if (setting instanceof NumberSetting numberSetting) {
-                            entry.put("type", "slider");
-                            entry.put("max", numberSetting.getMax());
-                            entry.put("min", numberSetting.getMin());
-                            entry.put("step", numberSetting.getStep());
-                            entry.put("value", numberSetting.getValue());
-                        } else if (setting instanceof BooleanSetting) {
-                            entry.put("type", "checkbox");
-                            entry.put("value", setting.getValue());
-                        } else if (setting instanceof ModeSetting modeSetting) {
-                            entry.put("type", "selection");
-                            entry.put("value", modeSetting.getValue());
-                            entry.put("values", modeSetting.getModes());
-                        }
-                        entries.add(entry);
+                    for (Value<?> value : module.getValueTree().getChildren()) {
+                        entries.add(toEntry(value));
                     }
                     response.put("result", entries);
                     success = true;
@@ -63,7 +46,7 @@ public class SettingsHandler extends AbstractHttpHandler {
                 reason = throwable.toString();
             }
         } else {
-            reason = "参数不足";
+            reason = "missing module";
         }
         response.put("success", success);
         response.put("reason", reason);
@@ -77,5 +60,32 @@ public class SettingsHandler extends AbstractHttpHandler {
         } catch (ModuleNotFoundException e) {
             return null;
         }
+    }
+
+    private static Map<String, Object> toEntry(Value<?> value) {
+        Map<String, Object> entry = new HashMap<>();
+        entry.put("id", value.getId());
+        entry.put("path", value.getPath());
+        entry.put("name", value.getPath());
+        entry.put("displayName", value.getDisplayName());
+        entry.put("description", value.getDescription());
+        entry.put("type", ValueJsonCodec.typeName(value.getType()));
+        entry.put("metadata", value.getMetadata());
+        entry.put("visible", value.isVisible());
+        if (value instanceof ToggleValueGroup toggleValueGroup) {
+            entry.put("enabled", toggleValueGroup.isEnabled());
+        } else if (value instanceof ModeValueGroup modeValueGroup) {
+            entry.put("mode", modeValueGroup.getActiveModeId());
+        } else if (!(value instanceof ValueGroup)) {
+            entry.put("value", ValueJsonCodec.writeValue(value));
+        }
+        if (value instanceof ValueGroup group) {
+            List<Map<String, Object>> children = new ArrayList<>();
+            for (Value<?> child : group.getChildren()) {
+                children.add(toEntry(child));
+            }
+            entry.put("children", children);
+        }
+        return entry;
     }
 }

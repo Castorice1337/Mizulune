@@ -19,6 +19,8 @@ import shit.zen.settings.impl.BooleanSetting;
 import shit.zen.settings.impl.ModeSetting;
 import shit.zen.settings.impl.NumberSetting;
 import shit.zen.utils.render.TextureUtil;
+import shit.zen.value.Value;
+import shit.zen.value.ValueJsonCodec;
 
 public class SetSettingHandler extends AbstractHttpHandler {
 
@@ -30,48 +32,56 @@ public class SetSettingHandler extends AbstractHttpHandler {
         boolean success = false;
         String reason = null;
         Object result = null;
-        if (query.containsKey("module") && query.containsKey("name") && query.containsKey("value")) {
+        if (query.containsKey("module") && (query.containsKey("path") || query.containsKey("name")) && query.containsKey("value")) {
             try {
                 Module module = lookupModule(query.get("module"));
                 if (module == null) {
-                    reason = "找不到模块";
+                    reason = "module not found";
                 } else if (module instanceof WebUI) {
-                    reason = "sb";
+                    reason = "webui module settings are locked";
                 } else {
-                    String settingName = query.get("name");
-                    Optional<Setting<?>> match = module.getSettings().stream()
-                            .filter(setting -> setting.getName().equals(settingName))
-                            .findFirst();
-                    if (match.isEmpty()) {
-                        reason = "找不到参数";
+                    String key = query.containsKey("path") ? query.get("path") : query.get("name");
+                    Value<?> value = module.findValue(key);
+                    if (value != null && ValueJsonCodec.readStringInto(value, query.get("value"), ConfigManager.LOGGER, value.getPath())) {
+                        success = true;
+                        result = ValueJsonCodec.writeValue(value);
                     } else {
-                        Setting setting = match.get();
-                        String raw = query.get("value");
-                        if (setting instanceof NumberSetting) {
-                            try {
-                                setting.setValue(Double.valueOf(raw));
-                                success = true;
-                            } catch (NumberFormatException ignored) {
-                            }
-                        } else if (setting instanceof BooleanSetting) {
-                            setting.setValue(Boolean.valueOf(raw));
-                            success = true;
-                        } else if (setting instanceof ModeSetting modeSetting) {
-                            String matchedMode = Stream.of(modeSetting.getModes())
-                                    .filter(mode -> mode.equals(raw))
-                                    .findFirst()
-                                    .orElse(null);
-                            if (matchedMode != null) {
-                                modeSetting.setValue(matchedMode);
-                                success = true;
-                            }
-                        }
-                        if (success) {
-                            ConfigManager.saveAllIfReady();
-                            result = setting.getValue();
+                        Optional<Setting<?>> match = module.getSettings().stream()
+                                .filter(setting -> setting.getName().equals(key))
+                                .findFirst();
+                        if (match.isEmpty()) {
+                            reason = "setting not found";
                         } else {
-                            reason = "无效的值";
+                            Setting setting = match.get();
+                            String raw = query.get("value");
+                            if (setting instanceof NumberSetting) {
+                                try {
+                                    setting.setValue(Double.valueOf(raw));
+                                    success = true;
+                                } catch (NumberFormatException ignored) {
+                                }
+                            } else if (setting instanceof BooleanSetting) {
+                                setting.setValue(Boolean.valueOf(raw));
+                                success = true;
+                            } else if (setting instanceof ModeSetting modeSetting) {
+                                String matchedMode = Stream.of(modeSetting.getModes())
+                                        .filter(mode -> mode.equals(raw))
+                                        .findFirst()
+                                        .orElse(null);
+                                if (matchedMode != null) {
+                                    modeSetting.setValue(matchedMode);
+                                    success = true;
+                                }
+                            }
+                            if (success) {
+                                result = setting.getValue();
+                            } else {
+                                reason = "invalid value";
+                            }
                         }
+                    }
+                    if (success) {
+                        ConfigManager.saveAllIfReady();
                     }
                 }
             } catch (Throwable throwable) {
@@ -81,7 +91,7 @@ public class SetSettingHandler extends AbstractHttpHandler {
             }
         } else {
             result = false;
-            reason = "参数不足";
+            reason = "missing module/path/value";
         }
         response.put("success", success);
         response.put("reason", reason);

@@ -1,6 +1,5 @@
 package shit.zen.hud;
 
-import java.awt.Color;
 import java.util.ArrayList;
 import java.util.IdentityHashMap;
 import java.util.List;
@@ -20,12 +19,18 @@ import shit.zen.render.LiquidGlassStyle;
 import shit.zen.render.Paint;
 import shit.zen.render.Renderer;
 import shit.zen.render.RoundedRectangle;
-import shit.zen.settings.impl.BooleanSetting;
-import shit.zen.settings.impl.ModeSetting;
-import shit.zen.settings.impl.NumberSetting;
+import shit.zen.render.color.ColorContext;
+import shit.zen.render.color.ColorProvider;
+import shit.zen.render.color.GradientColorProvider;
+import shit.zen.render.color.RainbowColorProvider;
+import shit.zen.render.color.SolidColorProvider;
 import shit.zen.utils.animation.SmoothAnimationTimer;
 import shit.zen.utils.math.Easings;
-import shit.zen.utils.render.ColorUtil;
+import shit.zen.value.MizuColor;
+import shit.zen.value.ModeValueGroup;
+import shit.zen.value.ToggleValueGroup;
+import shit.zen.value.Value;
+import shit.zen.value.ValueGroup;
 
 public class ModuleListHud extends HudElement {
     private enum Alignment {
@@ -82,73 +87,47 @@ public class ModuleListHud extends HudElement {
     private static final float DEFAULT_PADDING_Y = 1.0f;
     private static final float DEFAULT_ROW_SPACING = 0.0f;
     private static final float DEFAULT_RADIUS = 1.5f;
-    private static final float RAINBOW_TEXT_SWEEP_DEGREES = 180.0f;
-    private static final float RAINBOW_LIST_SWEEP_DEGREES = 360.0f;
     private static final float SLIDE_DISTANCE = 18.0f;
 
-    public final ModeSetting sideMode = new ModeSetting("Side Mode", "Auto", "Left", "Right").withDefault("Auto");
-    public final BooleanSetting backgroundEnabled = new BooleanSetting("Background", true);
-    public final NumberSetting backgroundColor = new NumberSetting("Background Color", 0x000000, 0, 0xFFFFFF, 1);
-    public final NumberSetting backgroundAlpha = new NumberSetting("Background Alpha", 80, 0, 255, 1);
-    public final NumberSetting backgroundRadius = new NumberSetting("Background Radius", DEFAULT_RADIUS, 0.0f, 10.0f, 0.25f);
-    public final NumberSetting paddingX = new NumberSetting("Padding X", DEFAULT_PADDING_X, 0.0f, 12.0f, 0.25f);
-    public final NumberSetting paddingY = new NumberSetting("Padding Y", DEFAULT_PADDING_Y, 0.0f, 8.0f, 0.25f);
-    public final NumberSetting rowHeight = new NumberSetting("Row Height", DEFAULT_ROW_HEIGHT, 9.0f, 24.0f, 0.25f);
-    public final NumberSetting rowSpacing = new NumberSetting("Row Spacing", DEFAULT_ROW_SPACING, 0.0f, 8.0f, 0.25f);
+    private Value<String> sideMode;
+    private Value<Boolean> backgroundEnabled;
+    private Value<MizuColor> backgroundColor;
+    private Value<Number> backgroundRadius;
+    private Value<Number> paddingX;
+    private Value<Number> paddingY;
+    private Value<Number> rowHeight;
+    private Value<Number> rowSpacing;
 
-    public final BooleanSetting backgroundBlurEnabled = new BooleanSetting("Background Blur", false);
-    public final NumberSetting blurRadius = new NumberSetting("Blur Radius", 10.0f, 0.0f, 32.0f, 0.5f,
-            () -> this.backgroundBlurEnabled.getValue());
-    public final NumberSetting blurStrength = new NumberSetting("Blur Strength", 0.55f, 0.0f, 1.0f, 0.01f,
-            () -> this.backgroundBlurEnabled.getValue());
+    private Value<Boolean> backgroundBlurEnabled;
+    private Value<Number> blurRadius;
+    private Value<Number> blurStrength;
 
-    public final BooleanSetting backgroundGlowEnabled = new BooleanSetting("Background Glow", true);
-    public final NumberSetting glowRadius = new NumberSetting("Glow Radius", 5.0f, 0.0f, 24.0f, 0.5f,
-            () -> this.backgroundGlowEnabled.getValue());
-    public final NumberSetting glowAlpha = new NumberSetting("Glow Alpha", 42, 0, 255, 1,
-            () -> this.backgroundGlowEnabled.getValue());
-    public final NumberSetting glowIterations = new NumberSetting("Glow Iterations", 3, 1, 8, 1,
-            () -> this.backgroundGlowEnabled.getValue());
+    private Value<Boolean> backgroundGlowEnabled;
+    private Value<Number> glowRadius;
+    private Value<Number> glowAlpha;
+    private Value<Number> glowIterations;
 
-    public final BooleanSetting sideLineEnabled = new BooleanSetting("Side Line", true);
-    public final ModeSetting sideLineMode = new ModeSetting("Side Line Mode", "Auto", "Left", "Right")
-            .withDefault("Auto")
-            .withVisibility(() -> this.sideLineEnabled.getValue());
-    public final NumberSetting sideLineWidth = new NumberSetting("Side Line Width", 2.0f, 0.5f, 5.0f, 0.25f,
-            () -> this.sideLineEnabled.getValue());
+    private Value<Boolean> sideLineEnabled;
+    private Value<String> sideLineMode;
+    private Value<Number> sideLineWidth;
 
-    public final BooleanSetting textGradientEnabled = new BooleanSetting("Text Gradient", true);
-    public final NumberSetting gradientColorStart = new NumberSetting("Gradient Color Start", 0xEAF7FF, 0, 0xFFFFFF, 1,
-            () -> this.textGradientEnabled.getValue());
-    public final NumberSetting gradientColorEnd = new NumberSetting("Gradient Color End", 0xFFC4F1, 0, 0xFFFFFF, 1,
-            () -> this.textGradientEnabled.getValue());
-    public final ModeSetting gradientMode = new ModeSetting("Gradient Mode", "Vertical List", "Horizontal Text")
-            .withDefault("Vertical List")
-            .withVisibility(() -> this.textGradientEnabled.getValue() && !this.dynamicGradientEnabled.getValue());
+    private ModeValueGroup textColorGroup;
+    private Value<MizuColor> solidTextColor;
+    private Value<MizuColor> gradientColorStart;
+    private Value<MizuColor> gradientColorEnd;
+    private Value<String> gradientMode;
+    private Value<Boolean> dynamicGradientEnabled;
+    private Value<Boolean> gradientAnimationEnabled;
+    private Value<Number> dynamicGradientSpeed;
+    private Value<Number> rainbowSpeed;
+    private Value<Number> rainbowSaturation;
+    private Value<Number> rainbowBrightness;
+    private Value<Number> rainbowOffset;
 
-    public final BooleanSetting rainbowEnabled = new BooleanSetting("Rainbow", false);
-    public final NumberSetting rainbowSpeed = new NumberSetting("Rainbow Speed", 48.0f, 1.0f, 240.0f, 1.0f,
-            () -> this.rainbowEnabled.getValue());
-    public final NumberSetting rainbowSaturation = new NumberSetting("Rainbow Saturation", 82.0f, 0.0f, 100.0f, 1.0f,
-            () -> this.rainbowEnabled.getValue());
-    public final NumberSetting rainbowBrightness = new NumberSetting("Rainbow Brightness", 100.0f, 10.0f, 100.0f, 1.0f,
-            () -> this.rainbowEnabled.getValue());
-    public final NumberSetting rainbowOffset = new NumberSetting("Rainbow Offset", 20.0f, 0.0f, 90.0f, 1.0f,
-            () -> this.rainbowEnabled.getValue());
-    public final BooleanSetting dynamicGradientEnabled = new BooleanSetting("Dynamic Gradient", true,
-            () -> this.rainbowEnabled.getValue() || this.textGradientEnabled.getValue());
-    public final BooleanSetting gradientAnimationEnabled = new BooleanSetting("Gradient Animation", true,
-            () -> this.rainbowEnabled.getValue() || this.textGradientEnabled.getValue());
-    public final NumberSetting dynamicGradientSpeed = new NumberSetting("Dynamic Gradient Speed", 48.0f, 0.0f, 240.0f, 1.0f,
-            () -> this.gradientAnimationEnabled.getValue() && (this.rainbowEnabled.getValue() || this.textGradientEnabled.getValue()));
-
-    public final BooleanSetting fontGlowEnabled = new BooleanSetting("Font Glow", true);
-    public final NumberSetting fontGlowRadius = new NumberSetting("Font Glow Radius", 1.4f, 0.0f, 8.0f, 0.1f,
-            () -> this.fontGlowEnabled.getValue());
-    public final NumberSetting fontGlowAlpha = new NumberSetting("Font Glow Alpha", 72, 0, 255, 1,
-            () -> this.fontGlowEnabled.getValue());
-    public final NumberSetting fontGlowQuality = new NumberSetting("Font Glow Quality", 3, 1, 8, 1,
-            () -> this.fontGlowEnabled.getValue());
+    private Value<Boolean> fontGlowEnabled;
+    private Value<Number> fontGlowRadius;
+    private Value<Number> fontGlowAlpha;
+    private Value<Number> fontGlowQuality;
 
     private final FontRenderer moduleFont = FontPresets.pingfang(16.0f);
     private final SmoothAnimationTimer widthAnim = new SmoothAnimationTimer();
@@ -163,6 +142,62 @@ public class ModuleListHud extends HudElement {
         this.setWidth(0.0f);
         this.setHeight(0.0f);
         this.setEnabled(true);
+    }
+
+    @Override
+    protected void configureValueTree(ValueGroup root) {
+        ValueGroup layout = root.group("layout", "Layout");
+        this.sideMode = layout.enumChoice("side_mode", "Side Mode", "Auto", "Auto", "Left", "Right").alias("Side Mode");
+        this.paddingX = layout.decimal("padding_x", "Padding X", DEFAULT_PADDING_X, 0.0f, 12.0f, 0.25f).alias("Padding X");
+        this.paddingY = layout.decimal("padding_y", "Padding Y", DEFAULT_PADDING_Y, 0.0f, 8.0f, 0.25f).alias("Padding Y");
+        this.rowHeight = layout.decimal("row_height", "Row Height", DEFAULT_ROW_HEIGHT, 9.0f, 24.0f, 0.25f).alias("Row Height");
+        this.rowSpacing = layout.decimal("row_spacing", "Row Spacing", DEFAULT_ROW_SPACING, 0.0f, 8.0f, 0.25f).alias("Row Spacing");
+
+        ToggleValueGroup background = root.toggleGroup("background", "Background", true);
+        this.backgroundEnabled = background.getEnabledValue().alias("Background");
+        this.backgroundColor = background.color("color", "Color", MizuColor.ofArgb(80, 0, 0, 0));
+        this.backgroundRadius = background.decimal("radius", "Radius", DEFAULT_RADIUS, 0.0f, 10.0f, 0.25f).alias("Background Radius");
+
+        ToggleValueGroup blur = background.toggleGroup("blur", "Background Blur", false);
+        this.backgroundBlurEnabled = blur.getEnabledValue().alias("Background Blur");
+        this.blurRadius = blur.decimal("radius", "Blur Radius", 10.0f, 0.0f, 32.0f, 0.5f).alias("Blur Radius");
+        this.blurStrength = blur.decimal("strength", "Blur Strength", 0.55f, 0.0f, 1.0f, 0.01f).alias("Blur Strength");
+
+        ToggleValueGroup glow = background.toggleGroup("glow", "Background Glow", true);
+        this.backgroundGlowEnabled = glow.getEnabledValue().alias("Background Glow");
+        this.glowRadius = glow.decimal("radius", "Glow Radius", 5.0f, 0.0f, 24.0f, 0.5f).alias("Glow Radius");
+        this.glowAlpha = glow.integer("alpha", "Glow Alpha", 42, 0, 255, 1).alias("Glow Alpha");
+        this.glowIterations = glow.integer("iterations", "Glow Iterations", 3, 1, 8, 1).alias("Glow Iterations");
+
+        ToggleValueGroup sideLine = root.toggleGroup("side_line", "Side Line", true);
+        this.sideLineEnabled = sideLine.getEnabledValue().alias("Side Line");
+        this.sideLineMode = sideLine.enumChoice("mode", "Mode", "Auto", "Auto", "Left", "Right").alias("Side Line Mode");
+        this.sideLineWidth = sideLine.decimal("width", "Width", 2.0f, 0.5f, 5.0f, 0.25f).alias("Side Line Width");
+
+        this.textColorGroup = root.modeGroup("text_color", "Text Color", "gradient", "solid", "gradient", "rainbow");
+        this.textColorGroup.getActiveValue().setValue("gradient");
+        ValueGroup solid = this.textColorGroup.getModes().get("solid");
+        this.solidTextColor = solid.color("color", "Color", MizuColor.ofArgb(255, 255, 255, 255));
+
+        ValueGroup gradient = this.textColorGroup.getModes().get("gradient");
+        this.gradientColorStart = gradient.color("start", "Start", MizuColor.ofRgb(0xEA, 0xF7, 0xFF)).alias("Gradient Color Start");
+        this.gradientColorEnd = gradient.color("end", "End", MizuColor.ofRgb(0xFF, 0xC4, 0xF1)).alias("Gradient Color End");
+        this.gradientMode = gradient.enumChoice("mode", "Mode", "Vertical List", "Vertical List", "Horizontal Text").alias("Gradient Mode");
+        this.dynamicGradientEnabled = gradient.bool("dynamic", "Dynamic Gradient", true).alias("Dynamic Gradient");
+        this.gradientAnimationEnabled = gradient.bool("animation", "Gradient Animation", true).alias("Gradient Animation");
+        this.dynamicGradientSpeed = gradient.decimal("speed", "Dynamic Speed", 48.0f, 0.0f, 240.0f, 1.0f).alias("Dynamic Gradient Speed");
+
+        ValueGroup rainbow = this.textColorGroup.getModes().get("rainbow");
+        this.rainbowSpeed = rainbow.decimal("speed", "Speed", 48.0f, 1.0f, 240.0f, 1.0f).alias("Rainbow Speed");
+        this.rainbowSaturation = rainbow.decimal("saturation", "Saturation", 82.0f, 0.0f, 100.0f, 1.0f).alias("Rainbow Saturation");
+        this.rainbowBrightness = rainbow.decimal("brightness", "Brightness", 100.0f, 10.0f, 100.0f, 1.0f).alias("Rainbow Brightness");
+        this.rainbowOffset = rainbow.decimal("offset", "Row Offset", 20.0f, 0.0f, 90.0f, 1.0f).alias("Rainbow Offset");
+
+        ToggleValueGroup fontGlow = root.toggleGroup("font_glow", "Font Glow", true);
+        this.fontGlowEnabled = fontGlow.getEnabledValue().alias("Font Glow");
+        this.fontGlowRadius = fontGlow.decimal("radius", "Radius", 1.4f, 0.0f, 8.0f, 0.1f).alias("Font Glow Radius");
+        this.fontGlowAlpha = fontGlow.integer("alpha", "Alpha", 72, 0, 255, 1).alias("Font Glow Alpha");
+        this.fontGlowQuality = fontGlow.integer("quality", "Quality", 3, 1, 8, 1).alias("Font Glow Quality");
     }
 
     private List<AnimatedRow> updateRows() {
@@ -319,8 +354,8 @@ public class ModuleListHud extends HudElement {
         }
         if (this.backgroundEnabled.getValue()) {
             try (Paint paint = new Paint()) {
-                paint.setColor(this.withAlpha(this.settingRgb(this.backgroundColor),
-                        Math.round((float)this.settingInt(this.backgroundAlpha) * progress)));
+                MizuColor color = this.backgroundColor.getValue();
+                paint.setColor(color.withAlpha(Math.round((float)color.alpha() * progress)).toArgb());
                 drawContext.drawRoundedRect(bounds, paint);
             }
         }
@@ -438,58 +473,14 @@ public class ModuleListHud extends HudElement {
     }
 
     private int colorForPosition(int rowIndex, float charProgress, int maxRowIndex) {
-        if (this.rainbowEnabled.getValue()) {
-            float rowOffset = this.settingFloat(this.rainbowOffset);
-            float rowProgress = maxRowIndex <= 0 ? 0.0f : (float)rowIndex / (float)maxRowIndex;
-            float hueDegrees = this.dynamicRainbowDegrees()
-                    + rowProgress * RAINBOW_LIST_SWEEP_DEGREES
-                    + (float)rowIndex * rowOffset
-                    + charProgress * RAINBOW_TEXT_SWEEP_DEGREES;
-            float hue = (hueDegrees % 360.0f) / 360.0f;
-            if (hue < 0.0f) {
-                hue += 1.0f;
-            }
-            float saturation = Mth.clamp(this.settingFloat(this.rainbowSaturation) / 100.0f, 0.0f, 1.0f);
-            float brightness = Mth.clamp(this.settingFloat(this.rainbowBrightness) / 100.0f, 0.0f, 1.0f);
-            return 0xFF000000 | (Color.HSBtoRGB(hue, saturation, brightness) & 0x00FFFFFF);
-        }
-        if (this.textGradientEnabled.getValue()) {
-            float rowProgress = maxRowIndex <= 0 ? 0.0f : (float)rowIndex / (float)maxRowIndex;
-            float progress = this.dynamicGradientEnabled.getValue()
-                    ? (rowProgress + charProgress) * 0.5f
-                    : this.gradientMode.is("Horizontal Text") ? charProgress : rowProgress;
-            if (this.gradientAnimationEnabled.getValue()) {
-                progress = this.cyclicTwoColorProgress(progress + this.dynamicGradientOffset());
-            }
-            return ColorUtil.interpolateColor(
-                    0xFF000000 | this.settingRgb(this.gradientColorStart),
-                    0xFF000000 | this.settingRgb(this.gradientColorEnd),
-                    progress);
-        }
-        return 0xFFFFFFFF;
-    }
-
-    private float dynamicRainbowDegrees() {
-        if (!this.gradientAnimationEnabled.getValue()) {
-            return 0.0f;
-        }
-        return (float)(System.currentTimeMillis() % 60000L) * this.settingFloat(this.rainbowSpeed) / 1000.0f;
-    }
-
-    private float dynamicGradientOffset() {
-        return (float)(System.currentTimeMillis() % 60000L) * this.settingFloat(this.dynamicGradientSpeed) / 360000.0f;
-    }
-
-    private float cyclicTwoColorProgress(float progress) {
-        float wrapped = progress - (float)Math.floor(progress);
-        return wrapped <= 0.5f ? wrapped * 2.0f : (1.0f - wrapped) * 2.0f;
+        return this.textColorProvider().color(new ColorContext(System.currentTimeMillis(), rowIndex, maxRowIndex, charProgress));
     }
 
     private Alignment resolveAlignment(float x, float width) {
-        if (this.sideMode.is("Left")) {
+        if (this.isValue(this.sideMode, "Left")) {
             return Alignment.LEFT;
         }
-        if (this.sideMode.is("Right")) {
+        if (this.isValue(this.sideMode, "Right")) {
             return Alignment.RIGHT;
         }
         return x + width / 2.0f < (float)mc.getWindow().getGuiScaledWidth() / 2.0f
@@ -498,10 +489,10 @@ public class ModuleListHud extends HudElement {
     }
 
     private Alignment resolveLineAlignment(Alignment rowAlignment) {
-        if (this.sideLineMode.is("Left")) {
+        if (this.isValue(this.sideLineMode, "Left")) {
             return Alignment.LEFT;
         }
-        if (this.sideLineMode.is("Right")) {
+        if (this.isValue(this.sideLineMode, "Right")) {
             return Alignment.RIGHT;
         }
         return rowAlignment;
@@ -535,16 +526,42 @@ public class ModuleListHud extends HudElement {
         }
     }
 
-    private float settingFloat(NumberSetting setting) {
+    private ColorProvider textColorProvider() {
+        String mode = this.textColorGroup.getActiveModeId();
+        if ("rainbow".equals(mode)) {
+            return new RainbowColorProvider(true,
+                    this.settingFloat(this.rainbowSpeed),
+                    this.settingFloat(this.rainbowSaturation),
+                    this.settingFloat(this.rainbowBrightness),
+                    this.settingFloat(this.rainbowOffset));
+        }
+        if ("solid".equals(mode)) {
+            return new SolidColorProvider(this.solidTextColor.getValue());
+        }
+        return new GradientColorProvider(
+                this.gradientColorStart.getValue(),
+                this.gradientColorEnd.getValue(),
+                this.gradientMode.getValue(),
+                this.dynamicGradientEnabled.getValue(),
+                this.gradientAnimationEnabled.getValue(),
+                this.settingFloat(this.dynamicGradientSpeed));
+    }
+
+    private boolean isValue(Value<String> value, String expected) {
+        return value != null && expected.equalsIgnoreCase(value.getValue());
+    }
+
+    private float settingFloat(Value<Number> setting) {
         return setting.getValue().floatValue();
     }
 
-    private int settingInt(NumberSetting setting) {
-        return Mth.clamp(Math.round(setting.getValue().floatValue()), Math.round(setting.getMin().floatValue()), Math.round(setting.getMax().floatValue()));
-    }
-
-    private int settingRgb(NumberSetting setting) {
-        return this.settingInt(setting) & 0x00FFFFFF;
+    private int settingInt(Value<Number> setting) {
+        int value = Math.round(setting.getValue().floatValue());
+        Object min = setting.getMetadata().get("min");
+        Object max = setting.getMetadata().get("max");
+        int minValue = min instanceof Number number ? Math.round(number.floatValue()) : Integer.MIN_VALUE;
+        int maxValue = max instanceof Number number ? Math.round(number.floatValue()) : Integer.MAX_VALUE;
+        return Mth.clamp(value, minValue, maxValue);
     }
 
     private int withAlpha(int color, int alpha) {

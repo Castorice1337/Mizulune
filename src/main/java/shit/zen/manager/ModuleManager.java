@@ -77,6 +77,7 @@ import shit.zen.modules.impl.world.Debugger;
 import shit.zen.modules.impl.world.Teams;
 import shit.zen.modules.impl.world.WebUI;
 import shit.zen.event.EventTarget;
+import shit.zen.value.Value;
 
 public class ModuleManager extends ClientBase {
     private final Map<String, Module> moduleMap = new ConcurrentHashMap<>();
@@ -166,8 +167,12 @@ public class ModuleManager extends ClientBase {
 
     public Module getModule(String string) {
         Module module = null;
+        String normalized = Value.normalizeId(string);
         for (Module module2 : this.moduleMap.values()) {
-            if (!StringUtils.replace(module2.getName(), " ", "").equalsIgnoreCase(string)) continue;
+            if (!StringUtils.replace(module2.getName(), " ", "").equalsIgnoreCase(string)
+                    && !module2.getId().equals(normalized)
+                    && !Value.normalizeId(module2.getName()).equals(normalized)
+                    && !Value.normalizeId(module2.getClass().getSimpleName()).equals(normalized)) continue;
             module = module2;
         }
         if (module == null) {
