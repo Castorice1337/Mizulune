@@ -61,7 +61,7 @@ public class ZenClient extends ClientBase {
     public static final String CLIENT_SHORT_NAME = "Mizulune";
     public static final String CLIENT_CHINESE_NAME = "水月蝶";
     public static final String CLIENT_ABBR = "MZL";
-    public static final String VERSION = "1.0";
+    public static final String VERSION = "1.1";
     public static float serverTickRate;
     public static boolean isReady;
     public static boolean isMCPMapped;
