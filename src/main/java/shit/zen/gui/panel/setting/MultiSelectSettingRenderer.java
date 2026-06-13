@@ -6,6 +6,7 @@ import java.util.Map;
 import net.minecraft.client.gui.GuiGraphics;
 import shit.zen.ClientBase;
 import shit.zen.gui.PanelClickGui;
+import shit.zen.manager.ConfigManager;
 import shit.zen.render.FontPresets;
 import shit.zen.render.FontRenderer;
 import shit.zen.render.GlHelper;
@@ -90,6 +91,7 @@ implements SettingRenderer {
                 } else {
                     multiSelectSetting.getValue().add(option);
                 }
+                ConfigManager.saveAllIfReady();
                 boolean nowSelected = multiSelectSetting.isSelected(option);
                 PanelClickGui.panelClickGui.addToast(option + (nowSelected ? " enabled" : " disabled"));
                 return true;

@@ -636,8 +636,7 @@ public final class SkikoBackend implements RenderBackend {
     }
 
     private float toLegacyTextBaseline(float y, GlyphMetrics glyphMetrics) {
-        float legacyAtlasTopY = this.roundLegacy(y + glyphMetrics.ascent() - 1.0f);
-        return legacyAtlasTopY - glyphMetrics.ascent();
+        return this.roundLegacy(y - glyphMetrics.ascent() * 0.2f - 1.0f);
     }
 
     private float roundLegacy(float value) {

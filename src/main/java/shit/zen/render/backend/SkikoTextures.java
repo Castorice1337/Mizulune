@@ -3,6 +3,7 @@ package shit.zen.render.backend;
 import net.minecraft.client.Minecraft;
 import net.minecraft.resources.ResourceLocation;
 import org.jetbrains.skia.Image;
+import shit.zen.utils.misc.Assets;
 
 import java.io.InputStream;
 import java.util.HashMap;
@@ -36,6 +37,17 @@ final class SkikoTextures {
         } catch (Exception ignored) {
             // Some Minecraft textures, especially downloaded skins, only exist as GL textures.
         }
+        try (InputStream stream = Assets.open(this.toClasspath(resourceLocation))) {
+            if (stream != null) {
+                Image image = Image.Companion.makeFromEncoded(stream.readAllBytes());
+                if (image != null) {
+                    this.imageCache.put(key, image);
+                    return image;
+                }
+            }
+        } catch (Exception ignored) {
+            // DLL injection exposes jar resources through Assets instead of Minecraft's resource manager.
+        }
         this.missingResources.add(key);
         return null;
     }
@@ -49,6 +61,11 @@ final class SkikoTextures {
     }
 
     private String resourceKey(Minecraft mc, ResourceLocation resourceLocation) {
-        return System.identityHashCode(mc.getResourceManager()) + ":" + resourceLocation;
+        String resourceDir = System.getProperty("mizulune.resources", "");
+        return System.identityHashCode(mc.getResourceManager()) + ":" + resourceDir + ":" + resourceLocation;
+    }
+
+    private String toClasspath(ResourceLocation resourceLocation) {
+        return "/assets/" + resourceLocation.getNamespace() + "/" + resourceLocation.getPath();
     }
 }

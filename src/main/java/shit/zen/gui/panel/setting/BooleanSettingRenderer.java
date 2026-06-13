@@ -6,6 +6,7 @@ import java.util.Map;
 import net.minecraft.client.gui.GuiGraphics;
 import shit.zen.ClientBase;
 import shit.zen.gui.PanelClickGui;
+import shit.zen.manager.ConfigManager;
 import shit.zen.render.FontPresets;
 import shit.zen.render.FontRenderer;
 import shit.zen.render.TextGlow;
@@ -131,6 +132,7 @@ implements SettingRenderer {
         if (button == 0 && mouseX >= toggleX && mouseX <= toggleX + toggleWidth && mouseY >= toggleY && mouseY <= toggleY + toggleH) {
             boolean newValue = booleanSetting.getValue() == false;
             booleanSetting.setValue(newValue);
+            ConfigManager.saveAllIfReady();
             String stateLabel = newValue ? "On" : "Off";
             PanelClickGui.panelClickGui.addToast(booleanSetting.getName() + " is " + stateLabel);
             return true;

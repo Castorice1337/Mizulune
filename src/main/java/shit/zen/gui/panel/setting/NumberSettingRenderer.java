@@ -7,6 +7,7 @@ import java.util.Map;
 import net.minecraft.client.gui.GuiGraphics;
 import shit.zen.ClientBase;
 import shit.zen.gui.PanelClickGui;
+import shit.zen.manager.ConfigManager;
 import shit.zen.render.FontPresets;
 import shit.zen.render.FontRenderer;
 import shit.zen.render.GlHelper;
@@ -151,6 +152,7 @@ implements SettingRenderer {
             double max = editingNumberSetting.getMax().doubleValue();
             parsed = Math.max(min, Math.min(max, parsed));
             NumberSettingRenderer.applyValueStatic(editingNumberSetting, parsed);
+            ConfigManager.saveAllIfReady();
             PanelClickGui.panelClickGui.addToast(editingNumberSetting.getName() + " set to " + String.format(Locale.US, "%.1f", new Object[]{parsed}));
         } catch (NumberFormatException numberFormatException) {
             PanelClickGui.panelClickGui.addToast("Invalid input, edit cancelled");
@@ -252,6 +254,7 @@ implements SettingRenderer {
         double max = numberSetting.getMax().doubleValue();
         double newValue = Math.min(max, current + step);
         this.applyValue(numberSetting, newValue);
+        ConfigManager.saveAllIfReady();
         PanelClickGui.panelClickGui.addToast(numberSetting.getName() + " set to " + this.formatValue(newValue));
     }
 
@@ -261,6 +264,7 @@ implements SettingRenderer {
         double min = numberSetting.getMin().doubleValue();
         double newValue = Math.max(min, current - step);
         this.applyValue(numberSetting, newValue);
+        ConfigManager.saveAllIfReady();
         PanelClickGui.panelClickGui.addToast(numberSetting.getName() + " set to " + this.formatValue(newValue));
     }
 
