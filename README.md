@@ -2,7 +2,7 @@
 
 Mizulune Client is a Minecraft Forge `1.20.1` client project with a Java mod, a Java-agent patch layer, and a Windows native injector.
 
-Current version: `1.0`
+Current version: `1.1`
 
 ## Overview
 
