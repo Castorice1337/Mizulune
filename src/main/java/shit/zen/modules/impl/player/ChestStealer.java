@@ -65,6 +65,7 @@ extends Module {
     private final BooleanSetting onlyBestSetting = new BooleanSetting("Only Best", true);
     private final BooleanSetting randomClickSetting = new BooleanSetting("Random Click", false);
     private final BooleanSetting smartStealingSetting = new BooleanSetting("Smart Stealing", true);
+    private final BooleanSetting silentOnIsland = new BooleanSetting("Silent On Island", false);
     private static final Timer stealTimer;
     private static final Timer openTimer;
     private final Random random = new Random();
@@ -88,6 +89,10 @@ extends Module {
 
     public static boolean isRateLimited() {
         return !stealTimer.hasPassed(100L) && !openTimer.hasPassed((int)clickDelayMs);
+    }
+
+    public boolean isSilentOnIslandActive() {
+        return this.isEnabled() && this.silentOnIsland.getValue();
     }
 
     @Override

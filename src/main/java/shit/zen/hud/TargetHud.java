@@ -12,9 +12,9 @@ import net.minecraft.world.entity.LivingEntity;
 import shit.zen.event.impl.GlRenderEvent;
 import shit.zen.event.impl.PacketEvent;
 import shit.zen.event.impl.Render2DEvent;
-import shit.zen.hud.target.RoundTargetStyle;
 import shit.zen.hud.target.TargetStyle;
 import shit.zen.modules.impl.combat.KillAura;
+import shit.zen.settings.impl.BooleanSetting;
 import shit.zen.settings.impl.ModeSetting;
 import shit.zen.utils.animation.SmoothAnimationTimer;
 import shit.zen.utils.math.Easings;
@@ -27,7 +27,8 @@ extends HudElement {
     public static final Map<String, AtomicInteger> playerHealthMap = new HashMap<>();
     private float lastHealth;
     private float healthDelta;
-    private final ModeSetting styleMode = new ModeSetting("Mode", "Round").withDefault("Opal");
+    private final ModeSetting styleMode = new ModeSetting("Mode", "Round", "Lite").withDefault("Lite");
+    private final BooleanSetting liquidGlass = new BooleanSetting("Liquid Glass", true, () -> this.styleMode.is("Lite"));
 
     public TargetHud() {
         super("TargetHUD");
@@ -87,16 +88,15 @@ extends HudElement {
         this.healthAnim.tick();
         this.healthLagAnim.tick();
         TargetStyle targetStyle = TargetStyle.getByName(this.styleMode.getValue());
+        if (targetStyle == null) {
+            this.styleMode.setValue("Lite");
+            targetStyle = TargetStyle.getByName(this.styleMode.getValue());
+        }
         if (targetStyle != null) {
             maxHealth = target != null ? (target.getMaxHealth() > 0.0f ? Math.min(target.getHealth(), 20.0f) / Math.min(target.getMaxHealth(), 20.0f) : 0.0f) : 0.0f;
-            targetStyle.render(render2DEvent, target, this.healthAnim, this.healthLagAnim, maxHealth, x, y);
-            if (targetStyle instanceof RoundTargetStyle) {
-                this.setWidth(120.0f);
-                this.setHeight(38.0f);
-            } else {
-                this.setWidth(150.0f);
-                this.setHeight(36.0f);
-            }
+            TargetStyle.Size size = targetStyle.render(render2DEvent, target, this.healthAnim, this.healthLagAnim, maxHealth, x, y, this.liquidGlass.getValue());
+            this.setWidth(size.width());
+            this.setHeight(size.height());
         }
     }
 }

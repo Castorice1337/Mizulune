@@ -139,7 +139,7 @@ extends UIElement {
         }
         if (CursorUtil.isInBounds((float) mouseX, (float) mouseY, this.posX, this.posY, 120.0f, 20.0f)) {
             if (button == 0) {
-                this.module.setEnabled(!this.module.isEnabled());
+                this.module.toggleFromUser();
             } else if (button == 1 && !this.module.getSettings().isEmpty()) {
                 this.isExpanded = !this.isExpanded;
             }

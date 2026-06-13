@@ -41,17 +41,22 @@ final class SkikoFonts {
         float penTopY = topY;
         int lineStart = 0;
         int currentColor = baseColor;
+        StringBuilder segment = new StringBuilder(text.length());
         try (org.jetbrains.skia.Paint paint = new org.jetbrains.skia.Paint()) {
             paint.setAntiAlias(true);
             for (int i = 0; i < text.length(); i++) {
                 char ch = text.charAt(i);
                 if (ch == '\n') {
+                    penX = this.drawTextSegment(canvas, segment, penX, penTopY + ascent, font, paint, currentColor, customFont.getLetterSpacing());
+                    segment.setLength(0);
                     penX = startX;
                     penTopY += Math.max(1.0f, customFont.getStringHeight(text.substring(lineStart, i)));
                     lineStart = i + 1;
                     continue;
                 }
                 if (ch == '\u00a7' && i + 1 < text.length()) {
+                    penX = this.drawTextSegment(canvas, segment, penX, penTopY + ascent, font, paint, currentColor, customFont.getLetterSpacing());
+                    segment.setLength(0);
                     char code = Character.toUpperCase(text.charAt(++i));
                     Integer rgb = CustomFont.getMinecraftColorCode(code);
                     if (rgb != null) {
@@ -61,12 +66,23 @@ final class SkikoFonts {
                     }
                     continue;
                 }
-                paint.setColor(currentColor);
-                canvas.drawString(String.valueOf(ch), penX, penTopY + ascent, font, paint);
-                penX += customFont.getGlyphWidth(ch) + customFont.getLetterSpacing();
+                segment.append(ch);
             }
+            this.drawTextSegment(canvas, segment, penX, penTopY + ascent, font, paint, currentColor, customFont.getLetterSpacing());
         }
         return true;
+    }
+
+    private float drawTextSegment(Canvas canvas, StringBuilder segment, float x, float baselineY, Font font,
+                                  org.jetbrains.skia.Paint paint, int color, float letterSpacing) {
+        if (segment.length() == 0) {
+            return x;
+        }
+        String value = segment.toString();
+        paint.setColor(color);
+        canvas.drawString(value, x, baselineY, font, paint);
+        float spacing = Math.max(0.0f, letterSpacing) * Math.max(0, value.length() - 1);
+        return x + Math.max(0.0f, font.measureTextWidth(value, paint)) + spacing;
     }
 
     private Font getFont(CustomFont customFont) {

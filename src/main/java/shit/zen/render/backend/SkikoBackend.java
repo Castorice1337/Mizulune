@@ -41,6 +41,7 @@ import shit.zen.render.CustomFont;
 import shit.zen.render.DrawContext;
 import shit.zen.render.FontRenderer;
 import shit.zen.render.GlyphMetrics;
+import shit.zen.render.LiquidGlassStyle;
 import shit.zen.render.Paint;
 import shit.zen.render.Path;
 import shit.zen.render.Rectangle;
@@ -58,6 +59,7 @@ public final class SkikoBackend implements RenderBackend {
     private final Map<String, Font> fontCache = new HashMap<>();
     private final SkikoTextures textures = new SkikoTextures();
     private final SkikoFonts customFonts = new SkikoFonts();
+    private final SkikoLiquidGlass liquidGlass = new SkikoLiquidGlass();
     private DirectContext directContext;
     private BackendRenderTarget renderTarget;
     private Surface surface;
@@ -96,7 +98,8 @@ public final class SkikoBackend implements RenderBackend {
                 + " imageMiss=" + this.textures.getMissingResourceCount()
                 + " backdrop=" + (this.backdropSnapshot != null)
                 + " blur=" + this.backdropBlurCount
-                + " blurMiss=" + this.backdropBlurMissCount;
+                + " blurMiss=" + this.backdropBlurMissCount
+                + " " + this.liquidGlass.debugSummary();
     }
 
     @Override
@@ -451,6 +454,26 @@ public final class SkikoBackend implements RenderBackend {
     }
 
     @Override
+    public boolean drawLiquidGlassPanel(DrawContext drawContext, RoundedRectangle roundedRectangle, LiquidGlassStyle style) {
+        if (this.backdropSnapshot == null || this.backdropSnapshotWidth <= 0 || this.backdropSnapshotHeight <= 0) {
+            this.backdropBlurMissCount++;
+            return false;
+        }
+        LiquidGlassStyle effectiveStyle = style == null ? LiquidGlassStyle.defaultClear() : style;
+        RRect clip = this.toRRect(roundedRectangle);
+        Rect dst = Rect.makeXYWH(roundedRectangle.x1, roundedRectangle.y1,
+                roundedRectangle.getWidth(), roundedRectangle.getHeight());
+        if (this.liquidGlass.draw(this.requireCanvas(), this.backdropSnapshot, clip, dst, effectiveStyle,
+                this.guiScale, this.backdropSnapshotWidth, this.backdropSnapshotHeight)) {
+            return true;
+        }
+        SkikoEffects.drawBackdropBlurredRect(this.requireCanvas(), this.backdropSnapshot, clip, dst,
+                Math.max(0.0f, effectiveStyle.getBlurRadius()), effectiveStyle.getOpacity(),
+                effectiveStyle.getTintColor(), this.guiScale, this.backdropSnapshotWidth, this.backdropSnapshotHeight);
+        return true;
+    }
+
+    @Override
     public void drawBlur(DrawContext drawContext, float x, float y, float width, float height, float radius, Runnable runnable) {
         SkikoEffects.drawSelfBlur(this.requireCanvas(), Rect.makeXYWH(x, y, width, height), radius, runnable);
     }
@@ -483,6 +506,7 @@ public final class SkikoBackend implements RenderBackend {
             this.backdropBlurMissCount++;
             return;
         }
+        GL11.glFlush();
         this.backdropSnapshot = this.surface.makeImageSnapshot();
         this.backdropSnapshotWidth = width;
         this.backdropSnapshotHeight = height;
@@ -612,8 +636,7 @@ public final class SkikoBackend implements RenderBackend {
     }
 
     private float toLegacyTextBaseline(float y, GlyphMetrics glyphMetrics) {
-        float legacyAtlasTopY = this.roundLegacy(y + glyphMetrics.ascent() - 1.0f);
-        return legacyAtlasTopY - glyphMetrics.ascent();
+        return this.roundLegacy(y - glyphMetrics.ascent() * 0.2f - 1.0f);
     }
 
     private float roundLegacy(float value) {

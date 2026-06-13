@@ -8,6 +8,7 @@ import java.util.Objects;
 import net.minecraft.client.gui.GuiGraphics;
 import shit.zen.ClientBase;
 import shit.zen.gui.PanelClickGui;
+import shit.zen.manager.ConfigManager;
 import shit.zen.render.FontPresets;
 import shit.zen.render.FontRenderer;
 import shit.zen.render.GlHelper;
@@ -146,6 +147,7 @@ implements SettingRenderer {
                 if (!this.isMouseInBounds(mouseX, mouseY, dropdownX, firstItemY + i * itemHeight, dropdownWidth, itemHeight) || button != 0) continue;
                 String chosen = otherModes[i];
                 modeSetting.setValue(chosen);
+                ConfigManager.saveAllIfReady();
                 this.openStates.put(modeSetting, false);
                 PanelClickGui.panelClickGui.addToast(modeSetting.getName() + " set to " + chosen);
                 return true;

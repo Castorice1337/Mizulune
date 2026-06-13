@@ -1,40 +1,52 @@
 #include "MainWindow.h"
 
-#include "InjectionOverlay.h"
-#include "InstanceList.h"
-#include "TitleBar.h"
+#include "ProfileStore.h"
+#include "UpdateClient.h"
 #include "loader.h"
 
 #include <QApplication>
 #include <QCloseEvent>
-#include <QEasingCurve>
-#include <QHBoxLayout>
-#include <QLabel>
-#include <QLinearGradient>
-#include <QPainter>
-#include <QPainterPath>
-#include <QParallelAnimationGroup>
+#include <QCoreApplication>
+#include <QDir>
+#include <QFileInfo>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QMessageBox>
+#include <QMetaObject>
+#include <QMouseEvent>
 #include <QPropertyAnimation>
-#include <QString>
-#include <QTimer>
-#include <QVBoxLayout>
-#include <QVector>
-#include <QWidget>
+#include <QResizeEvent>
+#include <QUrl>
+#include <QWindow>
 
-#ifdef Q_OS_WIN
-#  include <windows.h>
-#  include <dwmapi.h>
+#include <algorithm>
+#include <cmath>
+#include <string>
+#include <thread>
+
+#include <dwmapi.h>
+#include <windows.h>
+
+#ifndef DWMWA_WINDOW_CORNER_PREFERENCE
+#  define DWMWA_WINDOW_CORNER_PREFERENCE 33
+#endif
+#ifndef DWMWA_SYSTEMBACKDROP_TYPE
+#  define DWMWA_SYSTEMBACKDROP_TYPE 38
+#endif
+#ifndef DWMWCP_ROUND
+#  define DWMWCP_ROUND 2
+#endif
+#ifndef DWMSBT_TRANSIENTWINDOW
+#  define DWMSBT_TRANSIENTWINDOW 3
 #endif
 
-#include <string>
+using Microsoft::WRL::Callback;
 
 namespace loader {
 
 namespace {
-constexpr int kCornerRadius = 12;
-
-QString fromW(const std::wstring& w) {
-    return QString::fromWCharArray(w.c_str(), static_cast<int>(w.size()));
+QString fromW(const std::wstring& value) {
+    return QString::fromWCharArray(value.c_str(), static_cast<int>(value.size()));
 }
 
 bool startsWithMinecraft(const std::wstring& title) {
@@ -44,253 +56,378 @@ bool startsWithMinecraft(const std::wstring& title) {
 }
 
 bool isMinecraft(const std::wstring& title, const std::wstring& cls) {
-    // Either the title starts with "Minecraft" (in-game window such as
-    // "Minecraft 1.20.1") or the LWJGL GLFW window class is in use (still
-    // true before the title gets set during early startup).
     if (startsWithMinecraft(title)) return true;
     return _wcsicmp(cls.c_str(), L"GLFW30") == 0;
+}
+
+std::wstring toWide(const QString& value) {
+    return value.toStdWString();
+}
+
+QString jsString(const QString& value) {
+    return QString::fromUtf8(QJsonDocument(QJsonArray{value}).toJson(QJsonDocument::Compact))
+            .mid(1)
+            .chopped(1);
+}
+
+QString sourceWebUiDir() {
+#ifdef OPENZEN_LOADER_WEBUI_DIR
+    return QString::fromUtf8(OPENZEN_LOADER_WEBUI_DIR);
+#else
+    return QString();
+#endif
 }
 } // namespace
 
 MainWindow::MainWindow(QWidget* parent)
-        : QMainWindow(parent) {
-    // Frameless + translucent so paintEvent can draw a rounded panel and
-    // shape the window however we like. The custom TitleBar covers move/
-    // minimize/close.
+        : QMainWindow(parent),
+          updateClient_(new UpdateClient(this)) {
     setWindowFlags(Qt::FramelessWindowHint | Qt::Window);
-    setAttribute(Qt::WA_TranslucentBackground);
+    setAttribute(Qt::WA_NativeWindow);
     setAttribute(Qt::WA_NoSystemBackground);
-    setMinimumSize(760, 500);
-    resize(760, 500);
+    setMinimumSize(1040, 640);
+    resize(1180, 720);
+    setWindowTitle(QStringLiteral("Mizulune Launcher"));
 
-    styleApp();
-    buildUi();
-
-    timer_ = new QTimer(this);
-    timer_->setInterval(1000);
-    connect(timer_, &QTimer::timeout, this, &MainWindow::refreshNow);
-    timer_->start();
-    refreshNow();
+    connect(updateClient_, &UpdateClient::checkStarted, this, [this] {
+        postEvent(QStringLiteral("update.checkStarted"));
+    });
+    connect(updateClient_, &UpdateClient::checkFailed, this, [this](const QString& error) {
+        postEvent(QStringLiteral("update.checkFailed"), {{"error", error}});
+    });
+    connect(updateClient_, &UpdateClient::latestReleaseChanged, this, &MainWindow::sendReleaseInfo);
+    connect(updateClient_, &UpdateClient::downloadStarted, this, [this](const QString& path) {
+        postEvent(QStringLiteral("update.downloadStarted"), {{"path", path}});
+    });
+    connect(updateClient_, &UpdateClient::downloadProgress, this, [this](qint64 received, qint64 total) {
+        postEvent(QStringLiteral("update.downloadProgress"), {
+            {"received", QString::number(received)},
+            {"total", QString::number(total)}
+        });
+    });
+    connect(updateClient_, &UpdateClient::downloadFinished, this, [this](const QString& path) {
+        postEvent(QStringLiteral("update.downloadFinished"), {{"path", path}});
+    });
+    connect(updateClient_, &UpdateClient::downloadFailed, this, [this](const QString& error) {
+        postEvent(QStringLiteral("update.downloadFailed"), {{"error", error}});
+    });
 }
 
-void MainWindow::buildUi() {
-#ifdef OPENZEN_BUILD_REVISION
-    const QString winTitle = QStringLiteral("Mizulune Client  ·  build %1")
-            .arg(QString::fromLatin1(OPENZEN_BUILD_REVISION).left(7));
-#else
-    const QString winTitle = QStringLiteral("Mizulune Client");
-#endif
-    setWindowTitle(winTitle);
-
-    auto* central = new QWidget(this);
-    central->setAttribute(Qt::WA_TranslucentBackground);
-
-    auto* root = new QVBoxLayout(central);
-    root->setContentsMargins(0, 0, 0, 0);
-    root->setSpacing(0);
-
-    titleBar_ = new TitleBar(central);
-    titleBar_->setTitleText(winTitle);
-    root->addWidget(titleBar_);
-
-    auto* body = new QWidget(central);
-    body->setObjectName("body");
-    body->setAttribute(Qt::WA_StyledBackground, false);
-    auto* layout = new QVBoxLayout(body);
-    layout->setContentsMargins(18, 14, 18, 14);
-    layout->setSpacing(10);
-
-    auto* title = new QLabel(QStringLiteral("Minecraft Instances"), body);
-    title->setObjectName("title");
-
-    hint_ = new QLabel(
-        QStringLiteral("Click Inject on the instance you want to load Mizulune Client into. "
-                       "List refreshes every second."),
-        body);
-    hint_->setObjectName("hint");
-    hint_->setWordWrap(true);
-
-    list_ = new InstanceList(body);
-    connect(list_, &InstanceList::injectRequested,
-            this, &MainWindow::onInjectRequested);
-
-    status_ = new QLabel(QStringLiteral("Watching for Minecraft processes…"), body);
-    status_->setObjectName("status");
-    status_->setWordWrap(true);
-
-    layout->addWidget(title);
-    layout->addWidget(hint_);
-    layout->addWidget(list_, 1);
-    layout->addWidget(status_);
-    root->addWidget(body, 1);
-
-    setCentralWidget(central);
+MainWindow::~MainWindow() {
+    if (webView_) {
+        webView_->remove_WebMessageReceived(messageToken_);
+    }
 }
 
-void MainWindow::styleApp() {
-    // Modern dark palette via QSS. The MainWindow background is painted in
-    // paintEvent (rounded panel) so we don't set a background colour on
-    // QMainWindow/QWidget directly here.
-    static const char* kQss = R"qss(
-        QWidget#body {
-            background: transparent;
-            color: #e3e5ea;
-            font-family: "Segoe UI", "Microsoft YaHei UI", sans-serif;
-            font-size: 13px;
-        }
-        QLabel#title {
-            font-size: 18px;
-            font-weight: 600;
-            color: #ffffff;
-            padding: 2px 0 0 2px;
-        }
-        QLabel#hint {
-            color: #8a8e98;
-            font-size: 12px;
-            padding-left: 2px;
-        }
-        QLabel#status {
-            color: #c2c6cf;
-            padding: 7px 11px;
-            border: 1px solid #2c2e35;
-            border-radius: 7px;
-            background: rgba(35, 37, 43, 200);
-        }
-    )qss";
-    qApp->setStyleSheet(QString::fromUtf8(kQss));
+void MainWindow::initializeWebView() {
+    if (webController_) return;
+
+    const QString userData = QDir(ProfileStore::profileDirectory()).filePath(QStringLiteral("webview2"));
+    QDir().mkpath(userData);
+
+    HRESULT hr = CreateCoreWebView2EnvironmentWithOptions(
+        nullptr,
+        toWide(userData).c_str(),
+        nullptr,
+        Callback<ICoreWebView2CreateCoreWebView2EnvironmentCompletedHandler>(
+            [this](HRESULT result, ICoreWebView2Environment* environment) -> HRESULT {
+                if (FAILED(result) || !environment) {
+                    QMessageBox::critical(this,
+                        QStringLiteral("WebView2"),
+                        QStringLiteral("WebView2 初始化失败。请安装 Microsoft Edge WebView2 Runtime。"));
+                    return S_OK;
+                }
+
+                webEnvironment_ = environment;
+                environment->CreateCoreWebView2Controller(
+                    reinterpret_cast<HWND>(winId()),
+                    Callback<ICoreWebView2CreateCoreWebView2ControllerCompletedHandler>(
+                        [this](HRESULT controllerResult, ICoreWebView2Controller* controller) -> HRESULT {
+                            if (FAILED(controllerResult) || !controller) {
+                                QMessageBox::critical(this,
+                                    QStringLiteral("WebView2"),
+                                    QStringLiteral("WebView2 Controller 创建失败。"));
+                                return S_OK;
+                            }
+
+                            webController_ = controller;
+                            webController_->get_CoreWebView2(&webView_);
+                            resizeWebView();
+
+                            Microsoft::WRL::ComPtr<ICoreWebView2Controller2> controller2;
+                            if (SUCCEEDED(webController_->QueryInterface(IID_PPV_ARGS(&controller2))) && controller2) {
+                                COREWEBVIEW2_COLOR transparentColor{0, 0, 0, 0};
+                                controller2->put_DefaultBackgroundColor(transparentColor);
+                            }
+
+                            Microsoft::WRL::ComPtr<ICoreWebView2Settings> settings;
+                            if (SUCCEEDED(webView_->get_Settings(&settings)) && settings) {
+                                settings->put_AreDevToolsEnabled(TRUE);
+                                settings->put_IsStatusBarEnabled(FALSE);
+                            }
+
+                            webView_->add_WebMessageReceived(
+                                Callback<ICoreWebView2WebMessageReceivedEventHandler>(
+                                    [this](ICoreWebView2*, ICoreWebView2WebMessageReceivedEventArgs* args) -> HRESULT {
+                                        LPWSTR raw = nullptr;
+                                        if (SUCCEEDED(args->get_WebMessageAsJson(&raw)) && raw) {
+                                            handleWebMessage(QString::fromWCharArray(raw));
+                                            CoTaskMemFree(raw);
+                                        }
+                                        return S_OK;
+                                    }).Get(),
+                                &messageToken_);
+
+                            navigateToWebUi();
+                            return S_OK;
+                        }).Get());
+                return S_OK;
+            }).Get());
+
+    if (FAILED(hr)) {
+        QMessageBox::critical(this,
+            QStringLiteral("WebView2"),
+            QStringLiteral("WebView2Loader 调用失败。请确认 WebView2 Runtime 已安装。"));
+    }
 }
 
-void MainWindow::enableWin11RoundedCorners() {
-#ifdef Q_OS_WIN
-    // DWMWA_WINDOW_CORNER_PREFERENCE is Windows 11+. The call is harmless
-    // (returns an HRESULT we ignore) on Windows 10 — DwmSetWindowAttribute
-    // just rejects the unknown attribute, no crash.
-    enum { DWMWA_WINDOW_CORNER_PREFERENCE_LOCAL = 33 };
-    enum { DWMWCP_ROUND_LOCAL = 2 };
+void MainWindow::navigateToWebUi() {
+    if (!webView_) return;
+    const QString index = webUiIndexPath();
+    const QString url = QFileInfo(index).isFile()
+            ? QUrl::fromLocalFile(index).toString(QUrl::FullyEncoded)
+            : QStringLiteral("data:text/html,<h1>Mizulune webui missing</h1>");
+    webView_->Navigate(toWide(url).c_str());
+}
+
+QString MainWindow::webUiIndexPath() const {
+    const QString dist = QDir(QCoreApplication::applicationDirPath())
+            .filePath(QStringLiteral("webui/index.html"));
+    if (QFileInfo(dist).isFile()) return dist;
+    return webUiFallbackIndexPath();
+}
+
+QString MainWindow::webUiFallbackIndexPath() const {
+    const QString src = sourceWebUiDir();
+    if (!src.isEmpty()) {
+        const QString path = QDir(src).filePath(QStringLiteral("index.html"));
+        if (QFileInfo(path).isFile()) return path;
+    }
+    return QDir(QDir::currentPath()).filePath(QStringLiteral("native/loader/webui/index.html"));
+}
+
+void MainWindow::resizeWebView() {
+    if (!webController_) return;
+    const double scale = devicePixelRatioF();
+    RECT bounds{
+        0,
+        0,
+        static_cast<LONG>(std::ceil(width() * scale)),
+        static_cast<LONG>(std::ceil(height() * scale))
+    };
+    webController_->put_Bounds(bounds);
+}
+
+void MainWindow::handleWebMessage(const QString& jsonText) {
+    const QJsonDocument doc = QJsonDocument::fromJson(jsonText.toUtf8());
+    if (!doc.isObject()) {
+        postError(QStringLiteral("Invalid web message."));
+        return;
+    }
+    const QJsonObject root = doc.object();
+    const QString type = root.value(QStringLiteral("type")).toString();
+    const QJsonObject payload = root.value(QStringLiteral("payload")).toObject();
+
+    if (type == QStringLiteral("ready")) {
+        webReady_ = true;
+        sendProfile();
+        sendInstances();
+        updateClient_->checkLatestRelease();
+    } else if (type == QStringLiteral("window.minimize")) {
+        showMinimized();
+    } else if (type == QStringLiteral("window.close")) {
+        close();
+    } else if (type == QStringLiteral("window.drag")) {
+        ReleaseCapture();
+        SendMessageW(reinterpret_cast<HWND>(winId()), WM_NCLBUTTONDOWN, HTCAPTION, 0);
+    } else if (type == QStringLiteral("profile.get")) {
+        sendProfile();
+    } else if (type == QStringLiteral("profile.save")) {
+        saveProfile(payload);
+    } else if (type == QStringLiteral("instances.scan")) {
+        sendInstances();
+    } else if (type == QStringLiteral("inject")) {
+        startInjection(payload);
+    } else if (type == QStringLiteral("update.check")) {
+        updateClient_->checkLatestRelease();
+    } else if (type == QStringLiteral("update.download")) {
+        updateClient_->downloadLatestLoader();
+    } else {
+        postError(QStringLiteral("Unknown web message: %1").arg(type));
+    }
+}
+
+void MainWindow::postEvent(const QString& type, const QJsonObject& payload) {
+    if (!webView_ || !webReady_) return;
+    const QJsonObject root{
+        {QStringLiteral("type"), type},
+        {QStringLiteral("payload"), payload}
+    };
+    const QString json = QString::fromUtf8(QJsonDocument(root).toJson(QJsonDocument::Compact));
+    webView_->PostWebMessageAsJson(toWide(json).c_str());
+}
+
+void MainWindow::postError(const QString& message) {
+    postEvent(QStringLiteral("error"), {{"message", message}});
+}
+
+void MainWindow::sendProfile() {
+    const LoaderProfile profile = ProfileStore::load();
+    postEvent(QStringLiteral("profile"), {
+        {"displayName", profile.displayName},
+        {"closeAfterInjection", profile.closeAfterInjection},
+        {"profilePath", ProfileStore::profileFilePath()}
+    });
+}
+
+void MainWindow::saveProfile(const QJsonObject& payload) {
+    LoaderProfile profile = ProfileStore::load();
+    profile.displayName = payload.value(QStringLiteral("displayName")).toString(profile.displayName);
+    profile.closeAfterInjection = payload.value(QStringLiteral("closeAfterInjection")).toBool(profile.closeAfterInjection);
+
+    QString error;
+    if (!ProfileStore::save(profile, &error)) {
+        postEvent(QStringLiteral("profile.saveFailed"), {{"error", error}});
+        return;
+    }
+    sendProfile();
+    postEvent(QStringLiteral("profile.saved"), {{"path", ProfileStore::profileFilePath()}});
+}
+
+void MainWindow::sendInstances() {
+    const auto processes = list_java_processes();
+    QJsonArray instances;
+    for (const auto& jp : processes) {
+        if (!isMinecraft(jp.window_title, jp.window_class)) continue;
+        QString title = fromW(jp.window_title);
+        if (title.isEmpty()) title = QStringLiteral("(starting up - %1)").arg(fromW(jp.window_class));
+        instances.append(QJsonObject{
+            {"pid", QString::number(jp.pid)},
+            {"title", title},
+            {"className", fromW(jp.window_class)}
+        });
+    }
+    postEvent(QStringLiteral("instances"), {{"items", instances}});
+}
+
+void MainWindow::startInjection(const QJsonObject& payload) {
+    if (injectionInFlight_) return;
+    bool okPid = false;
+    const unsigned long pid = payload.value(QStringLiteral("pid")).toString().toULong(&okPid);
+    const QString title = payload.value(QStringLiteral("title")).toString();
+    if (!okPid || pid == 0) {
+        postError(QStringLiteral("Invalid target process."));
+        return;
+    }
+
+    injectionInFlight_ = true;
+    postEvent(QStringLiteral("inject.started"), {{"pid", QString::number(pid)}, {"title", title}});
+
+    std::thread([this, pid]() {
+        const std::wstring error = inject(static_cast<DWORD>(pid));
+        const QString qError = fromW(error);
+        QMetaObject::invokeMethod(this, [this, qError]() {
+            injectionInFlight_ = false;
+            const bool ok = qError.isEmpty();
+            postEvent(QStringLiteral("inject.finished"), {{"ok", ok}, {"error", qError}});
+            if (ok && ProfileStore::load().closeAfterInjection) {
+                playExitThenQuit();
+            } else {
+                sendInstances();
+            }
+        }, Qt::QueuedConnection);
+    }).detach();
+}
+
+void MainWindow::sendReleaseInfo() {
+    const ReleaseInfo rel = updateClient_->latestRelease();
+    postEvent(QStringLiteral("update.release"), {
+        {"tagName", rel.tagName},
+        {"title", rel.title},
+        {"body", rel.body},
+        {"htmlUrl", rel.htmlUrl},
+        {"assetName", rel.assetName},
+        {"assetRevision", rel.assetRevision},
+        {"hasLoaderAsset", rel.hasLoaderAsset},
+        {"updateAvailable", rel.updateAvailable},
+        {"currentBuild", currentBuildLabel()}
+    });
+}
+
+QString MainWindow::currentBuildLabel() const {
+    const QString rev = UpdateClient::currentRevision();
+    return rev.isEmpty() ? QStringLiteral("local build") : QStringLiteral("build %1").arg(rev);
+}
+
+void MainWindow::setDwmFrame() {
     HWND hwnd = reinterpret_cast<HWND>(winId());
     if (!hwnd) return;
-    int pref = DWMWCP_ROUND_LOCAL;
-    DwmSetWindowAttribute(hwnd,
-                          DWMWA_WINDOW_CORNER_PREFERENCE_LOCAL,
-                          &pref,
-                          sizeof(pref));
-#endif
-}
-
-void MainWindow::paintEvent(QPaintEvent*) {
-    QPainter p(this);
-    p.setRenderHint(QPainter::Antialiasing);
-
-    QRectF r = QRectF(rect()).adjusted(0.5, 0.5, -0.5, -0.5);
-    QPainterPath panel;
-    panel.addRoundedRect(r, kCornerRadius, kCornerRadius);
-
-    QLinearGradient bg(r.topLeft(), r.bottomLeft());
-    bg.setColorAt(0.0, QColor("#1f2127"));
-    bg.setColorAt(1.0, QColor("#15171c"));
-    p.fillPath(panel, bg);
-
-    p.setPen(QPen(QColor(255, 255, 255, 26), 1));
-    p.setBrush(Qt::NoBrush);
-    p.drawPath(panel);
-}
-
-void MainWindow::showEvent(QShowEvent* e) {
-    QMainWindow::showEvent(e);
-    enableWin11RoundedCorners();
-    if (!entrancePlayed_) {
-        setWindowOpacity(0.0);
-    }
+    int cornerPref = DWMWCP_ROUND;
+    DwmSetWindowAttribute(hwnd, DWMWA_WINDOW_CORNER_PREFERENCE, &cornerPref, sizeof(cornerPref));
+    int backdrop = DWMSBT_TRANSIENTWINDOW;
+    DwmSetWindowAttribute(hwnd, DWMWA_SYSTEMBACKDROP_TYPE, &backdrop, sizeof(backdrop));
 }
 
 void MainWindow::playEntrance() {
-    entrancePlayed_ = true;
     show();
+    setDwmFrame();
+    initializeWebView();
     raise();
     activateWindow();
 
-    auto* fade = new QPropertyAnimation(this, "windowOpacity", this);
-    fade->setDuration(520);
-    fade->setStartValue(windowOpacity());
-    fade->setEndValue(1.0);
-    fade->setEasingCurve(QEasingCurve::OutCubic);
-
-    QRect endGeo   = geometry();
-    QRect startGeo = endGeo;
-    startGeo.translate(0, 18);
-    setGeometry(startGeo);
-    auto* slide = new QPropertyAnimation(this, "geometry", this);
-    slide->setDuration(560);
-    slide->setStartValue(startGeo);
-    slide->setEndValue(endGeo);
-    slide->setEasingCurve(QEasingCurve::OutCubic);
-
-    auto* grp = new QParallelAnimationGroup(this);
-    grp->addAnimation(fade);
-    grp->addAnimation(slide);
-    grp->start(QAbstractAnimation::DeleteWhenStopped);
-}
-
-void MainWindow::refreshNow() {
-    auto procs = list_java_processes();
-    QVector<Instance> filtered;
-    filtered.reserve(procs.size());
-    for (const auto& jp : procs) {
-        if (!isMinecraft(jp.window_title, jp.window_class)) continue;
-        Instance item;
-        item.pid = jp.pid;
-        item.title = fromW(jp.window_title);
-        if (item.title.isEmpty()) {
-            item.title = QStringLiteral("(starting up — %1)")
-                    .arg(fromW(jp.window_class));
-        }
-        filtered.push_back(std::move(item));
+    if (windowOpacity() < 0.01) {
+        auto* fade = new QPropertyAnimation(this, "windowOpacity", this);
+        fade->setDuration(220);
+        fade->setStartValue(0.0);
+        fade->setEndValue(1.0);
+        fade->start(QAbstractAnimation::DeleteWhenStopped);
     }
-
-    list_->setInstances(filtered);
-    status_->setText(QStringLiteral("Watching %1 Minecraft instance(s).")
-                     .arg(list_->count()));
 }
 
-void MainWindow::onInjectRequested(unsigned long pid, const QString& title) {
-    if (injectionInFlight_) return;
-    injectionInFlight_ = true;
-
-    // Freeze the list so the user can't queue another injection while we're
-    // waiting for the worker thread + animation to wrap up.
-    list_->setInteractive(false);
-    if (timer_) timer_->stop();
-
-    auto* overlay = new InjectionOverlay(pid, title, this);
-    connect(overlay, &InjectionOverlay::completed, this,
-            [this](bool /*ok*/) { playExitThenQuit(); });
-    overlay->start();
+void MainWindow::mousePressEvent(QMouseEvent* event) {
+    if (event->button() == Qt::LeftButton) {
+        if (auto* handle = windowHandle()) {
+            handle->startSystemMove();
+            event->accept();
+            return;
+        }
+    }
+    QMainWindow::mousePressEvent(event);
 }
 
-void MainWindow::closeEvent(QCloseEvent* e) {
-    // Intercept the first close so we can play the fade-out; the fade's
-    // finished handler calls qApp->quit which fires another close after
-    // exiting_ is set, and we let that one through normally.
+void MainWindow::resizeEvent(QResizeEvent* event) {
+    QMainWindow::resizeEvent(event);
+    resizeWebView();
+}
+
+void MainWindow::closeEvent(QCloseEvent* event) {
     if (exiting_) {
-        QMainWindow::closeEvent(e);
+        QMainWindow::closeEvent(event);
         return;
     }
-    e->ignore();
+    event->ignore();
     playExitThenQuit();
 }
 
 void MainWindow::playExitThenQuit() {
     if (exiting_) return;
     exiting_ = true;
-    if (timer_) timer_->stop();
 
     auto* fade = new QPropertyAnimation(this, "windowOpacity", this);
-    fade->setDuration(280);
+    fade->setDuration(180);
     fade->setStartValue(windowOpacity());
     fade->setEndValue(0.0);
-    fade->setEasingCurve(QEasingCurve::InCubic);
-    connect(fade, &QAbstractAnimation::finished,
-            qApp, &QApplication::quit);
+    connect(fade, &QAbstractAnimation::finished, qApp, &QApplication::quit);
     fade->start(QAbstractAnimation::DeleteWhenStopped);
 }
 

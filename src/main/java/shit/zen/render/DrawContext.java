@@ -653,6 +653,32 @@ public class DrawContext {
         BlurRenderer.renderBlur(this, x, y, width, height, halfBlur, () -> this.drawRoundedRect(expanded, paint));
     }
 
+    public void drawLiquidGlassPanel(RoundedRectangle roundedRectangle, LiquidGlassStyle style) {
+        if (roundedRectangle == null) {
+            return;
+        }
+        LiquidGlassStyle effectiveStyle = style == null ? LiquidGlassStyle.defaultClear() : style;
+        if (this.useBackend() && this.backend.drawLiquidGlassPanel(this, roundedRectangle, effectiveStyle)) {
+            return;
+        }
+        float radius = Math.max(0.0f, Math.min(Math.min(roundedRectangle.topLeftRadius, roundedRectangle.topRightRadius),
+                Math.min(roundedRectangle.bottomRightRadius, roundedRectangle.bottomLeftRadius)));
+        int overlayColor = scaleAlpha(effectiveStyle.getTintColor(), Math.max(0.08f, effectiveStyle.getTintStrength()));
+        if ((overlayColor >>> 24) == 0) {
+            overlayColor = scaleAlpha(0x40FFFFFF, effectiveStyle.getOpacity() * 0.35f);
+        }
+        if (this.useBackend()) {
+            boolean rendered = this.backend.drawBackdropBlurredRect(this, roundedRectangle.x1, roundedRectangle.y1,
+                    roundedRectangle.getWidth(), roundedRectangle.getHeight(), radius,
+                    effectiveStyle.getBlurRadius(), effectiveStyle.getOpacity(), overlayColor);
+            if (rendered) {
+                return;
+            }
+        }
+        this.drawBlurredRoundedRect(roundedRectangle, 0.0f, 0.0f,
+                Math.max(0.01f, effectiveStyle.getBlurRadius()), 0.0f, overlayColor);
+    }
+
     public void drawBlur(float x, float y, float width, float height, float radius, Runnable runnable) {
         if (this.useBackend()) {
             this.backend.drawBlur(this, x, y, width, height, radius, runnable);
@@ -689,6 +715,12 @@ public class DrawContext {
 
     static float[] colorToFloats(int color) {
         return new float[]{(float)(color >> 16 & 0xFF) / 255.0f, (float)(color >> 8 & 0xFF) / 255.0f, (float)(color & 0xFF) / 255.0f, (float)(color >>> 24 & 0xFF) / 255.0f};
+    }
+
+    private static int scaleAlpha(int color, float alphaScale) {
+        float clamped = Math.max(0.0f, Math.min(1.0f, alphaScale));
+        int alpha = Math.round((float)(color >>> 24) * clamped);
+        return alpha << 24 | color & 0x00FFFFFF;
     }
 
     public static AbstractTexture getTexture(ResourceLocation resourceLocation) {

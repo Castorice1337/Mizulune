@@ -4,6 +4,7 @@ import com.mojang.blaze3d.vertex.PoseStack;
 import java.awt.Color;
 import shit.zen.gui.legacy.ModuleButton;
 import shit.zen.gui.legacy.SettingComponent;
+import shit.zen.manager.ConfigManager;
 import shit.zen.render.FontStore;
 import shit.zen.settings.Setting;
 import shit.zen.settings.impl.BooleanSetting;
@@ -55,6 +56,7 @@ extends SettingComponent {
             boolean previous = this.booleanSetting.getValue();
             this.booleanSetting.setValue(!previous);
             if (previous != this.booleanSetting.getValue()) {
+                ConfigManager.saveAllIfReady();
                 this.parentButton.panel.recalcLayout();
             }
         }

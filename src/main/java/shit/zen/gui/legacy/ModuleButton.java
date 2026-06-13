@@ -160,7 +160,7 @@ public class ModuleButton {
     public void mouseClicked(double mouseX, double mouseY, int button) {
         if (this.isHovered(mouseX, mouseY)) {
             if (button == 0) {
-                this.module.setEnabled(!this.module.isEnabled());
+                this.module.toggleFromUser();
             } else if (button == 1 && !this.module.getSettings().isEmpty()) {
                 this.expanded = !this.expanded;
                 this.expandAnim.animate(this.expanded ? 1.0 : 0.0, 0.2, Easings.EASE_OUT_QUAD);
