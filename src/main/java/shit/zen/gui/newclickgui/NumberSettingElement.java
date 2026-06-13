@@ -6,6 +6,7 @@ import net.minecraft.util.Mth;
 import shit.zen.gui.NewClickGui;
 import shit.zen.gui.newclickgui.CategoryPanel;
 import shit.zen.gui.newclickgui.SettingElement;
+import shit.zen.manager.ConfigManager;
 import shit.zen.render.FontStore;
 import shit.zen.settings.impl.NumberSetting;
 import shit.zen.utils.animation.SmoothAnimationTimer;
@@ -104,7 +105,11 @@ extends SettingElement<NumberSetting> {
         float sliderWidth = 108.0f;
         float sliderHeight = 5.0f;
         float sliderY = this.y + this.getHeight() / 2.0f + (this.getHeight() / 2.0f - sliderHeight) / 2.0f;
+        boolean wasDragging = this.isDragging;
         this.isDragging = false;
+        if (wasDragging) {
+            ConfigManager.saveAllIfReady();
+        }
         return false;
     }
 }

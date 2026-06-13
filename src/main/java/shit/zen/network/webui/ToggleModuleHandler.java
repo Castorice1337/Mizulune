@@ -33,7 +33,7 @@ public class ToggleModuleHandler extends AbstractHttpHandler {
                     state = true;
                     success = true;
                 } else {
-                    module.setEnabled(Boolean.parseBoolean(query.get("state")));
+                    module.setEnabledFromUser(Boolean.parseBoolean(query.get("state")));
                     state = module.isEnabled();
                     success = true;
                 }

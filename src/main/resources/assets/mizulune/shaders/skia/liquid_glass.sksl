@@ -1,0 +1,122 @@
+// Liquid glass SkSL for Mizulune's Skiko backend.
+// References the superellipse/refraction/grain/rim-lighting approach from:
+// https://github.com/Jacquesqwq/LiquidGlassShader (MIT, copyright Jack 2026).
+
+uniform shader uBackdrop;
+uniform float4 uRect;
+uniform float2 uSurfaceSize;
+uniform float uGuiScale;
+uniform float uPowerFactor;
+uniform float uRefractionPower;
+uniform float uRefractionStrength;
+uniform float uNoise;
+uniform float uGlowWeight;
+uniform float uGlowBias;
+uniform float uGlowEdge0;
+uniform float uGlowEdge1;
+uniform float uBlurIterations;
+uniform float uBlurRadius;
+uniform float uBlurDownscale;
+uniform float uOpacity;
+uniform float3 uTintColor;
+uniform float uTintStrength;
+uniform float uChromaStrength;
+uniform float uDarkness;
+
+const float M_E = 2.718281828459045;
+
+float rand(float2 co) {
+    return fract(sin(dot(co, float2(12.9898, 78.233))) * 43758.5453);
+}
+
+float responseCurve(float x) {
+    return 1.0 - 2.3 * pow(5.2 * M_E, -6.9 * x - 0.7);
+}
+
+float sdRoundedRect(float2 p, float2 halfSize, float radius) {
+    float2 q = abs(p) - halfSize + float2(radius);
+    return length(max(q, float2(0.0))) + min(max(q.x, q.y), 0.0) - radius;
+}
+
+float rimGlow(float2 uv) {
+    float2 glowUV = uv * 2.0 - 1.0;
+    return sin(atan(glowUV.y, glowUV.x) - 0.5);
+}
+
+float4 sampleBackdrop(float2 guiCoord) {
+    float2 guiSize = max(float2(1.0), uSurfaceSize / max(1.0, uGuiScale));
+    float2 clampedGui = clamp(guiCoord, float2(0.0), guiSize);
+    return uBackdrop.eval(clampedGui * max(1.0, uGuiScale));
+}
+
+float2 clampToPanel(float2 guiCoord) {
+    float2 minCoord = uRect.xy;
+    float2 maxCoord = uRect.xy + uRect.zw;
+    return clamp(guiCoord, minCoord, maxCoord);
+}
+
+float3 sampleBlurredBackdrop(float2 guiCoord, float2 dir) {
+    float iterations = clamp(uBlurIterations, 0.0, 4.0);
+    float downscale = clamp(uBlurDownscale, 0.25, 2.0);
+    float r = clamp(uBlurRadius * (1.0 + iterations * 0.35) / downscale, 0.35, 18.0);
+    float2 dx = float2(r, 0.0);
+    float2 dy = float2(0.0, r);
+    float2 dd = normalize(dir + float2(0.001)) * r;
+    float2 base = clampToPanel(guiCoord);
+    float3 color = sampleBackdrop(base).rgb * 0.30;
+    color += sampleBackdrop(clampToPanel(base + dx)).rgb * 0.105;
+    color += sampleBackdrop(clampToPanel(base - dx)).rgb * 0.105;
+    color += sampleBackdrop(clampToPanel(base + dy)).rgb * 0.105;
+    color += sampleBackdrop(clampToPanel(base - dy)).rgb * 0.105;
+    color += sampleBackdrop(clampToPanel(base + dx + dy)).rgb * 0.055;
+    color += sampleBackdrop(clampToPanel(base - dx + dy)).rgb * 0.055;
+    color += sampleBackdrop(clampToPanel(base + dx - dy)).rgb * 0.055;
+    color += sampleBackdrop(clampToPanel(base - dx - dy)).rgb * 0.055;
+    color += sampleBackdrop(clampToPanel(base + dd)).rgb * 0.055;
+    color += sampleBackdrop(clampToPanel(base - dd)).rgb * 0.055;
+    return color;
+}
+
+half4 main(float2 coord) {
+    float2 rectPos = uRect.xy;
+    float2 rectSize = max(uRect.zw, float2(1.0));
+    float2 localUV = (coord - rectPos) / rectSize;
+    float2 center = rectPos + rectSize * 0.5;
+    float radius = clamp(uPowerFactor, 0.0, min(rectSize.x, rectSize.y) * 0.5);
+    float d = sdRoundedRect(coord - center, rectSize * 0.5, radius);
+    float edge = 1.0 - smoothstep(-0.75, 0.75, d);
+    if (edge <= 0.0) {
+        return half4(0.0);
+    }
+
+    float dist = max(-d, 0.0) / max(1.0, min(rectSize.x, rectSize.y) * 0.5);
+    float refraction = pow(max(0.0, responseCurve(dist)), max(0.01, uRefractionPower));
+    float2 offset = coord - center;
+    float2 referenceCoord = center + offset * refraction;
+    float strength = clamp(uRefractionStrength, 0.0, 1.5);
+    float2 sampleCoord = clampToPanel(mix(coord, referenceCoord, strength));
+
+    float chroma = clamp(uChromaStrength, 0.0, 0.08) * max(rectSize.x, rectSize.y);
+    float3 rgb;
+    if (chroma > 0.001) {
+        float2 chromaDir = normalize(offset + float2(0.001));
+        rgb.r = sampleBlurredBackdrop(sampleCoord + chromaDir * chroma, offset).r;
+        rgb.g = sampleBlurredBackdrop(sampleCoord, offset).g;
+        rgb.b = sampleBlurredBackdrop(sampleCoord - chromaDir * chroma, offset).b;
+    } else {
+        rgb = sampleBlurredBackdrop(sampleCoord, offset);
+    }
+
+    float grain = (rand(coord * 0.001) - 0.5) * uNoise;
+    rgb += float3(grain);
+    rgb = mix(rgb, uTintColor, clamp(uTintStrength, 0.0, 1.0));
+    rgb *= 1.0 - clamp(uDarkness, 0.0, 1.0);
+
+    float glow = rimGlow(localUV);
+    float glowMask = smoothstep(uGlowEdge0, uGlowEdge1, dist);
+    float glowStrength = glow * uGlowWeight * glowMask + 1.0 + uGlowBias;
+    rgb = clamp(rgb * max(0.0, glowStrength), float3(0.0), float3(1.0));
+
+    float alpha = edge * clamp(uOpacity, 0.0, 1.0);
+    return half4(rgb * alpha, alpha);
+}

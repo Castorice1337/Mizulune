@@ -5,6 +5,7 @@ import java.awt.Color;
 import lombok.Getter;
 import shit.zen.gui.legacy.ModuleButton;
 import shit.zen.gui.legacy.SettingComponent;
+import shit.zen.manager.ConfigManager;
 import shit.zen.render.FontStore;
 import shit.zen.settings.Setting;
 import shit.zen.settings.impl.ModeSetting;
@@ -89,6 +90,7 @@ extends SettingComponent {
                 int itemIndex = (int)((mouseY - (double)overHeader) / (double)contentHeight);
                 if (itemIndex >= 0 && itemIndex < modes.length) {
                     this.modeSetting.setValue(modes[itemIndex]);
+                    ConfigManager.saveAllIfReady();
                     this.dropdownOpen = false;
                     this.parentButton.panel.recalcLayout();
                 }

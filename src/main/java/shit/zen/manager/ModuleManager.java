@@ -56,13 +56,16 @@ import shit.zen.modules.impl.render.ChestESP;
 import shit.zen.modules.impl.render.ClickGuiModule;
 import shit.zen.modules.impl.render.Compass;
 import shit.zen.modules.impl.render.DamageGlow;
+import shit.zen.modules.impl.render.DynamicIsland;
 import shit.zen.modules.impl.render.ESP;
 import shit.zen.modules.impl.render.FullBright;
+import shit.zen.modules.impl.render.HUD;
 import shit.zen.modules.impl.render.Interface;
 import shit.zen.modules.impl.render.ItemTags;
 import shit.zen.modules.impl.render.NameProtect;
 import shit.zen.modules.impl.render.NameTags;
 import shit.zen.modules.impl.render.NoHurtCam;
+import shit.zen.modules.impl.render.Notification;
 import shit.zen.modules.impl.render.OldHitting;
 import shit.zen.modules.impl.render.Projectiles;
 import shit.zen.modules.impl.render.Watermark;
@@ -133,13 +136,16 @@ public class ModuleManager extends ClientBase {
         this.register(new ClickGuiModule());
         this.register(new Compass());
         this.register(new DamageGlow());
+        this.register(new DynamicIsland());
         this.register(new ESP());
         this.register(new FullBright());
+        this.register(new HUD());
         this.register(new Interface());
         this.register(new ItemTags());
         this.register(new NameProtect());
         this.register(new NameTags());
         this.register(new NoHurtCam());
+        this.register(new Notification());
         this.register(new OldHitting());
         this.register(new Projectiles());
         this.register(new Watermark());
@@ -194,7 +200,7 @@ public class ModuleManager extends ClientBase {
         if (mc.screen == null) {
             for (Module module : this.moduleMap.values()) {
                 if (module.getKey() != 0 && module.getKey() == event.getKeyCode() && event.isPressed()) {
-                    module.toggle();
+                    module.toggleFromUser();
                 }
             }
         }

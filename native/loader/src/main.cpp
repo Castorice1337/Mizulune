@@ -1,8 +1,33 @@
 #include "MainWindow.h"
-#include "SplashScreen.h"
+#include "ProfileStore.h"
 
 #include <QApplication>
+#include <QCoreApplication>
+#include <QDir>
+#include <QFile>
 #include <QStyleFactory>
+#include <QTextStream>
+
+namespace {
+void logStartupDebug() {
+    QDir().mkpath(loader::ProfileStore::profileDirectory());
+
+    QFile file(QDir(loader::ProfileStore::profileDirectory()).filePath(QStringLiteral("loader_debug.txt")));
+    if (!file.open(QIODevice::WriteOnly | QIODevice::Text)) return;
+
+    QTextStream out(&file);
+    out << "Mizulune WebView2 Loader Debug\n";
+    out << "==============================\n\n";
+    out << "applicationDir = " << QCoreApplication::applicationDirPath() << "\n";
+    out << "profileDir     = " << loader::ProfileStore::profileDirectory() << "\n";
+    out << "webui/index    = "
+        << QDir(QCoreApplication::applicationDirPath()).filePath(QStringLiteral("webui/index.html"))
+        << "\n";
+    out << "res/bg         = "
+        << QDir(QCoreApplication::applicationDirPath()).filePath(QStringLiteral("res/bg.png"))
+        << "\n";
+}
+} // namespace
 
 int main(int argc, char** argv) {
     QApplication::setHighDpiScaleFactorRoundingPolicy(
@@ -13,16 +38,11 @@ int main(int argc, char** argv) {
     QApplication::setApplicationName(QStringLiteral("Mizulune Client"));
     QApplication::setOrganizationName(QStringLiteral("Mizulune"));
 
-    // Main window is constructed up front but kept hidden until the splash
-    // emits finished(), so its windowOpacity starts at 0 (set in showEvent
-    // on its first show inside playEntrance()).
-    auto* main = new loader::MainWindow();
+    logStartupDebug();
 
-    auto* splash = new loader::SplashScreen();
-    QObject::connect(splash, &loader::SplashScreen::finished, main, [main] {
-        main->playEntrance();
-    });
-    splash->start();
+    auto* main = new loader::MainWindow();
+    main->setWindowOpacity(0.0);
+    main->playEntrance();
 
     int rc = app.exec();
     delete main;

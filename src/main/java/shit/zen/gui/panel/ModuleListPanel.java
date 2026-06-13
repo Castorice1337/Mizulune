@@ -339,7 +339,7 @@ extends ClientBase {
             int adjustedRowY;
             if (this.isMouseOverModule(module, panelX, adjustedRowY = (int)((float)rowY - this.scrollOffset), mouseX, mouseY, scale)) {
                 if (button == 0) {
-                    module.toggle();
+                    module.toggleFromUser();
                     String stateLabel = module.isEnabled() ? "On" : "Off";
                     PanelClickGui.panelClickGui.addToast(module.getName() + " Module " + stateLabel);
                 } else if (button == 1) {

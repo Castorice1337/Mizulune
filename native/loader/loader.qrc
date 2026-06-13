@@ -1,0 +1,10 @@
+<!DOCTYPE RCC><RCC version="1.0">
+<qresource>
+    <file>webui/index.html</file>
+    <file>webui/styles.css</file>
+    <file>webui/app.js</file>
+    <file>webui/res/bg.png</file>
+    <file>webui/res/logo.png</file>
+    <file>webui/res/logo_text.png</file>
+</qresource>
+</RCC>

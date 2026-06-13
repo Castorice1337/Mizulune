@@ -6,6 +6,7 @@ import net.minecraft.resources.ResourceLocation;
 import shit.zen.render.CustomFont;
 import shit.zen.render.DrawContext;
 import shit.zen.render.FontRenderer;
+import shit.zen.render.LiquidGlassStyle;
 import shit.zen.render.Paint;
 import shit.zen.render.Path;
 import shit.zen.render.Rectangle;
@@ -118,6 +119,10 @@ public interface RenderBackend {
 
     default boolean drawBackdropBlurredRect(DrawContext drawContext, float x, float y, float width, float height,
                                             float radius, float blurRadius, float opacity, int color) {
+        return false;
+    }
+
+    default boolean drawLiquidGlassPanel(DrawContext drawContext, RoundedRectangle roundedRectangle, LiquidGlassStyle style) {
         return false;
     }
 

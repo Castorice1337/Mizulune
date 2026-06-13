@@ -6,6 +6,7 @@ import net.minecraft.util.Mth;
 import shit.zen.gui.NewClickGui;
 import shit.zen.gui.newclickgui.CategoryPanel;
 import shit.zen.gui.newclickgui.SettingElement;
+import shit.zen.manager.ConfigManager;
 import shit.zen.render.FontStore;
 import shit.zen.settings.impl.ModeSetting;
 import shit.zen.utils.animation.SmoothAnimationTimer;
@@ -101,6 +102,7 @@ extends SettingElement<ModeSetting> {
         }
         if (this.hoveredMode != null && this.isOpen) {
             this.setting.setValue(this.hoveredMode);
+            ConfigManager.saveAllIfReady();
             this.isOpen = false;
             this.hoveredMode = null;
             return true;

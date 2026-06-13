@@ -4,7 +4,6 @@ import asm.patchify.annotation.At;
 import asm.patchify.annotation.Inject;
 import asm.patchify.annotation.Patch;
 import asm.patchify.annotation.Transform;
-import java.lang.reflect.Field;
 import java.util.List;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
@@ -25,8 +24,8 @@ import shit.zen.ClientBase;
 import shit.zen.ZenClient;
 import shit.zen.event.impl.ChatReceiveEvent;
 import shit.zen.hud.TabListInfo;
+import shit.zen.modules.impl.render.DynamicIsland;
 import shit.zen.modules.impl.render.Watermark;
-import shit.zen.settings.impl.ModeSetting;
 import shit.zen.utils.misc.ReflectionUtil;
 
 @Patch(PlayerTabOverlay.class)
@@ -110,20 +109,16 @@ public class PlayerTabOverlayPatch extends ClientBase {
         }
         renderState.set(false);
         if (!ZenClient.isReady() || ZenClient.getInstance().getModuleManager() == null) return;
+        if (!mc.options.keyPlayerList.isDown()) return;
+        if (DynamicIsland.shouldOwnTabOverlay()) {
+            callbackInfo.cancel();
+            return;
+        }
         Watermark watermark = (Watermark) ZenClient.getInstance().getModuleManager().getModule(Watermark.class);
-        if (watermark == null || !watermark.isEnabled() || !mc.options.keyPlayerList.isDown()) return;
-        try {
-            Field styleField = Watermark.class.getDeclaredField("styleSetting");
-            styleField.setAccessible(true);
-            ModeSetting style = (ModeSetting) styleField.get(watermark);
-            if ("DynamicIsland".equals(style.getValue())) {
-                callbackInfo.cancel();
-            } else {
-                renderState.set(true);
-                graphics.pose().pushPose();
-                graphics.pose().translate(0.0f, 30.0f, 0.0f);
-            }
-        } catch (Exception ignored) {
+        if (watermark != null && watermark.isEnabled()) {
+            renderState.set(true);
+            graphics.pose().pushPose();
+            graphics.pose().translate(0.0f, 30.0f, 0.0f);
         }
     }
 

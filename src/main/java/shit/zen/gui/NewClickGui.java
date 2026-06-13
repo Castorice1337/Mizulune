@@ -9,6 +9,7 @@ import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 import net.minecraft.util.Mth;
 import shit.zen.gui.newclickgui.CategoryPanel;
+import shit.zen.manager.ConfigManager;
 import shit.zen.modules.Category;
 import shit.zen.utils.animation.SmoothAnimationTimer;
 import shit.zen.utils.math.Easings;
@@ -45,6 +46,7 @@ extends Screen {
         float closeProgress = this.closeAnim.getValueF();
         if (Mth.equal(closeProgress, 0.0f) && this.closing) {
             this.closing = false;
+            ConfigManager.saveAllIfReady();
             super.onClose();
             categoryPanels.forEach(CategoryPanel::reset);
             return;

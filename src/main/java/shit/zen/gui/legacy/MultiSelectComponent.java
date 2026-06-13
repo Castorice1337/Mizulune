@@ -6,6 +6,7 @@ import java.util.List;
 import lombok.Getter;
 import shit.zen.gui.legacy.ModuleButton;
 import shit.zen.gui.legacy.SettingComponent;
+import shit.zen.manager.ConfigManager;
 import shit.zen.render.FontStore;
 import shit.zen.settings.Setting;
 import shit.zen.settings.impl.MultiSelectSetting;
@@ -100,6 +101,7 @@ extends SettingComponent {
                     } else {
                         this.multiSelectSetting.getValue().add(option);
                     }
+                    ConfigManager.saveAllIfReady();
                 }
             }
         }

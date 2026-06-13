@@ -6,7 +6,10 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.io.OutputStream;
+import java.nio.charset.StandardCharsets;
+import java.util.Properties;
 import java.lang.reflect.Field;
 import lombok.Getter;
 import lombok.Setter;
@@ -26,6 +29,7 @@ import shit.zen.patch.BlockPatch;
 import shit.zen.patch.ChatScreenPatch;
 import shit.zen.patch.ClientLevelPatch;
 import shit.zen.patch.ConnectionPatch;
+import shit.zen.patch.ContainerScreenRenderPatch;
 import shit.zen.patch.EntityPatch;
 import shit.zen.patch.EntityRendererPatch;
 import shit.zen.patch.FriendlyByteBufPatch;
@@ -57,7 +61,7 @@ public class ZenClient extends ClientBase {
     public static final String CLIENT_SHORT_NAME = "Mizulune";
     public static final String CLIENT_CHINESE_NAME = "水月蝶";
     public static final String CLIENT_ABBR = "MZL";
-    public static final String VERSION = "1.0";
+    public static final String VERSION = "1.1";
     public static float serverTickRate;
     public static boolean isReady;
     public static boolean isMCPMapped;
@@ -85,7 +89,7 @@ public class ZenClient extends ClientBase {
 
     private void init() {
         try {
-            username = System.getProperty("user.name", "Player");
+            username = resolveDisplayName();
             File dir = new File(configDir);
             if (!dir.exists() && !dir.mkdirs()) {
                 logger.warn("Failed to create config directory at {}", configDir);
@@ -119,6 +123,26 @@ public class ZenClient extends ClientBase {
         } catch (Throwable throwable) {
             logger.error(throwable.getMessage(), throwable);
         }
+    }
+
+    private static String resolveDisplayName() {
+        String fallback = System.getProperty("user.name", "Player");
+        File profileFile = new File(configDir, "loader-profile.properties");
+        if (!profileFile.isFile()) {
+            return fallback;
+        }
+        try (InputStream in = new java.io.FileInputStream(profileFile);
+             InputStreamReader reader = new InputStreamReader(in, StandardCharsets.UTF_8)) {
+            Properties properties = new Properties();
+            properties.load(reader);
+            String displayName = properties.getProperty("displayName", "").trim();
+            if (!displayName.isEmpty()) {
+                return displayName.length() > 32 ? displayName.substring(0, 32).trim() : displayName;
+            }
+        } catch (IOException ioException) {
+            logger.warn("Failed to read loader profile at {}", profileFile, ioException);
+        }
+        return fallback;
     }
 
     private boolean moduleInit = false;
@@ -197,6 +221,7 @@ public class ZenClient extends ClientBase {
         PatchRegistry.register(PlayerPatch.class);
         PatchRegistry.register(ClientLevelPatch.class);
         PatchRegistry.register(ConnectionPatch.class);
+        PatchRegistry.register(ContainerScreenRenderPatch.class);
         PatchRegistry.register(PacketUtilsPatch.class);
         PatchRegistry.register(KeyboardHandlerPatch.class);
         PatchRegistry.register(KeyboardInputPatch.class);
