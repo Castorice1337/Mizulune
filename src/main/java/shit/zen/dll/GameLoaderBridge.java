@@ -9,9 +9,12 @@ import java.nio.file.StandardCopyOption;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.security.SecureRandom;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.Enumeration;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.Iterator;
 import java.util.List;
@@ -23,6 +26,12 @@ import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import org.objectweb.asm.ClassReader;
+import org.objectweb.asm.ClassVisitor;
+import org.objectweb.asm.ClassWriter;
+import org.objectweb.asm.Opcodes;
+import org.objectweb.asm.commons.ClassRemapper;
+import org.objectweb.asm.commons.Remapper;
 
 /**
  * One-shot bootstrap that is loaded by a throwaway {@code URLClassLoader}
@@ -122,6 +131,21 @@ public final class GameLoaderBridge {
             }
         }
 
+        // --- Runtime class-name obfuscation (second layer) ---
+        // The jar already contains build-time obfuscated names (layer 1).
+        // Generate fresh random names for this injection session (layer 2),
+        // so every DLL injection produces unique, unpredictable class names.
+        String selfInternalName = GameLoaderBridge.class.getName().replace('.', '/');
+        Map<String, String> runtimeTypeMap = buildRuntimeTypeMap(
+                pendingClasses.keySet(), selfInternalName);
+        if (!runtimeTypeMap.isEmpty()) {
+            long obfT0 = System.nanoTime();
+            pendingClasses = applyRuntimeObfuscation(pendingClasses, runtimeTypeMap);
+            long obfMs = (System.nanoTime() - obfT0) / 1_000_000L;
+            LOGGER.info("Runtime obfuscation: renamed {} classes in {} ms",
+                    runtimeTypeMap.size(), obfMs);
+        }
+
         int classCount = definePassUntilFixedPoint(defineClass, gameLoader, pendingClasses);
 
         if (!pendingClasses.isEmpty()) {
@@ -146,7 +170,9 @@ public final class GameLoaderBridge {
         LOGGER.info("Defined {} classes, extracted {} resources to {} ({} ms)",
                 classCount, resourceCount, resourceDir, ms);
 
-        Class<?> bootstrapCls = Class.forName("shit.zen.dll.DllBootstrap", true, gameLoader);
+        // Resolve DllBootstrap using the runtime type map (its name was remapped).
+        String dllBootstrapName = resolveDllBootstrapName(runtimeTypeMap);
+        Class<?> bootstrapCls = Class.forName(dllBootstrapName, true, gameLoader);
         LOGGER.info("bootstrap loader (should be gameLoader): {}", bootstrapCls.getClassLoader());
         Method start = bootstrapCls.getMethod("start", String.class);
         start.invoke(null, jarPath);
@@ -343,4 +369,184 @@ public final class GameLoaderBridge {
                     t.toString());
         }
     }
+
+    // ===== Runtime class-name obfuscation =====
+    //
+    // Mirrors the build-time ext.obfuscateJar logic (build.gradle) but runs
+    // inside the target JVM at injection time, so every DLL injection session
+    // gets a unique set of random class names. This defeats anti-cheat systems
+    // that maintain class-name blacklists from known pre-built releases.
+
+    /**
+     * Well-known class prefixes that should NOT be renamed (JDK, Minecraft,
+     * Forge, Kotlin, Skiko, and other third-party libraries).
+     */
+    private static final String[] THIRD_PARTY_PREFIXES = {
+            "java/", "javax/", "jdk/", "sun/",
+            "net/minecraft/", "net/minecraftforge/", "cpw/",
+            "com/mojang/", "com/google/", "io/netty/",
+            "org/jetbrains/", "kotlin/", "kotlinx/",
+            "org/objectweb/asm/",
+            "org/apache/", "org/slf4j/",
+            "it/unimi/", "com/electronwill/",
+            "org/lwjgl/", "org/joml/",
+            "me/", "lombok/",
+            "module-info",
+    };
+
+    private static final String LEAD_ALPHABET;
+    private static final String NAME_ALPHABET;
+    static {
+        StringBuilder lead = new StringBuilder(52);
+        StringBuilder full = new StringBuilder(62);
+        for (char c = 'a'; c <= 'z'; c++) { lead.append(c); full.append(c); }
+        for (char c = 'A'; c <= 'Z'; c++) { lead.append(c); full.append(c); }
+        for (char c = '0'; c <= '9'; c++) { full.append(c); }
+        LEAD_ALPHABET = lead.toString();
+        NAME_ALPHABET = full.toString();
+    }
+
+    /**
+     * Build a mapping from current (build-time obfuscated) internal class names
+     * to fresh random internal names. All owned classes are flattened into a
+     * single random package (same strategy as build-time obfuscation) so that
+     * package-private access between formerly same-package classes still works.
+     *
+     * @param classNames           dotted FQCNs of all pending classes
+     * @param selfInternalName     internal name of GameLoaderBridge (excluded)
+     * @return map of old-internal-name → new-internal-name
+     */
+    private static Map<String, String> buildRuntimeTypeMap(
+            Set<String> classNames, String selfInternalName) {
+        SecureRandom rng = new SecureRandom();
+        String obfPackage = randomName(rng);
+        Set<String> usedNames = new HashSet<>();
+        Map<String, String> typeMap = new HashMap<>();
+
+        for (String dotted : classNames) {
+            String internal = dotted.replace('.', '/');
+            if (internal.equals(selfInternalName)) continue; // skip self
+            if (isThirdParty(internal)) continue;
+
+            String newSimple;
+            do { newSimple = randomName(rng); } while (!usedNames.add(newSimple));
+            typeMap.put(internal, obfPackage + "/" + newSimple);
+        }
+        return typeMap;
+    }
+
+    private static boolean isThirdParty(String internal) {
+        for (String prefix : THIRD_PARTY_PREFIXES) {
+            if (internal.startsWith(prefix)) return true;
+        }
+        return false;
+    }
+
+    private static String randomName(SecureRandom rng) {
+        StringBuilder sb = new StringBuilder(16);
+        sb.append(LEAD_ALPHABET.charAt(rng.nextInt(LEAD_ALPHABET.length())));
+        for (int i = 0; i < 15; i++) {
+            sb.append(NAME_ALPHABET.charAt(rng.nextInt(NAME_ALPHABET.length())));
+        }
+        return sb.toString();
+    }
+
+    /**
+     * Remap all owned classes using ASM {@link ClassRemapper}. Returns a new
+     * map with the remapped class names as keys and rewritten bytecode as values.
+     */
+    private static LinkedHashMap<String, byte[]> applyRuntimeObfuscation(
+            LinkedHashMap<String, byte[]> pending,
+            Map<String, String> typeMap) {
+
+        // Build string-constant remap table for Class.forName() / other string refs
+        Map<String, String> stringMap = new HashMap<>();
+        for (Map.Entry<String, String> e : typeMap.entrySet()) {
+            // Dotted form: Class.forName("old.pkg.ClassName")
+            stringMap.put(e.getKey().replace('/', '.'), e.getValue().replace('/', '.'));
+            // Internal form: sometimes used in string constants too
+            stringMap.put(e.getKey(), e.getValue());
+        }
+
+        Remapper remapper = new Remapper() {
+            @Override
+            public String map(String internalName) {
+                String mapped = typeMap.get(internalName);
+                return mapped != null ? mapped : internalName;
+            }
+
+            @Override
+            public Object mapValue(Object value) {
+                if (value instanceof String s) {
+                    String repl = stringMap.get(s);
+                    if (repl != null) return repl;
+                }
+                return super.mapValue(value);
+            }
+        };
+
+        LinkedHashMap<String, byte[]> result = new LinkedHashMap<>();
+        for (Map.Entry<String, byte[]> entry : pending.entrySet()) {
+            String oldDotted = entry.getKey();
+            String oldInternal = oldDotted.replace('.', '/');
+            byte[] oldBytes = entry.getValue();
+
+            String newInternal = typeMap.get(oldInternal);
+            if (newInternal != null) {
+                // Owned class — remap class name + all references
+                ClassReader cr = new ClassReader(oldBytes);
+                ClassWriter cw = new ClassWriter(0);
+                // Strip SourceFile attribute for additional obfuscation
+                ClassVisitor stripSource = new ClassVisitor(Opcodes.ASM9, cw) {
+                    @Override
+                    public void visitSource(String source, String debug) {
+                        super.visitSource(null, null);
+                    }
+                };
+                cr.accept(new ClassRemapper(stripSource, remapper), 0);
+                result.put(newInternal.replace('/', '.'), cw.toByteArray());
+            } else {
+                // Third-party / non-owned class — still remap internal references
+                // in case it refers to owned classes (unlikely but safe)
+                ClassReader cr = new ClassReader(oldBytes);
+                ClassWriter cw = new ClassWriter(0);
+                cr.accept(new ClassRemapper(cw, remapper), 0);
+                byte[] rewritten = cw.toByteArray();
+                result.put(oldDotted, rewritten);
+            }
+        }
+        return result;
+    }
+
+    /**
+     * Resolve the runtime-obfuscated name of {@code DllBootstrap}. The original
+     * name was already replaced by build-time obfuscation; find its new mapping
+     * entry by looking for the class whose build-time name matches the
+     * compile-time reference (which is itself remapped by build-time obfuscation
+     * via {@code mapValue}).
+     *
+     * <p>Because the build-time obfuscator rewrites the string constant
+     * {@code "shit.zen.dll.DllBootstrap"} inside GameLoaderBridge's bytecode,
+     * at runtime this class sees the build-time-obfuscated name. We look up
+     * that name in the runtime type map to get the final session-unique name.</p>
+     */
+    private static String resolveDllBootstrapName(Map<String, String> runtimeTypeMap) {
+        // The build-time obfuscator rewrites the literal "shit.zen.dll.DllBootstrap"
+        // inside this class's bytecode to the build-time-obfuscated name.
+        // At runtime, BOOTSTRAP_REF holds that build-time name.
+        String buildTimeInternal = BOOTSTRAP_REF.replace('.', '/');
+        String runtimeInternal = runtimeTypeMap.get(buildTimeInternal);
+        if (runtimeInternal != null) {
+            return runtimeInternal.replace('/', '.');
+        }
+        // Fallback: no runtime mapping (shouldn't happen), use build-time name
+        return BOOTSTRAP_REF;
+    }
+
+    /**
+     * Build-time reference to DllBootstrap. The build-time obfuscator's
+     * {@code mapValue()} will rewrite this string literal to the build-time
+     * obfuscated FQCN, keeping it in sync with the jar contents.
+     */
+    private static final String BOOTSTRAP_REF = "shit.zen.dll.DllBootstrap";
 }

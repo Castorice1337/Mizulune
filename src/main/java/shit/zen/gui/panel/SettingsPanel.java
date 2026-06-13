@@ -6,6 +6,7 @@ import java.util.List;
 import net.minecraft.client.gui.GuiGraphics;
 import shit.zen.ClientBase;
 import shit.zen.gui.PanelClickGui;
+import shit.zen.gui.panel.value.ValueRendererRegistry;
 import shit.zen.gui.panel.setting.SettingRenderer;
 import shit.zen.gui.panel.setting.SettingRendererRegistry;
 import shit.zen.modules.Module;
@@ -21,6 +22,8 @@ import shit.zen.render.TextGlow;
 import shit.zen.settings.Setting;
 import shit.zen.utils.math.LerpUtil;
 import shit.zen.utils.render.RenderUtil;
+import shit.zen.value.Value;
+import shit.zen.value.ValueGroup;
 
 public class SettingsPanel
 extends ClientBase {
@@ -196,12 +199,11 @@ extends ClientBase {
             drawContext.translate(0.0f, slideY);
             guiGraphics.pose().pushPose();
             guiGraphics.pose().translate(0.0f, slideY, 0.0f);
-            List<Setting<?>> settings = bodyModule.getSettings();
-            if (settings != null && !settings.isEmpty()) {
+            ValueGroup valueTree = bodyModule.getValueTree();
+            if (valueTree != null && !valueTree.getVisibleChildren().isEmpty()) {
                 int settingY = panelY + headerHeight - (int)this.scrollOffset;
-                for (Setting<?> setting : settings) {
-                    if (setting.getVisibility() != null && !setting.getVisibility().displayable()) continue;
-                    int dy = SettingRendererRegistry.getInstance().render(guiGraphics, setting, panelX + (int)(10.0f * scale), settingY, panelWidth - (int)(20.0f * scale), mouseX, mouseY, bodyAlpha, scale);
+                for (Value<?> value : valueTree.getVisibleChildren()) {
+                    int dy = ValueRendererRegistry.getInstance().render(guiGraphics, value, panelX + (int)(10.0f * scale), settingY, panelWidth - (int)(20.0f * scale), mouseX, mouseY, bodyAlpha, scale);
                     settingY += dy;
                 }
             } else {
@@ -321,12 +323,11 @@ extends ClientBase {
             this.totalContentHeight = 0.0f;
             return;
         }
-        List<Setting<?>> settings = module.getSettings();
-        if (settings != null && !settings.isEmpty()) {
+        ValueGroup valueTree = module.getValueTree();
+        if (valueTree != null && !valueTree.getVisibleChildren().isEmpty()) {
             int total = 0;
-            for (Setting setting : settings) {
-                if (setting.getVisibility() != null && !setting.getVisibility().displayable()) continue;
-                total += SettingRendererRegistry.getInstance().getHeightForScroll(setting, scale);
+            for (Value<?> value : valueTree.getVisibleChildren()) {
+                total += ValueRendererRegistry.getInstance().getHeight(value, scale);
             }
             this.totalContentHeight = total;
         } else {
@@ -419,14 +420,13 @@ extends ClientBase {
             PanelClickGui.panelClickGui.addToast(this.currentModule.getName() + " Module " + stateLabel);
             return true;
         }
-        List<Setting<?>> settings = this.currentModule.getSettings();
-        if (settings != null && !settings.isEmpty()) {
+        ValueGroup valueTree = this.currentModule.getValueTree();
+        if (valueTree != null && !valueTree.getVisibleChildren().isEmpty()) {
             int settingY = panelY + headerHeight;
             int adjustedMouseY = mouseY + (int)this.scrollOffset;
-            for (Setting setting : settings) {
-                if (setting.getVisibility() != null && !setting.getVisibility().displayable()) continue;
-                int settingHeight = SettingRendererRegistry.getInstance().getHeightForScroll(setting, scale);
-                if (adjustedMouseY >= settingY && adjustedMouseY <= settingY + settingHeight && SettingRendererRegistry.getInstance().onClick(setting, panelX + (int)(10.0f * scale), settingY - (int)this.scrollOffset, panelWidth - (int)(20.0f * scale), mouseX, mouseY, button, scale)) {
+            for (Value<?> value : valueTree.getVisibleChildren()) {
+                int settingHeight = ValueRendererRegistry.getInstance().getHeight(value, scale);
+                if (adjustedMouseY >= settingY && adjustedMouseY <= settingY + settingHeight && ValueRendererRegistry.getInstance().onClick(value, panelX + (int)(10.0f * scale), settingY - (int)this.scrollOffset, panelWidth - (int)(20.0f * scale), mouseX, mouseY, button, scale)) {
                     return true;
                 }
                 settingY += settingHeight;
@@ -476,11 +476,7 @@ extends ClientBase {
             this.lastScrollTime = System.currentTimeMillis();
         }
         if (this.currentModule != null) {
-            for (Setting setting : this.currentModule.getSettings()) {
-                SettingRenderer settingRenderer;
-                if (setting.getVisibility() != null && !setting.getVisibility().displayable() || (settingRenderer = SettingRendererRegistry.getInstance().findRenderer(setting)) == null) continue;
-                settingRenderer.onMouseMove(mouseX, mouseY);
-            }
+            ValueRendererRegistry.getInstance().onMouseMove(mouseX, mouseY);
         }
     }
 
@@ -488,11 +484,7 @@ extends ClientBase {
         this.isDraggingScrollbar = false;
         this.lastScrollTime = System.currentTimeMillis();
         if (this.currentModule != null) {
-            for (Setting setting : this.currentModule.getSettings()) {
-                SettingRenderer settingRenderer;
-                if (setting.getVisibility() != null && !setting.getVisibility().displayable() || (settingRenderer = SettingRendererRegistry.getInstance().findRenderer(setting)) == null) continue;
-                settingRenderer.onMouseRelease(mouseX, mouseY, button);
-            }
+            ValueRendererRegistry.getInstance().onMouseRelease(mouseX, mouseY, button);
         }
     }
 

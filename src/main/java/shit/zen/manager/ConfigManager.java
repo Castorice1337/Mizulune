@@ -16,6 +16,7 @@ import shit.zen.ZenClient;
 import shit.zen.config.Config;
 import shit.zen.config.ModulesConfig;
 import shit.zen.config.ValuesConfig;
+import shit.zen.config.json.JsonValuesConfig;
 
 public class ConfigManager {
     public static final Logger LOGGER = LogManager.getLogger("ConfigManager");
@@ -29,6 +30,7 @@ public class ConfigManager {
         }
         this.configs.add(new ModulesConfig());
         this.configs.add(new ValuesConfig());
+        this.configs.add(new JsonValuesConfig());
     }
 
     public void loadAll() {
