@@ -58,6 +58,12 @@ public class ConfigManager {
         LOGGER.info("Saved all configs");
     }
 
+    public static void saveAllIfReady() {
+        if (ZenClient.isReady() && ZenClient.instance != null && ZenClient.instance.getConfigManager() != null) {
+            ZenClient.instance.getConfigManager().saveAll();
+        }
+    }
+
     private void saveConfig(Config config) {
         try (BufferedWriter writer = new BufferedWriter(
                 new OutputStreamWriter(Files.newOutputStream(config.getFile().toPath()), StandardCharsets.UTF_8))) {

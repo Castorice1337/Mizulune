@@ -15,6 +15,7 @@ import net.minecraft.world.level.block.CraftingTableBlock;
 import net.minecraft.world.level.block.CropBlock;
 import net.minecraft.world.level.block.FlowerBlock;
 import net.minecraft.world.level.block.FungusBlock;
+import net.minecraft.world.level.block.FallingBlock;
 import net.minecraft.world.level.block.FurnaceBlock;
 import net.minecraft.world.level.block.LadderBlock;
 import net.minecraft.world.level.block.LiquidBlock;
@@ -117,6 +118,9 @@ extends ClientBase {
                 return false;
             }
             if (block instanceof CropBlock) {
+                return false;
+            }
+            if (block instanceof FallingBlock) {
                 return false;
             }
             if (block instanceof SlabBlock) {

@@ -11,6 +11,7 @@ import java.util.Optional;
 import java.util.stream.Stream;
 import shit.zen.ZenClient;
 import shit.zen.exception.ModuleNotFoundException;
+import shit.zen.manager.ConfigManager;
 import shit.zen.modules.Module;
 import shit.zen.modules.impl.world.WebUI;
 import shit.zen.settings.Setting;
@@ -66,6 +67,7 @@ public class SetSettingHandler extends AbstractHttpHandler {
                             }
                         }
                         if (success) {
+                            ConfigManager.saveAllIfReady();
                             result = setting.getValue();
                         } else {
                             reason = "无效的值";

@@ -410,7 +410,7 @@ extends HudElement {
                 }
                 if (row.keyName == null) {
                     float iconX = keyBoxX + (rowH - this.visibleHeight) / 2.0f;
-                    GlHelper.drawTextWithShadow("\uE9F6", iconX, keyTextY, this.bindFont, this.disabledPaint);
+                    GlHelper.drawTextWithShadow("\uE9F6", iconX, keyTextY - 2.0f, this.bindFont, this.disabledPaint);
                     continue;
                 }
                 FontRenderer fontRenderer = row.getFittingFont(this.keyFont, rowH - 5.0f);

@@ -8,6 +8,7 @@ import net.minecraft.util.Mth;
 import shit.zen.gui.NewClickGui;
 import shit.zen.gui.newclickgui.CategoryPanel;
 import shit.zen.gui.newclickgui.SettingElement;
+import shit.zen.manager.ConfigManager;
 import shit.zen.render.FontStore;
 import shit.zen.settings.impl.BooleanSetting;
 import shit.zen.utils.animation.SmoothAnimationTimer;
@@ -83,6 +84,7 @@ extends SettingElement<BooleanSetting> {
         }
         if (this.isHovered && CursorUtil.isInBounds((float)mouseX, (float)mouseY, this.x, this.y, 120.0f, this.getHeight())) {
             this.setting.setValue(this.setting.getValue() == false);
+            ConfigManager.saveAllIfReady();
             return true;
         }
         return false;

@@ -4,6 +4,7 @@ import com.mojang.blaze3d.vertex.PoseStack;
 import java.awt.Color;
 import shit.zen.gui.legacy.ModuleButton;
 import shit.zen.gui.legacy.SettingComponent;
+import shit.zen.manager.ConfigManager;
 import shit.zen.render.FontStore;
 import shit.zen.settings.Setting;
 import shit.zen.settings.impl.NumberSetting;
@@ -80,8 +81,9 @@ extends SettingComponent {
 
     @Override
     public void mouseReleased(double mouseX, double mouseY, int button) {
-        if (button == 0) {
+        if (button == 0 && this.dragging) {
             this.dragging = false;
+            ConfigManager.saveAllIfReady();
         }
     }
 }

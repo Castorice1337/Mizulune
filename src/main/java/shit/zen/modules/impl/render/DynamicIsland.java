@@ -1,29 +1,16 @@
 package shit.zen.modules.impl.render;
 
-import com.mojang.blaze3d.systems.RenderSystem;
-import com.mojang.blaze3d.vertex.BufferBuilder;
-import com.mojang.blaze3d.vertex.DefaultVertexFormat;
-import com.mojang.blaze3d.vertex.Tesselator;
-import com.mojang.blaze3d.vertex.VertexFormat;
 import java.awt.Color;
-import java.nio.ByteBuffer;
-import java.nio.IntBuffer;
 import java.util.ArrayList;
 import java.util.List;
-import net.minecraft.client.renderer.GameRenderer;
-import net.minecraft.client.renderer.texture.TextureAtlasSprite;
-import net.minecraft.client.resources.model.BakedModel;
 import net.minecraft.client.gui.screens.inventory.ContainerScreen;
 import net.minecraft.client.multiplayer.PlayerInfo;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.util.Mth;
 import net.minecraft.world.inventory.ChestMenu;
-import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.ItemStack;
-import org.joml.Matrix4f;
 import shit.zen.ZenClient;
 import shit.zen.event.EventTarget;
-import shit.zen.event.impl.GlRenderEvent;
 import shit.zen.event.impl.Render2DEvent;
 import shit.zen.modules.Category;
 import shit.zen.modules.Module;
@@ -37,20 +24,14 @@ import shit.zen.render.LiquidGlassSettings;
 import shit.zen.render.LiquidGlassStyle;
 import shit.zen.render.Paint;
 import shit.zen.render.Rectangle;
+import shit.zen.render.Renderer;
 import shit.zen.render.RoundedRectangle;
 import shit.zen.render.Texture;
 import shit.zen.settings.impl.ModeSetting;
 import shit.zen.utils.animation.SpringAnimation;
 import shit.zen.utils.game.MovementUtil;
 import shit.zen.utils.render.ColorUtil;
-import org.lwjgl.opengl.GL11;
-import org.lwjgl.opengl.GL13;
-import org.lwjgl.opengl.GL14;
-import org.lwjgl.opengl.GL20;
-import org.lwjgl.opengl.GL21;
-import org.lwjgl.opengl.GL30;
-import org.lwjgl.opengl.GL33;
-import org.lwjgl.system.MemoryStack;
+import shit.zen.utils.render.RenderUtil;
 
 public class DynamicIsland extends Module {
     public static DynamicIsland INSTANCE;
@@ -61,7 +42,7 @@ public class DynamicIsland extends Module {
     private static final float MIN_WIDTH = 210.0f;
     private static final float PANEL_RADIUS = 8.0f;
     private static final float STACK_GAP = 6.0f;
-    private static final float SCAFFOLD_HEIGHT = 44.0f;
+    private static final float SCAFFOLD_HEIGHT = 48.0f;
 
     public final ModeSetting modeSetting = new ModeSetting("Mode", "Old", "Liquid Glass").withDefault("Liquid Glass");
 
@@ -70,15 +51,15 @@ public class DynamicIsland extends Module {
     private final FontRenderer infoFont = FontPresets.poppinsMedium(11.0f);
     private final FontRenderer notificationFont = FontPresets.poppinsMedium(13.0f);
     private final FontRenderer notificationStatusFont = FontPresets.poppinsBold(11.0f);
-    private final FontRenderer scaffoldTitleFont = FontPresets.poppinsBold(13.0f);
-    private final FontRenderer scaffoldInfoFont = FontPresets.poppinsMedium(10.0f);
+    private final FontRenderer scaffoldTitleFont = FontPresets.poppinsBold(14.0f);
+    private final FontRenderer scaffoldInfoFont = FontPresets.poppinsMedium(12.0f);
     private final FontRenderer chestTitleFont = FontPresets.poppinsBold(13.0f);
     private final FontRenderer chestSubFont = FontPresets.poppinsMedium(10.0f);
     private final SpringAnimation widthAnim = new SpringAnimation(360.0f, 1.0f, 30.0f, MIN_WIDTH);
     private final SpringAnimation heightAnim = new SpringAnimation(360.0f, 1.0f, 30.0f, DEFAULT_HEIGHT);
     private final SpringAnimation contentAlpha = new SpringAnimation(280.0f, 1.0f, 24.0f, 1.0f);
     private final SpringAnimation scaffoldProgress = new SpringAnimation(260.0f, 1.0f, 22.0f, 0.0f);
-    private final List<PendingItemSprite> pendingItemSprites = new ArrayList<>();
+    private final List<PendingItemRender> pendingItemRenders = new ArrayList<>();
     private long lastFrameTimestamp;
     private long lastScaffoldProgressTimestamp;
     private String activeContentKey = "";
@@ -114,17 +95,19 @@ public class DynamicIsland extends Module {
 
     @EventTarget
     public void onRender2D(Render2DEvent event) {
-        if (!this.isEnabled() || !this.isOldMode()) {
+        if (!this.isEnabled()) {
             return;
         }
-        this.oldIsland.onRender2D(event);
+        if (this.isOldMode()) {
+            this.oldIsland.onRender2D(event);
+            return;
+        }
+        if (this.isLiquidGlassMode() && !mc.options.renderDebug) {
+            this.renderLiquidGlass(event);
+        }
     }
 
-    @EventTarget
-    public void onGlRender(GlRenderEvent event) {
-        if (!this.isEnabled() || !this.isLiquidGlassMode() || mc.options.renderDebug) {
-            return;
-        }
+    private void renderLiquidGlass(Render2DEvent event) {
         ContentSnapshot content = this.resolveContent();
         long now = System.currentTimeMillis();
         float deltaSec = this.updateTiming(now);
@@ -144,19 +127,20 @@ public class DynamicIsland extends Module {
         float islandX = ((float)mc.getWindow().getGuiScaledWidth() - islandWidth) / 2.0f;
         float islandY = TOP_MARGIN;
         float alpha = Mth.clamp(this.contentAlpha.getValue(), 0.0f, 1.0f);
-        DrawContext drawContext = event.drawContext();
-        this.pendingItemSprites.clear();
-        RoundedRectangle bounds = RoundedRectangle.ofXYWHR(islandX, islandY, islandWidth, islandHeight, PANEL_RADIUS);
-        this.drawIslandBase(drawContext, bounds);
-        drawContext.save();
-        drawContext.clipRoundedRect(bounds, true);
-        if (content.type == ContentType.DEFAULT) {
-            this.drawDefaultContent(drawContext, islandX, islandY, islandWidth, islandHeight, alpha);
-        } else {
-            this.drawPayloadStack(event, content, islandX, islandY, islandWidth, now, alpha);
-        }
-        drawContext.restore();
-        this.drawPendingItemSprites(event, bounds);
+        this.pendingItemRenders.clear();
+        Renderer.render(event.guiGraphics(), drawContext -> {
+            RoundedRectangle bounds = RoundedRectangle.ofXYWHR(islandX, islandY, islandWidth, islandHeight, PANEL_RADIUS);
+            this.drawIslandBase(drawContext, bounds);
+            drawContext.save();
+            drawContext.clipRoundedRect(bounds, true);
+            if (content.type == ContentType.DEFAULT) {
+                this.drawDefaultContent(drawContext, islandX, islandY, islandWidth, islandHeight, alpha);
+            } else {
+                this.drawPayloadStack(drawContext, content, islandX, islandY, islandWidth, now, alpha);
+            }
+            drawContext.restore();
+        });
+        this.renderPendingItems(event, RoundedRectangle.ofXYWHR(islandX, islandY, islandWidth, islandHeight, PANEL_RADIUS));
     }
 
     private float updateTiming(long now) {
@@ -236,7 +220,7 @@ public class DynamicIsland extends Module {
         float textWidth = Math.max(
                 GlHelper.getStringWidth(title, this.scaffoldTitleFont),
                 GlHelper.getStringWidth(info, this.scaffoldInfoFont));
-        return Math.max(218.0f, 18.0f + textWidth + 16.0f);
+        return Math.max(230.0f, 48.0f + textWidth + 20.0f);
     }
 
     private boolean shouldShowScaffoldCounter() {
@@ -333,30 +317,30 @@ public class DynamicIsland extends Module {
         }
     }
 
-    private void drawPayloadStack(GlRenderEvent event, ContentSnapshot content, float x, float y, float width,
+    private void drawPayloadStack(DrawContext drawContext, ContentSnapshot content, float x, float y, float width,
                                   long now, float alpha) {
         float cursorY = y;
         boolean needsDivider = false;
         if (content.scaffoldCounter) {
-            this.drawScaffoldContent(event, x, cursorY, width, SCAFFOLD_HEIGHT, alpha);
+            this.drawScaffoldContent(drawContext, x, cursorY, width, SCAFFOLD_HEIGHT, alpha);
             cursorY += SCAFFOLD_HEIGHT;
             needsDivider = true;
         }
         if (content.chestMenu != null) {
             if (needsDivider) {
-                this.drawStackDivider(event.drawContext(), x, cursorY, width, alpha);
+                this.drawStackDivider(drawContext, x, cursorY, width, alpha);
                 cursorY += STACK_GAP;
             }
-            this.drawChestContent(event, content, x, cursorY, width, content.chestHeight, alpha);
+            this.drawChestContent(drawContext, content, x, cursorY, width, content.chestHeight, alpha);
             cursorY += content.chestHeight;
             needsDivider = true;
         }
         if (!content.notifications.isEmpty()) {
             if (needsDivider) {
-                this.drawStackDivider(event.drawContext(), x, cursorY, width, alpha);
+                this.drawStackDivider(drawContext, x, cursorY, width, alpha);
                 cursorY += STACK_GAP;
             }
-            this.drawNotificationContent(event.drawContext(), content.notifications, x, cursorY, width,
+            this.drawNotificationContent(drawContext, content.notifications, x, cursorY, width,
                     content.notificationHeight, now, alpha);
         }
     }
@@ -368,34 +352,36 @@ public class DynamicIsland extends Module {
         }
     }
 
-    private void drawScaffoldContent(GlRenderEvent event, float x, float y, float width, float height, float alpha) {
+    private void drawScaffoldContent(DrawContext drawContext, float x, float y, float width, float height, float alpha) {
         if (Scaffold.INSTANCE == null) {
             return;
         }
-        DrawContext drawContext = event.drawContext();
         int blocks = Scaffold.INSTANCE.getPlaceableBlockCount();
         ItemStack iconStack = Scaffold.INSTANCE.getCounterBlockItem();
+        float iconSize = 22.0f;
+        float iconX = x + 14.0f;
+        float iconY = y + 8.0f;
         if (!iconStack.isEmpty()) {
-            this.queueItemSprite(iconStack, x + 17.0f, y + 12.0f, 16.0f, alpha, false);
+            this.queueItemRender(iconStack, iconX, iconY, iconSize, alpha, false);
         }
-        float textX = iconStack.isEmpty() ? x + 18.0f : x + 42.0f;
+        float textX = iconStack.isEmpty() ? x + 16.0f : x + 46.0f;
         GlHelper.drawText("Scaffold Toggle", textX, y + 6.0f, this.scaffoldTitleFont, this.withAlpha(0xFFFFFFFF, alpha));
         String info = blocks + " blocks available  \u00b7  " + this.getScaffoldSpeedText();
-        GlHelper.drawText(info, textX, y + 22.0f, this.scaffoldInfoFont, this.withAlpha(0xE8F3FBFF, alpha));
+        GlHelper.drawText(info, textX, y + 23.0f, this.scaffoldInfoFont, this.withAlpha(0xEAF4FFFF, alpha));
 
         float barX = x + 14.0f;
-        float barY = y + height - 7.0f;
+        float barY = y + height - 8.0f;
         float barWidth = width - 28.0f;
-        float barHeight = 3.0f;
+        float barHeight = 4.0f;
         float progress = this.updateScaffoldProgress(blocks);
         this.drawBluePinkProgressBar(drawContext, barX, barY, barWidth, barHeight, progress, alpha);
     }
 
-    private void queueItemSprite(ItemStack stack, float x, float y, float size, float alpha, boolean showCount) {
+    private void queueItemRender(ItemStack stack, float x, float y, float size, float alpha, boolean showCount) {
         if (stack.isEmpty() || alpha <= 0.01f) {
             return;
         }
-        this.pendingItemSprites.add(new PendingItemSprite(stack.copy(), x, y, size, alpha, showCount));
+        this.pendingItemRenders.add(new PendingItemRender(stack.copy(), x, y, size, alpha, showCount));
     }
 
     private void drawBluePinkProgressBar(DrawContext drawContext, float x, float y, float width, float height, float progress, float alpha) {
@@ -479,9 +465,8 @@ public class DynamicIsland extends Module {
         }
     }
 
-    private void drawChestContent(GlRenderEvent event, ContentSnapshot content, float x, float y,
+    private void drawChestContent(DrawContext drawContext, ContentSnapshot content, float x, float y,
                                   float width, float height, float alpha) {
-        DrawContext drawContext = event.drawContext();
         int rows = content.chestRows > 0 ? content.chestRows : Mth.clamp(content.chestMenu.getRowCount(), 3, 6);
         int slotCount = rows * 9;
         float titleY = y + 11.0f;
@@ -506,10 +491,10 @@ public class DynamicIsland extends Module {
                 }
             }
         }
-        this.drawChestItems(event, content.chestMenu, gridX, gridY, cell, gap, rows, alpha);
+        this.drawChestItems(content.chestMenu, gridX, gridY, cell, gap, rows, alpha);
     }
 
-    private void drawChestItems(GlRenderEvent event, ChestMenu chestMenu, float gridX, float gridY,
+    private void drawChestItems(ChestMenu chestMenu, float gridX, float gridY,
                                 float cell, float gap, int rows, float alpha) {
         if (alpha <= 0.01f) {
             return;
@@ -525,100 +510,49 @@ public class DynamicIsland extends Module {
                 }
                 float itemX = gridX + col * (cell + gap) + iconInset;
                 float itemY = gridY + row * (cell + gap) + iconInset;
-                this.queueItemSprite(stack, itemX, itemY, iconSize, alpha, true);
+                this.queueItemRender(stack, itemX, itemY, iconSize, alpha, true);
             }
         }
     }
 
-    private void drawPendingItemSprites(GlRenderEvent event, RoundedRectangle islandBounds) {
-        if (this.pendingItemSprites.isEmpty()) {
+    private void renderPendingItems(Render2DEvent event, RoundedRectangle islandBounds) {
+        if (this.pendingItemRenders.isEmpty()) {
             return;
         }
-        DrawContext drawContext = event.drawContext();
-        drawContext.flush();
-        GlStateSnapshot snapshot = GlStateSnapshot.capture();
+        RenderUtil.pushScissor(Math.round(islandBounds.x1), Math.round(islandBounds.y1),
+                Math.round(islandBounds.getWidth()), Math.round(islandBounds.getHeight()));
         try {
-            RenderSystem.enableBlend();
-            RenderSystem.defaultBlendFunc();
-            RenderSystem.disableDepthTest();
-            RenderSystem.depthMask(false);
-            RenderSystem.disableCull();
-            RenderSystem.setShaderColor(1.0f, 1.0f, 1.0f, 1.0f);
-            event.guiGraphics().enableScissor(Math.round(islandBounds.x1), Math.round(islandBounds.y1),
-                    Math.round(islandBounds.x2), Math.round(islandBounds.y2));
-            for (PendingItemSprite sprite : this.pendingItemSprites) {
-                this.blitItemSprite(event, sprite);
+            for (PendingItemRender pending : this.pendingItemRenders) {
+                this.renderItem(event, pending);
             }
             event.guiGraphics().flush();
         } finally {
-            event.guiGraphics().disableScissor();
-            RenderSystem.setShaderColor(1.0f, 1.0f, 1.0f, 1.0f);
-            snapshot.restore();
-            this.pendingItemSprites.clear();
+            RenderUtil.popScissor();
+            this.pendingItemRenders.clear();
         }
     }
 
-    private void blitItemSprite(GlRenderEvent event, PendingItemSprite pending) {
-        TextureAtlasSprite sprite = this.getItemSprite(pending.stack);
+    private void renderItem(Render2DEvent event, PendingItemRender pending) {
+        if (pending.alpha <= 0.1f || pending.stack.isEmpty()) {
+            return;
+        }
         int ix = Math.round(pending.x);
         int iy = Math.round(pending.y);
         int itemSize = Math.max(1, Math.round(pending.size));
-        if (sprite != null) {
-            if (pending.stack.getItem() instanceof BlockItem) {
-                this.drawBlockSpriteCube(event, sprite, pending.x, pending.y, pending.size, pending.alpha);
-            } else {
-                event.guiGraphics().blit(ix, iy, 240, itemSize, itemSize, sprite, 1.0f, 1.0f, 1.0f,
-                        Mth.clamp(pending.alpha, 0.0f, 1.0f));
-            }
-        } else {
-            event.guiGraphics().fill(ix + 2, iy + 2, ix + itemSize - 2, iy + itemSize - 2,
-                    this.withAlpha(0x88FFFFFF, pending.alpha));
-        }
+        event.guiGraphics().setColor(1.0f, 1.0f, 1.0f, Mth.clamp(pending.alpha, 0.0f, 1.0f));
+        event.guiGraphics().pose().pushPose();
+        event.guiGraphics().pose().translate(ix, iy, 0.0f);
+        float scale = itemSize / 16.0f;
+        event.guiGraphics().pose().scale(scale, scale, 1.0f);
+        event.guiGraphics().renderItem(pending.stack, 0, 0);
+        event.guiGraphics().pose().popPose();
+        event.guiGraphics().setColor(1.0f, 1.0f, 1.0f, 1.0f);
         if (pending.showCount && pending.stack.getCount() > 1) {
-            this.drawSpriteCount(event, pending);
+            this.drawItemCount(event, pending);
         }
     }
 
-    private void drawBlockSpriteCube(GlRenderEvent event, TextureAtlasSprite sprite, float x, float y,
-                                     float size, float alpha) {
-        Matrix4f pose = event.guiGraphics().pose().last().pose();
-        float cx = x + size * 0.5f;
-        float top = y + size * 0.03f;
-        float mid = y + size * 0.28f;
-        float seam = y + size * 0.52f;
-        float lower = y + size * 0.77f;
-        float bottom = y + size * 0.98f;
-        float left = x + size * 0.03f;
-        float right = x + size * 0.97f;
-        float z = 245.0f;
-        Tesselator tesselator = Tesselator.getInstance();
-        BufferBuilder buffer = tesselator.getBuilder();
-        RenderSystem.setShader(GameRenderer::getPositionTexColorShader);
-        RenderSystem.setShaderTexture(0, sprite.atlasLocation());
-        buffer.begin(VertexFormat.Mode.QUADS, DefaultVertexFormat.POSITION_TEX_COLOR);
-        this.addSpriteFace(buffer, pose, sprite,
-                cx, top, right, mid, cx, seam, left, mid,
-                z, 255, 255, 255, alpha);
-        this.addSpriteFace(buffer, pose, sprite,
-                left, mid, cx, seam, cx, bottom, left, lower,
-                z, 178, 196, 178, alpha);
-        this.addSpriteFace(buffer, pose, sprite,
-                right, mid, right, lower, cx, bottom, cx, seam,
-                z, 215, 224, 215, alpha);
-        tesselator.end();
-    }
-
-    private void addSpriteFace(BufferBuilder buffer, Matrix4f pose, TextureAtlasSprite sprite,
-                               float x1, float y1, float x2, float y2, float x3, float y3, float x4, float y4,
-                               float z, int red, int green, int blue, float alpha) {
-        int a = Math.round(255.0f * Mth.clamp(alpha, 0.0f, 1.0f));
-        buffer.vertex(pose, x1, y1, z).uv(sprite.getU0(), sprite.getV0()).color(red, green, blue, a).endVertex();
-        buffer.vertex(pose, x2, y2, z).uv(sprite.getU1(), sprite.getV0()).color(red, green, blue, a).endVertex();
-        buffer.vertex(pose, x3, y3, z).uv(sprite.getU1(), sprite.getV1()).color(red, green, blue, a).endVertex();
-        buffer.vertex(pose, x4, y4, z).uv(sprite.getU0(), sprite.getV1()).color(red, green, blue, a).endVertex();
-    }
-
-    private void drawSpriteCount(GlRenderEvent event, PendingItemSprite pending) {
+    private void drawItemCount(Render2DEvent event, PendingItemRender pending) {
         String count = String.valueOf(Math.min(99, pending.stack.getCount()));
         float scale = pending.size < 14.0f ? 0.55f : 0.65f;
         float textX = pending.x + pending.size - mc.font.width(count) * scale + 1.0f;
@@ -630,15 +564,6 @@ public class DynamicIsland extends Module {
             event.guiGraphics().drawString(mc.font, count, 0, 0, this.withAlpha(0xFFFFFFFF, pending.alpha), true);
         } finally {
             event.guiGraphics().pose().popPose();
-        }
-    }
-
-    private TextureAtlasSprite getItemSprite(ItemStack stack) {
-        try {
-            BakedModel model = mc.getItemRenderer().getModel(stack, mc.level, mc.player, 0);
-            return model == null ? null : model.getParticleIcon();
-        } catch (RuntimeException ignored) {
-            return null;
         }
     }
 
@@ -670,150 +595,7 @@ public class DynamicIsland extends Module {
         return nextAlpha << 24 | color & 0x00FFFFFF;
     }
 
-    private static final class GlStateSnapshot {
-        private final boolean blendEnabled;
-        private final int blendSrcRgb;
-        private final int blendDstRgb;
-        private final int blendSrcAlpha;
-        private final int blendDstAlpha;
-        private final boolean depthTestEnabled;
-        private final boolean depthMask;
-        private final int depthFunc;
-        private final boolean cullEnabled;
-        private final int cullFace;
-        private final int activeTexture;
-        private final int[] textureBindings2d;
-        private final int[] samplerBindings;
-        private final int program;
-        private final int vaoBinding;
-        private final boolean colorMaskR;
-        private final boolean colorMaskG;
-        private final boolean colorMaskB;
-        private final boolean colorMaskA;
-        private final int unpackAlignment;
-        private final int pixelUnpackBufferBinding;
-        private final boolean scissorTestEnabled;
-        private final int[] scissorBox;
-
-        private GlStateSnapshot(boolean blendEnabled, int blendSrcRgb, int blendDstRgb, int blendSrcAlpha, int blendDstAlpha,
-                                boolean depthTestEnabled, boolean depthMask, int depthFunc, boolean cullEnabled, int cullFace,
-                                int activeTexture, int[] textureBindings2d, int[] samplerBindings, int program,
-                                int vaoBinding, boolean colorMaskR, boolean colorMaskG, boolean colorMaskB,
-                                boolean colorMaskA, int unpackAlignment, int pixelUnpackBufferBinding,
-                                boolean scissorTestEnabled, int[] scissorBox) {
-            this.blendEnabled = blendEnabled;
-            this.blendSrcRgb = blendSrcRgb;
-            this.blendDstRgb = blendDstRgb;
-            this.blendSrcAlpha = blendSrcAlpha;
-            this.blendDstAlpha = blendDstAlpha;
-            this.depthTestEnabled = depthTestEnabled;
-            this.depthMask = depthMask;
-            this.depthFunc = depthFunc;
-            this.cullEnabled = cullEnabled;
-            this.cullFace = cullFace;
-            this.activeTexture = activeTexture;
-            this.textureBindings2d = textureBindings2d;
-            this.samplerBindings = samplerBindings;
-            this.program = program;
-            this.vaoBinding = vaoBinding;
-            this.colorMaskR = colorMaskR;
-            this.colorMaskG = colorMaskG;
-            this.colorMaskB = colorMaskB;
-            this.colorMaskA = colorMaskA;
-            this.unpackAlignment = unpackAlignment;
-            this.pixelUnpackBufferBinding = pixelUnpackBufferBinding;
-            this.scissorTestEnabled = scissorTestEnabled;
-            this.scissorBox = scissorBox;
-        }
-
-        private static GlStateSnapshot capture() {
-            try (MemoryStack stack = MemoryStack.stackPush()) {
-                int textureUnits = Math.max(1, GL11.glGetInteger(GL20.GL_MAX_COMBINED_TEXTURE_IMAGE_UNITS));
-                int[] textureBindings = new int[textureUnits];
-                int[] samplerBindings = new int[textureUnits];
-                int activeTexture = GL11.glGetInteger(GL13.GL_ACTIVE_TEXTURE);
-                for (int i = 0; i < textureUnits; i++) {
-                    GL13.glActiveTexture(GL13.GL_TEXTURE0 + i);
-                    textureBindings[i] = GL11.glGetInteger(GL11.GL_TEXTURE_BINDING_2D);
-                    samplerBindings[i] = GL11.glGetInteger(GL33.GL_SAMPLER_BINDING);
-                }
-                GL13.glActiveTexture(activeTexture);
-
-                ByteBuffer colorMask = stack.malloc(4);
-                GL11.glGetBooleanv(GL11.GL_COLOR_WRITEMASK, colorMask);
-                IntBuffer scissor = stack.mallocInt(4);
-                GL11.glGetIntegerv(GL11.GL_SCISSOR_BOX, scissor);
-
-                return new GlStateSnapshot(
-                        GL11.glIsEnabled(GL11.GL_BLEND),
-                        GL11.glGetInteger(GL14.GL_BLEND_SRC_RGB),
-                        GL11.glGetInteger(GL14.GL_BLEND_DST_RGB),
-                        GL11.glGetInteger(GL14.GL_BLEND_SRC_ALPHA),
-                        GL11.glGetInteger(GL14.GL_BLEND_DST_ALPHA),
-                        GL11.glIsEnabled(GL11.GL_DEPTH_TEST),
-                        GL11.glGetBoolean(GL11.GL_DEPTH_WRITEMASK),
-                        GL11.glGetInteger(GL11.GL_DEPTH_FUNC),
-                        GL11.glIsEnabled(GL11.GL_CULL_FACE),
-                        GL11.glGetInteger(GL11.GL_CULL_FACE_MODE),
-                        activeTexture,
-                        textureBindings,
-                        samplerBindings,
-                        GL11.glGetInteger(GL20.GL_CURRENT_PROGRAM),
-                        GL11.glGetInteger(GL30.GL_VERTEX_ARRAY_BINDING),
-                        colorMask.get(0) != 0,
-                        colorMask.get(1) != 0,
-                        colorMask.get(2) != 0,
-                        colorMask.get(3) != 0,
-                        GL11.glGetInteger(GL11.GL_UNPACK_ALIGNMENT),
-                        GL11.glGetInteger(GL21.GL_PIXEL_UNPACK_BUFFER_BINDING),
-                        GL11.glIsEnabled(GL11.GL_SCISSOR_TEST),
-                        new int[]{scissor.get(0), scissor.get(1), scissor.get(2), scissor.get(3)}
-                );
-            }
-        }
-
-        private void restore() {
-            if (this.blendEnabled) {
-                GL11.glEnable(GL11.GL_BLEND);
-            } else {
-                GL11.glDisable(GL11.GL_BLEND);
-            }
-            GL14.glBlendFuncSeparate(this.blendSrcRgb, this.blendDstRgb, this.blendSrcAlpha, this.blendDstAlpha);
-            if (this.depthTestEnabled) {
-                GL11.glEnable(GL11.GL_DEPTH_TEST);
-            } else {
-                GL11.glDisable(GL11.GL_DEPTH_TEST);
-            }
-            GL11.glDepthMask(this.depthMask);
-            GL11.glDepthFunc(this.depthFunc);
-            if (this.cullEnabled) {
-                GL11.glEnable(GL11.GL_CULL_FACE);
-            } else {
-                GL11.glDisable(GL11.GL_CULL_FACE);
-            }
-            GL11.glCullFace(this.cullFace);
-            for (int i = 0; i < this.textureBindings2d.length; i++) {
-                GL13.glActiveTexture(GL13.GL_TEXTURE0 + i);
-                GL11.glBindTexture(GL11.GL_TEXTURE_2D, this.textureBindings2d[i]);
-                GL33.glBindSampler(i, this.samplerBindings[i]);
-            }
-            GL13.glActiveTexture(this.activeTexture);
-            RenderSystem.activeTexture(this.activeTexture);
-            GL20.glUseProgram(this.program);
-            GL30.glBindVertexArray(this.vaoBinding);
-            GL11.glColorMask(this.colorMaskR, this.colorMaskG, this.colorMaskB, this.colorMaskA);
-            GL11.glPixelStorei(GL11.GL_UNPACK_ALIGNMENT, this.unpackAlignment);
-            GL21.glBindBuffer(GL21.GL_PIXEL_UNPACK_BUFFER, this.pixelUnpackBufferBinding);
-            if (this.scissorTestEnabled) {
-                GL11.glEnable(GL11.GL_SCISSOR_TEST);
-                GL11.glScissor(this.scissorBox[0], this.scissorBox[1], this.scissorBox[2], this.scissorBox[3]);
-            } else {
-                GL11.glDisable(GL11.GL_SCISSOR_TEST);
-            }
-        }
-    }
-
-    private static final class PendingItemSprite {
+    private static final class PendingItemRender {
         private final ItemStack stack;
         private final float x;
         private final float y;
@@ -821,7 +603,7 @@ public class DynamicIsland extends Module {
         private final float alpha;
         private final boolean showCount;
 
-        private PendingItemSprite(ItemStack stack, float x, float y, float size, float alpha, boolean showCount) {
+        private PendingItemRender(ItemStack stack, float x, float y, float size, float alpha, boolean showCount) {
             this.stack = stack;
             this.x = x;
             this.y = y;

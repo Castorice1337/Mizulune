@@ -21,6 +21,8 @@ import shit.zen.utils.render.RenderUtil;
 
 public class RoundTargetStyle
 extends TargetStyle {
+    public static final float WIDTH = 120.0f;
+    public static final float HEIGHT = 38.0f;
     private static final Color COLOR_PANEL_BG;
     private static final Color COLOR_HEALTH_BG;
     private static final Color COLOR_HEALTH_BAR;
@@ -57,14 +59,14 @@ extends TargetStyle {
     }
 
     @Override
-    public void render(Render2DEvent render2DEvent, LivingEntity livingEntity, SmoothAnimationTimer healthAnim, SmoothAnimationTimer healthLagAnim, float healthPct, float x, float y) {
+    public TargetStyle.Size render(Render2DEvent render2DEvent, LivingEntity livingEntity, SmoothAnimationTimer healthAnim, SmoothAnimationTimer healthLagAnim, float healthPct, float x, float y, boolean liquidGlass) {
         float fade;
         boolean shouldShow;
         for (int i = 0; i < this.equipmentSlots.length; ++i) {
             this.equipmentSlots[i] = ItemStack.EMPTY;
         }
-        float panelWidth = 120.0f;
-        float panelHeight = 38.0f;
+        float panelWidth = WIDTH;
+        float panelHeight = HEIGHT;
         float healthBarRadius = 3.0f;
         float panelRadius = 5.0f;
         boolean hasTarget = livingEntity != null;
@@ -119,11 +121,11 @@ extends TargetStyle {
             this.contentAnim.tick();
         }
         if ((fade = this.fadeAnim.getValueF()) <= 0.01f) {
-            return;
+            return new TargetStyle.Size(WIDTH, HEIGHT);
         }
         LivingEntity target = this.currentTarget;
         if (target == null) {
-            return;
+            return new TargetStyle.Size(WIDTH, HEIGHT);
         }
         float headBoxSize = 30.0f;
         float headPadding = 4.0f;
@@ -199,6 +201,7 @@ extends TargetStyle {
         }
         RenderSystem.setShaderColor(1.0f, 1.0f, 1.0f, 1.0f);
         RenderSystem.disableBlend();
+        return new TargetStyle.Size(WIDTH, HEIGHT);
     }
 
     static {

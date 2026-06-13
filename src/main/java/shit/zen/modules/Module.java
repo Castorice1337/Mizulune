@@ -54,16 +54,19 @@ extends ClientBase {
     }
 
     public void registerSettings() {
-        for (Field field : this.getClass().getDeclaredFields()) {
-            try {
-                Object value;
-                if (!field.isAccessible()) {
-                    field.setAccessible(true);
+        this.settings.clear();
+        for (Class<?> clazz = this.getClass(); clazz != null && Module.class.isAssignableFrom(clazz); clazz = clazz.getSuperclass()) {
+            for (Field field : clazz.getDeclaredFields()) {
+                try {
+                    Object value;
+                    if (!field.isAccessible()) {
+                        field.setAccessible(true);
+                    }
+                    if (!((value = field.get(this)) instanceof Setting)) continue;
+                    this.addSetting((Setting)value);
+                } catch (IllegalAccessException ex) {
+                    System.out.println(REGISTER_FAIL_MSG + this.getName() + "!");
                 }
-                if (!((value = field.get(this)) instanceof Setting)) continue;
-                this.addSetting((Setting)value);
-            } catch (IllegalAccessException ex) {
-                System.out.println(REGISTER_FAIL_MSG + this.getName() + "!");
             }
         }
     }

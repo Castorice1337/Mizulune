@@ -11,6 +11,7 @@ import net.minecraft.util.Mth;
 import shit.zen.gui.NewClickGui;
 import shit.zen.gui.newclickgui.CategoryPanel;
 import shit.zen.gui.newclickgui.SettingElement;
+import shit.zen.manager.ConfigManager;
 import shit.zen.render.FontStore;
 import shit.zen.settings.impl.MultiSelectSetting;
 import shit.zen.utils.animation.SmoothAnimationTimer;
@@ -141,6 +142,7 @@ extends SettingElement<MultiSelectSetting> {
                 selected.add(this.hoveredOption);
             }
             this.setting.setValue(selected);
+            ConfigManager.saveAllIfReady();
             return true;
         }
         return false;
