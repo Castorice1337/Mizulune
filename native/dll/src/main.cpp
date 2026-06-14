@@ -14,7 +14,7 @@ DWORD WINAPI inject_thread(LPVOID) {
     using namespace openzen;
 
     log::init();
-    log::info("OpenZen.dll bootstrap thread started, pid=%lu", GetCurrentProcessId());
+    log::info("Mizulune.dll bootstrap thread started, pid=%lu", GetCurrentProcessId());
 
     JavaVM* vm = jvm::find_vm();
     if (!vm) return 1;
@@ -22,7 +22,7 @@ DWORD WINAPI inject_thread(LPVOID) {
     JNIEnv* env = nullptr;
     JavaVMAttachArgs args{};
     args.version = JNI_VERSION_1_8;
-    args.name = const_cast<char*>("OpenZen-Bootstrap");
+    args.name = const_cast<char*>("Mizulune-Bootstrap");
     args.group = nullptr;
     if (vm->AttachCurrentThreadAsDaemon((void**)&env, &args) != JNI_OK || !env) {
         log::error("AttachCurrentThreadAsDaemon failed");

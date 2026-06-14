@@ -18,6 +18,7 @@
 #include <QResizeEvent>
 #include <QUrl>
 #include <QWindow>
+#include <QStandardPaths>
 
 #include <algorithm>
 #include <cmath>
@@ -200,20 +201,45 @@ void MainWindow::navigateToWebUi() {
     webView_->Navigate(toWide(url).c_str());
 }
 
+namespace {
+QString extractWebUiResources() {
+    QString tempPath = QStandardPaths::writableLocation(QStandardPaths::TempLocation) + QStringLiteral("/mizulune_webui");
+    QDir().mkpath(tempPath);
+    QDir().mkpath(tempPath + QStringLiteral("/res"));
+
+    QStringList files = {
+        QStringLiteral("webui/index.html"),
+        QStringLiteral("webui/styles.css"),
+        QStringLiteral("webui/app.js"),
+        QStringLiteral("webui/res/bg.png"),
+        QStringLiteral("webui/res/logo.png"),
+        QStringLiteral("webui/res/logo_text.png")
+    };
+
+    for (const QString& relPath : files) {
+        QString qrcPath = QStringLiteral(":/") + relPath;
+        QString targetPath = tempPath + QStringLiteral("/") + relPath.mid(6); // remove "webui/" prefix
+        
+        if (QFile::exists(targetPath)) {
+            QFile::remove(targetPath);
+        }
+        QFile::copy(qrcPath, targetPath);
+    }
+    return tempPath + QStringLiteral("/index.html");
+}
+} // namespace
+
 QString MainWindow::webUiIndexPath() const {
     const QString dist = QDir(QCoreApplication::applicationDirPath())
             .filePath(QStringLiteral("webui/index.html"));
     if (QFileInfo(dist).isFile()) return dist;
-    return webUiFallbackIndexPath();
-}
 
-QString MainWindow::webUiFallbackIndexPath() const {
     const QString src = sourceWebUiDir();
     if (!src.isEmpty()) {
         const QString path = QDir(src).filePath(QStringLiteral("index.html"));
         if (QFileInfo(path).isFile()) return path;
     }
-    return QDir(QDir::currentPath()).filePath(QStringLiteral("native/loader/webui/index.html"));
+    return extractWebUiResources();
 }
 
 void MainWindow::resizeWebView() {

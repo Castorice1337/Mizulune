@@ -76,7 +76,7 @@ bool extract_embedded(std::wstring& out_path) {
     }
 
     wchar_t path[MAX_PATH];
-    std::swprintf(path, MAX_PATH, L"%sopenzen-%lu.jar", tmp, GetCurrentProcessId());
+    std::swprintf(path, MAX_PATH, L"%smizulune-%lu.jar", tmp, GetCurrentProcessId());
 
     HANDLE file = CreateFileW(path, GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS,
                                FILE_ATTRIBUTE_NORMAL, nullptr);
@@ -94,7 +94,7 @@ bool extract_embedded(std::wstring& out_path) {
     }
 
     out_path.assign(path);
-    log::info("Extracted zen.jar (%lu bytes) to %ls", (unsigned long)size, path);
+    log::info("Extracted mizulune.jar (%lu bytes) to %ls", (unsigned long)size, path);
     return true;
 }
 
