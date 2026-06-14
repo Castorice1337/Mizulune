@@ -8,7 +8,6 @@ import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.Vec3;
-import net.minecraft.world.phys.shapes.VoxelShape;
 import shit.zen.event.EventTarget;
 import shit.zen.event.impl.GameTickEvent;
 import shit.zen.modules.Category;
@@ -16,19 +15,13 @@ import shit.zen.modules.Module;
 import shit.zen.value.impl.BooleanValue;
 import shit.zen.value.impl.NumberValue;
 import shit.zen.utils.game.BlockUtil;
+import shit.zen.utils.game.EdgeSafetyUtil;
+import shit.zen.utils.game.EdgeSafetyUtil.MovementVector;
 
 public class SafeWalk
 extends Module {
-    private static final double SUPPORT_PROBE_DOWN = 0.08;
-    private static final double SUPPORT_PROBE_UP = 0.02;
-    private static final double SUPPORT_PROBE_EPSILON = 1.0E-4;
-    private static final double RELEASE_DISTANCE_HYSTERESIS = 0.08;
     private static final double ADAPTIVE_PREDICT_DISTANCE = 0.08;
     private static final double ADAPTIVE_SIDE_MARGIN = 0.04;
-    private static final double MOVEMENT_TRIGGER_MARGIN = 0.04;
-    private static final double MIN_UNSNEAK_STEP_DISTANCE = 0.10;
-    private static final double MAX_UNSNEAK_STEP_DISTANCE = 0.28;
-    private static final double TRUE_EDGE_FALL_DISTANCE = 0.015;
     private static final int AIRBORNE_SNEAK_GRACE_TICKS = 2;
 
     public final NumberValue edgeDistanceMin = new NumberValue("Edge Distance Min", 0.08, 0.01, 0.5, 0.01);
@@ -92,8 +85,8 @@ extends Module {
 
         MovementVector movementVector = this.getPhysicalMovementVector();
         double effectiveEdgeDistance = this.getEffectiveEdgeDistance(movementVector);
-        double distanceToFall = SafeWalk.getDistanceToFall(mc.player.getBoundingBox(), movementVector);
-        double globalDistanceToFall = SafeWalk.getDistanceToFall(mc.player.getBoundingBox());
+        double distanceToFall = EdgeSafetyUtil.getDistanceToFall(mc.player.getBoundingBox(), movementVector);
+        double globalDistanceToFall = EdgeSafetyUtil.getDistanceToFall(mc.player.getBoundingBox());
         boolean nearDirectionalEdge = distanceToFall <= effectiveEdgeDistance;
         boolean nearGlobalEdge = this.shouldTriggerForGlobalEdgeRisk(globalDistanceToFall);
         boolean nearEdge = nearDirectionalEdge || nearGlobalEdge;
@@ -188,7 +181,7 @@ extends Module {
         mc.options.keyShift.setDown(true);
         if (forcePlayerSneak) {
             mc.player.setShiftKeyDown(true);
-            this.debugLog("force-true-edge-sneak", this.getPhysicalMovementVector(), SafeWalk.getDistanceToFall(mc.player.getBoundingBox()), this.currentEdgeDistance);
+            this.debugLog("force-true-edge-sneak", this.getPhysicalMovementVector(), EdgeSafetyUtil.getDistanceToFall(mc.player.getBoundingBox()), this.currentEdgeDistance);
         }
         if (refreshAirborneGrace) {
             this.airborneSneakGraceTicks = AIRBORNE_SNEAK_GRACE_TICKS;
@@ -207,7 +200,7 @@ extends Module {
         if (mc.options.keyShift.isDown() && mc.player.isShiftKeyDown()) {
             return false;
         }
-        return SafeWalk.getDistanceToFall(mc.player.getBoundingBox()) <= TRUE_EDGE_FALL_DISTANCE;
+        return EdgeSafetyUtil.isTrueEdge(mc.player.getBoundingBox());
     }
 
     private void releaseModuleSneak() {
@@ -260,14 +253,14 @@ extends Module {
     }
 
     private boolean shouldHoldForUnsafeRelease(double distanceToFall, double effectiveEdgeDistance) {
-        return distanceToFall <= effectiveEdgeDistance + RELEASE_DISTANCE_HYSTERESIS;
+        return distanceToFall <= effectiveEdgeDistance + EdgeSafetyUtil.RELEASE_DISTANCE_HYSTERESIS;
     }
 
     private boolean shouldHoldForPredictedRelease(double distanceToFall, MovementVector movementVector) {
         if (movementVector == null) {
             return false;
         }
-        return distanceToFall <= this.getPredictedUnsneakStepDistance(movementVector) + MOVEMENT_TRIGGER_MARGIN;
+        return distanceToFall <= this.getPredictedUnsneakStepDistance(movementVector) + EdgeSafetyUtil.MOVEMENT_TRIGGER_MARGIN;
     }
 
     private boolean shouldTriggerForGlobalEdgeRisk(double globalDistance) {
@@ -278,8 +271,8 @@ extends Module {
         if (mc == null || mc.player == null || mc.level == null) {
             return false;
         }
-        double globalDistance = SafeWalk.getDistanceToFall(mc.player.getBoundingBox());
-        double threshold = this.currentEdgeDistance + RELEASE_DISTANCE_HYSTERESIS + ADAPTIVE_PREDICT_DISTANCE;
+        double globalDistance = EdgeSafetyUtil.getDistanceToFall(mc.player.getBoundingBox());
+        double threshold = this.currentEdgeDistance + EdgeSafetyUtil.RELEASE_DISTANCE_HYSTERESIS + ADAPTIVE_PREDICT_DISTANCE;
         return globalDistance <= threshold;
     }
 
@@ -287,7 +280,7 @@ extends Module {
         if (movementVector == null) {
             return this.currentEdgeDistance;
         }
-        return Math.max(this.currentEdgeDistance, this.getPredictedUnsneakStepDistance(movementVector) + MOVEMENT_TRIGGER_MARGIN);
+        return Math.max(this.currentEdgeDistance, this.getPredictedUnsneakStepDistance(movementVector) + EdgeSafetyUtil.MOVEMENT_TRIGGER_MARGIN);
     }
 
     private boolean shouldApplyAdaptiveTap() {
@@ -332,30 +325,11 @@ extends Module {
         if (this.isKeyDown(mc.options.keyRight)) {
             strafe -= 1;
         }
-        if (forward == 0 && strafe == 0) {
-            return null;
-        }
-        double yaw = Math.toRadians(mc.player.getYRot());
-        double x = (double) forward * -Math.sin(yaw) + (double) strafe * Math.cos(yaw);
-        double z = (double) forward * Math.cos(yaw) + (double) strafe * Math.sin(yaw);
-        double length = Math.hypot(x, z);
-        if (length <= SUPPORT_PROBE_EPSILON) {
-            return null;
-        }
-        return new MovementVector(x / length, z / length);
+        return EdgeSafetyUtil.getMovementVectorFromInput(mc.player.getYRot(), forward, strafe);
     }
 
     private double getPredictedUnsneakStepDistance(MovementVector movementVector) {
-        Vec3 delta = mc.player.getDeltaMovement();
-        double currentSpeed = Math.hypot(delta.x, delta.z);
-        double directionalSpeed = Math.max(0.0, delta.x * movementVector.x() + delta.z * movementVector.z());
-        double predicted = Math.max(currentSpeed, directionalSpeed);
-        if (mc.options.keyShift.isDown()) {
-            predicted = Math.max(predicted * 2.6, MIN_UNSNEAK_STEP_DISTANCE);
-        } else {
-            predicted = Math.max(predicted, MIN_UNSNEAK_STEP_DISTANCE);
-        }
-        return Math.min(MAX_UNSNEAK_STEP_DISTANCE, predicted);
+        return EdgeSafetyUtil.getPredictedUnsneakStepDistance(mc.player.getDeltaMovement(), movementVector, mc.options.keyShift.isDown());
     }
 
     private void debugLog(String reason, MovementVector movementVector, double distanceToFall, double effectiveEdgeDistance) {
@@ -368,7 +342,7 @@ extends Module {
                 || reason.startsWith("release")
                 || reason.startsWith("skip")
                 || reason.startsWith("force")
-                || SafeWalk.getDistanceToFall(mc.player.getBoundingBox()) <= Math.max(TRUE_EDGE_FALL_DISTANCE, this.currentEdgeDistance);
+                || EdgeSafetyUtil.getDistanceToFall(mc.player.getBoundingBox()) <= Math.max(EdgeSafetyUtil.TRUE_EDGE_FALL_DISTANCE, this.currentEdgeDistance);
         if (!important) {
             return;
         }
@@ -378,7 +352,7 @@ extends Module {
             return;
         }
         Vec3 delta = mc.player.getDeltaMovement();
-        double globalDistance = SafeWalk.getDistanceToFall(mc.player.getBoundingBox());
+        double globalDistance = EdgeSafetyUtil.getDistanceToFall(mc.player.getBoundingBox());
         double predictedStep = movementVector == null ? 0.0 : this.getPredictedUnsneakStepDistance(movementVector);
         logger.info(String.format(Locale.US,
                 "[SafeWalkDebug] reason=%s moduleSneak=%s keyShift=%s playerShift=%s physicalShift=%s onGround=%s "
@@ -514,7 +488,7 @@ extends Module {
             return false;
         }
         double globalSafetyThreshold = this.currentEdgeDistance + ADAPTIVE_SIDE_MARGIN + ADAPTIVE_PREDICT_DISTANCE;
-        if (SafeWalk.getDistanceToFall(mc.player.getBoundingBox()) <= globalSafetyThreshold) {
+        if (EdgeSafetyUtil.getDistanceToFall(mc.player.getBoundingBox()) <= globalSafetyThreshold) {
             return false;
         }
         double strafe = direction > 0 ? -1.0 : 1.0;
@@ -522,8 +496,8 @@ extends Module {
         double unitX = strafe * Math.cos(yaw);
         double unitZ = strafe * Math.sin(yaw);
         AABB predicted = mc.player.getBoundingBox().move(unitX * ADAPTIVE_PREDICT_DISTANCE, 0.0, unitZ * ADAPTIVE_PREDICT_DISTANCE);
-        double sideDistance = SafeWalk.getDirectionalDistanceToFall(predicted, unitX, unitZ);
-        double globalDistance = SafeWalk.getDistanceToFall(predicted);
+        double sideDistance = EdgeSafetyUtil.getDirectionalDistanceToFall(predicted, unitX, unitZ);
+        double globalDistance = EdgeSafetyUtil.getDistanceToFall(predicted);
         return sideDistance > this.currentEdgeDistance + ADAPTIVE_SIDE_MARGIN
                 && globalDistance > globalSafetyThreshold;
     }
@@ -534,91 +508,6 @@ extends Module {
         }
         AABB box = mc.player.getBoundingBox();
         double threshold = Math.max(0.0, distance);
-        return SafeWalk.getDistanceToFall(box) <= threshold;
-    }
-
-    private static double getDistanceToFall(AABB box) {
-        SupportDistances distances = SafeWalk.getSupportDistances(box);
-        return Math.max(0.0, Math.min(Math.min(distances.east(), distances.west()), Math.min(distances.south(), distances.north())));
-    }
-
-    private static double getDistanceToFall(AABB box, MovementVector movementVector) {
-        if (movementVector == null) {
-            return SafeWalk.getDistanceToFall(box);
-        }
-        return SafeWalk.getDirectionalDistanceToFall(box, movementVector.x(), movementVector.z());
-    }
-
-    private static double getDirectionalDistanceToFall(AABB box, double directionX, double directionZ) {
-        SupportDistances distances = SafeWalk.getSupportDistances(box);
-        double distance = Double.POSITIVE_INFINITY;
-        double absX = Math.abs(directionX);
-        double absZ = Math.abs(directionZ);
-        if (directionX > SUPPORT_PROBE_EPSILON) {
-            distance = Math.min(distance, distances.east() / absX);
-        } else if (directionX < -SUPPORT_PROBE_EPSILON) {
-            distance = Math.min(distance, distances.west() / absX);
-        }
-        if (directionZ > SUPPORT_PROBE_EPSILON) {
-            distance = Math.min(distance, distances.south() / absZ);
-        } else if (directionZ < -SUPPORT_PROBE_EPSILON) {
-            distance = Math.min(distance, distances.north() / absZ);
-        }
-        if (distance == Double.POSITIVE_INFINITY) {
-            return 0.0;
-        }
-        return Math.max(0.0, distance);
-    }
-
-    private static SupportDistances getSupportDistances(AABB box) {
-        AABB supportProbe = new AABB(
-                box.minX + SUPPORT_PROBE_EPSILON,
-                box.minY - SUPPORT_PROBE_DOWN,
-                box.minZ + SUPPORT_PROBE_EPSILON,
-                box.maxX - SUPPORT_PROBE_EPSILON,
-                box.minY + SUPPORT_PROBE_UP,
-                box.maxZ - SUPPORT_PROBE_EPSILON);
-
-        double eastSupport = Double.NEGATIVE_INFINITY;
-        double westSupport = Double.POSITIVE_INFINITY;
-        double southSupport = Double.NEGATIVE_INFINITY;
-        double northSupport = Double.POSITIVE_INFINITY;
-
-        for (VoxelShape shape : mc.level.getBlockCollisions(mc.player, supportProbe)) {
-            for (AABB support : shape.toAabbs()) {
-                if (!SafeWalk.overlaps(support.minZ, support.maxZ, box.minZ, box.maxZ)) {
-                    continue;
-                }
-                eastSupport = Math.max(eastSupport, support.maxX);
-                westSupport = Math.min(westSupport, support.minX);
-            }
-            for (AABB support : shape.toAabbs()) {
-                if (!SafeWalk.overlaps(support.minX, support.maxX, box.minX, box.maxX)) {
-                    continue;
-                }
-                southSupport = Math.max(southSupport, support.maxZ);
-                northSupport = Math.min(northSupport, support.minZ);
-            }
-        }
-
-        double eastDistance = eastSupport == Double.NEGATIVE_INFINITY ? 0.0 : eastSupport - box.minX;
-        double westDistance = westSupport == Double.POSITIVE_INFINITY ? 0.0 : box.maxX - westSupport;
-        double southDistance = southSupport == Double.NEGATIVE_INFINITY ? 0.0 : southSupport - box.minZ;
-        double northDistance = northSupport == Double.POSITIVE_INFINITY ? 0.0 : box.maxZ - northSupport;
-        return new SupportDistances(
-                Math.max(0.0, eastDistance),
-                Math.max(0.0, westDistance),
-                Math.max(0.0, southDistance),
-                Math.max(0.0, northDistance));
-    }
-
-    private static boolean overlaps(double firstMin, double firstMax, double secondMin, double secondMax) {
-        return firstMax > secondMin + SUPPORT_PROBE_EPSILON && firstMin < secondMax - SUPPORT_PROBE_EPSILON;
-    }
-
-    private record SupportDistances(double east, double west, double south, double north) {
-    }
-
-    private record MovementVector(double x, double z) {
+        return EdgeSafetyUtil.getDistanceToFall(box) <= threshold;
     }
 }

@@ -6,7 +6,7 @@
  *
  * LiquidBounce is licensed under GPL-3.0-or-later.
  * Modified for Mizulune/OpenZen as a standalone stateful smoother with
- * SNAP, LINEAR, and angle-difference SIGMOID modes plus configurable caps.
+ * SNAP, LINEAR, angle-difference SIGMOID, and Interpolation AngleSmooth modes.
  */
 package shit.zen.utils.rotation;
 
@@ -27,6 +27,13 @@ public class RotationSmoother extends ClientBase {
             double maxPitchSpeed,
             double minStep,
             double epsilon,
+            double interpolationHorizontalSpeedMin,
+            double interpolationHorizontalSpeedMax,
+            double interpolationVerticalSpeedMin,
+            double interpolationVerticalSpeedMax,
+            double interpolationDirectionChangeFactorMin,
+            double interpolationDirectionChangeFactorMax,
+            double interpolationMidpoint,
             boolean humanize) {
         if (target == null || mc.player == null || mc.options == null) {
             this.reset();
@@ -39,6 +46,7 @@ public class RotationSmoother extends ClientBase {
             this.currentRotation = this.clampPitch(fallback);
         }
 
+        Rotation previousTargetRotation = this.targetRotation == null ? null : this.targetRotation.clone();
         this.targetRotation = this.normalizeTarget(target, this.currentRotation);
 
         float yawDiff = Mth.wrapDegrees(this.targetRotation.getYaw() - this.currentRotation.getYaw());
@@ -56,7 +64,23 @@ public class RotationSmoother extends ClientBase {
         }
 
         double distance = Math.sqrt(yawDiff * yawDiff + pitchDiff * pitchDiff);
-        double[] speeds = this.resolveSpeeds(smoothMode, distance, durationTicks, steepness, maxYawSpeed, maxPitchSpeed);
+        double[] speeds = this.resolveSpeeds(
+                smoothMode,
+                yawDiff,
+                pitchDiff,
+                distance,
+                previousTargetRotation,
+                durationTicks,
+                steepness,
+                maxYawSpeed,
+                maxPitchSpeed,
+                interpolationHorizontalSpeedMin,
+                interpolationHorizontalSpeedMax,
+                interpolationVerticalSpeedMin,
+                interpolationVerticalSpeedMax,
+                interpolationDirectionChangeFactorMin,
+                interpolationDirectionChangeFactorMax,
+                interpolationMidpoint);
         float yawStep = this.resolveAxisStep(yawDiff, distance, speeds[0], minStep, reachEpsilon);
         float pitchStep = this.resolveAxisStep(pitchDiff, distance, speeds[1], minStep, reachEpsilon);
 
@@ -116,11 +140,34 @@ public class RotationSmoother extends ClientBase {
 
     private double[] resolveSpeeds(
             SmoothMode mode,
+            float yawDiff,
+            float pitchDiff,
             double distance,
+            Rotation previousTargetRotation,
             int durationTicks,
             double steepness,
             double maxYawSpeed,
-            double maxPitchSpeed) {
+            double maxPitchSpeed,
+            double interpolationHorizontalSpeedMin,
+            double interpolationHorizontalSpeedMax,
+            double interpolationVerticalSpeedMin,
+            double interpolationVerticalSpeedMax,
+            double interpolationDirectionChangeFactorMin,
+            double interpolationDirectionChangeFactorMax,
+            double interpolationMidpoint) {
+        if (mode == SmoothMode.INTERPOLATION) {
+            double directionChange = this.getDirectionChange(previousTargetRotation)
+                    * this.randomRange(interpolationDirectionChangeFactorMin, interpolationDirectionChangeFactorMax);
+            double horizontalSpeed = this.randomRange(interpolationHorizontalSpeedMin, interpolationHorizontalSpeedMax);
+            double verticalSpeed = this.randomRange(interpolationVerticalSpeedMin, interpolationVerticalSpeedMax);
+            double yawSpeed = Math.abs(yawDiff) * interpolationFactor(Math.abs(yawDiff), horizontalSpeed, directionChange, interpolationMidpoint);
+            double pitchSpeed = Math.abs(pitchDiff) * interpolationFactor(Math.abs(pitchDiff), verticalSpeed, directionChange, interpolationMidpoint);
+            return new double[]{
+                    Math.min(Math.max(0.0, maxYawSpeed), yawSpeed),
+                    Math.min(Math.max(0.0, maxPitchSpeed), pitchSpeed)
+            };
+        }
+
         double durationScale = Math.max(0.1, 6.0 / Math.max(1, durationTicks));
         double yawSpeed = Math.max(0.0, maxYawSpeed) * durationScale;
         double pitchSpeed = Math.max(0.0, maxPitchSpeed) * durationScale;
@@ -131,6 +178,24 @@ public class RotationSmoother extends ClientBase {
             pitchSpeed *= sigmoid;
         }
         return new double[]{yawSpeed, pitchSpeed};
+    }
+
+    private double getDirectionChange(Rotation previousTargetRotation) {
+        if (previousTargetRotation == null || this.targetRotation == null) {
+            return 0.0;
+        }
+        float yaw = Mth.wrapDegrees(this.targetRotation.getYaw() - previousTargetRotation.getYaw());
+        float pitch = this.targetRotation.getPitch() - previousTargetRotation.getPitch();
+        return normalizeDirectionChange(Math.sqrt(yaw * yaw + pitch * pitch));
+    }
+
+    private double randomRange(double min, double max) {
+        double lower = Math.max(0.0, Math.min(min, max));
+        double upper = Math.max(lower, Math.max(min, max));
+        if (upper <= lower) {
+            return lower;
+        }
+        return ThreadLocalRandom.current().nextDouble(lower, upper);
     }
 
     private float resolveAxisStep(double remaining, double distance, double speed, double minStep, double epsilon) {
@@ -189,5 +254,30 @@ public class RotationSmoother extends ClientBase {
         double safeSteepness = Math.max(0.001, steepness);
         double midpoint = 0.5;
         return 1.0 / (1.0 + Math.exp(-safeSteepness * (Mth.clamp(scaledDifference, 0.0, 1.0) - midpoint)));
+    }
+
+    private static double interpolationFactor(
+            double rotationDifference,
+            double turnSpeed,
+            double directionChange,
+            double midpoint) {
+        double t = normalizeDirectionChange(rotationDifference);
+        double bezierSpeed = bezier(0.05, 1.0, 1.0 - t);
+        double sigmoidSpeed = 1.0 / (1.0 + Math.exp(-0.5 * (t - 0.3)));
+        double speed = Mth.clamp(turnSpeed, 0.0, 1.0);
+        if (t > Mth.clamp(midpoint, 0.0, 1.0)) {
+            return bezierSpeed * speed;
+        }
+        return sigmoidSpeed * Mth.clamp(speed + directionChange, 0.0, 1.0);
+    }
+
+    private static double bezier(double start, double end, double t) {
+        double progress = Mth.clamp(t, 0.0, 1.0);
+        double inverse = 1.0 - progress;
+        return inverse * inverse * start + 2.0 * inverse * progress + progress * progress * end;
+    }
+
+    private static double normalizeDirectionChange(double angle) {
+        return Mth.clamp(angle / 180.0, 0.0, 1.0);
     }
 }

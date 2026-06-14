@@ -185,6 +185,13 @@ extends ClientBase {
                 provider.getMaxPitchSpeed(),
                 provider.getMinStep(),
                 provider.getRotationEpsilon(),
+                provider.getInterpolationHorizontalSpeedMin(),
+                provider.getInterpolationHorizontalSpeedMax(),
+                provider.getInterpolationVerticalSpeedMin(),
+                provider.getInterpolationVerticalSpeedMax(),
+                provider.getInterpolationDirectionChangeFactorMin(),
+                provider.getInterpolationDirectionChangeFactorMax(),
+                provider.getInterpolationMidpoint(),
                 provider.shouldHumanizeRotation());
     }
 

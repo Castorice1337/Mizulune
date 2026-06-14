@@ -49,5 +49,15 @@ native/dll.zip
 # Test Server for development testing
 /test-server/
 
+# Python scripts
+*.py
+
+# Other clients reference source code
+/liquidSRC/
+/liquidSRC/src/
+
+# Test folder
+/test-heypixel/
+
 # Research folder
 /research/
