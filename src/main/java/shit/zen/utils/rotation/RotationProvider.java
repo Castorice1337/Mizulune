@@ -39,6 +39,34 @@ public interface RotationProvider {
         return 0.1;
     }
 
+    default double getInterpolationHorizontalSpeedMin() {
+        return 0.80;
+    }
+
+    default double getInterpolationHorizontalSpeedMax() {
+        return 0.85;
+    }
+
+    default double getInterpolationVerticalSpeedMin() {
+        return 0.20;
+    }
+
+    default double getInterpolationVerticalSpeedMax() {
+        return 0.25;
+    }
+
+    default double getInterpolationDirectionChangeFactorMin() {
+        return 0.95;
+    }
+
+    default double getInterpolationDirectionChangeFactorMax() {
+        return 1.0;
+    }
+
+    default double getInterpolationMidpoint() {
+        return 0.35;
+    }
+
     default boolean shouldHumanizeRotation() {
         return false;
     }

@@ -10,6 +10,7 @@
 package shit.zen.modules.impl.movement;
 
 import com.mojang.blaze3d.platform.InputConstants;
+import java.util.concurrent.ThreadLocalRandom;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
@@ -30,6 +31,8 @@ import shit.zen.event.impl.TickEvent;
 import shit.zen.modules.Category;
 import shit.zen.modules.Module;
 import shit.zen.utils.game.BlockUtil;
+import shit.zen.utils.game.EdgeSafetyUtil;
+import shit.zen.utils.game.EdgeSafetyUtil.MovementVector;
 import shit.zen.utils.game.MovementUtil;
 import shit.zen.utils.rotation.Rotation;
 import shit.zen.utils.rotation.RotationApplyMode;
@@ -62,8 +65,18 @@ public class GodBridgeAssist extends Module implements RotationProvider {
     public final BooleanValue humanizeRotation = new BooleanValue("Humanize Rotation", false, () -> !this.smoothMode.is("SNAP"));
     public final BooleanValue movementFix = new BooleanValue("Movement Fix", false, () -> !this.rotationMode.is("Off"));
     public final ModeValue placeMode = new ModeValue("Place Mode", "ManualPlaceOnly", "AutoPlace").withDefault("ManualPlaceOnly");
+    public final BooleanValue autoBlock = new BooleanValue("Auto Block", false);
     public final BooleanValue ledgeAssist = new BooleanValue("Ledge Assist", true);
+    public final ModeValue ledgeDetection = new ModeValue("Ledge Detection", "SafeWalkDistance", "PredictProbe")
+            .withDefault("SafeWalkDistance")
+            .withVisibility(() -> this.ledgeAssist.getValue());
     public final ModeValue ledgeAction = new ModeValue("Ledge Action", "Sneak", "Jump", "StopInput", "Backwards").withDefault("Sneak");
+    public final NumberValue bridgeEdgeDistanceMin = new NumberValue("Bridge Edge Distance Min", 0.08, 0.01, 0.5, 0.01, this::isSafeWalkDistanceLedge);
+    public final NumberValue bridgeEdgeDistanceMax = new NumberValue("Bridge Edge Distance Max", 0.18, 0.01, 0.5, 0.01, this::isSafeWalkDistanceLedge);
+    public final NumberValue bridgeLedgeTicksMin = new NumberValue("Bridge Ledge Ticks Min", 1, 1, 10, 1, this::isSafeWalkDistanceLedge);
+    public final NumberValue bridgeLedgeTicksMax = new NumberValue("Bridge Ledge Ticks Max", 3, 1, 10, 1, this::isSafeWalkDistanceLedge);
+    public final NumberValue bridgeReleaseDelay = new NumberValue("Bridge Release Delay", 1, 0, 5, 1, this::isSafeWalkDistanceLedge);
+    public final BooleanValue forceTrueEdgeSneak = new BooleanValue("Force True Edge Sneak", true, this::isSafeWalkDistanceLedge);
 
     private Rotation currentTargetRotation;
     private PlacementTarget currentTarget;
@@ -73,6 +86,12 @@ public class GodBridgeAssist extends Module implements RotationProvider {
     private boolean stopInputThisTick;
     private boolean backwardsThisTick;
     private int lastPlaceTick = -1;
+    private int savedAutoBlockSlot = -1;
+    private int lockedBlockSlot = -1;
+    private boolean edgeDistanceArmed;
+    private double currentEdgeDistance;
+    private int remainingLedgeTicks;
+    private int releaseDelayTicks;
 
     public GodBridgeAssist() {
         super("GodBridgeAssist", Category.MISC);
@@ -86,6 +105,9 @@ public class GodBridgeAssist extends Module implements RotationProvider {
         this.stopInputThisTick = false;
         this.backwardsThisTick = false;
         this.lastPlaceTick = -1;
+        this.savedAutoBlockSlot = -1;
+        this.lockedBlockSlot = -1;
+        this.resetBridgeEdgeState();
         RotationHandler.registerProvider(this);
         super.onEnable();
     }
@@ -97,6 +119,8 @@ public class GodBridgeAssist extends Module implements RotationProvider {
         this.currentTarget = null;
         this.stopInputThisTick = false;
         this.backwardsThisTick = false;
+        this.resetBridgeEdgeState();
+        this.restoreAutoBlockSlot();
         this.restoreControlledKeys();
         super.onDisable();
     }
@@ -109,9 +133,14 @@ public class GodBridgeAssist extends Module implements RotationProvider {
         if (mc.player == null || mc.level == null || mc.options == null) {
             this.currentTargetRotation = null;
             this.currentTarget = null;
+            this.resetBridgeEdgeState();
             return;
         }
+        if (!this.ledgeAssist.getValue()) {
+            this.resetBridgeEdgeState();
+        }
 
+        this.updateAutoBlockSlot();
         this.currentTarget = this.findPlacementTarget();
         this.currentTargetRotation = this.angleSolver.solve(
                 this.toSolverTarget(this.currentTarget),
@@ -125,6 +154,7 @@ public class GodBridgeAssist extends Module implements RotationProvider {
 
     @EventTarget(value = 4)
     public void onTickLate(TickEvent event) {
+        this.updateAutoBlockSlot();
         if (this.placeMode.is("AutoPlace")) {
             this.tryAutoPlace();
         }
@@ -227,8 +257,16 @@ public class GodBridgeAssist extends Module implements RotationProvider {
         return target == null ? null : new GodBridgeAngleSolver.Target(this.getHitVec(target));
     }
 
+    private boolean isSafeWalkDistanceLedge() {
+        return this.ledgeAssist.getValue() && this.ledgeDetection.is("SafeWalkDistance");
+    }
+
     private boolean shouldApplyLedgeAssist() {
-        if (!this.isInputActive() || !this.willWalkOffEdge()) {
+        if (!this.isInputActive()) {
+            this.resetBridgeEdgeState();
+            return false;
+        }
+        if (!this.shouldProtectBridgeEdge()) {
             return false;
         }
         if (this.getPlaceableBlockCount() <= 0) {
@@ -253,7 +291,100 @@ public class GodBridgeAssist extends Module implements RotationProvider {
         } else {
             this.setKeyDown(mc.options.keyShift, true);
             this.moduleSneakDown = true;
+            if (this.forceTrueEdgeSneak.getValue() && mc.player != null && EdgeSafetyUtil.isTrueEdge(mc.player.getBoundingBox())) {
+                mc.player.setShiftKeyDown(true);
+            }
         }
+    }
+
+    private boolean shouldProtectBridgeEdge() {
+        if (this.ledgeDetection.is("PredictProbe")) {
+            this.resetBridgeEdgeState();
+            return this.willWalkOffEdge();
+        }
+        return this.shouldProtectBridgeSafeWalkDistanceEdge();
+    }
+
+    private boolean shouldProtectBridgeSafeWalkDistanceEdge() {
+        if (mc.player == null || mc.level == null || mc.options == null || mc.getWindow() == null || !mc.player.onGround()) {
+            this.resetBridgeEdgeState();
+            return false;
+        }
+        int forward = this.getPhysicalForward();
+        int strafe = this.getPhysicalStrafe();
+        MovementVector movementVector = EdgeSafetyUtil.getMovementVectorFromInput(mc.player.getYRot(), forward, strafe);
+        if (movementVector == null) {
+            this.resetBridgeEdgeState();
+            return false;
+        }
+        if (!this.edgeDistanceArmed) {
+            this.currentEdgeDistance = this.randomBridgeEdgeDistance();
+            this.edgeDistanceArmed = true;
+        }
+
+        AABB box = mc.player.getBoundingBox();
+        double distanceToFall = EdgeSafetyUtil.getDistanceToFall(box, movementVector);
+        double predictedStep = EdgeSafetyUtil.getPredictedUnsneakStepDistance(mc.player.getDeltaMovement(), movementVector, mc.options.keyShift.isDown());
+        double effectiveEdgeDistance = Math.max(this.currentEdgeDistance, predictedStep + EdgeSafetyUtil.MOVEMENT_TRIGGER_MARGIN);
+        boolean nearDirectionalEdge = distanceToFall <= effectiveEdgeDistance;
+        boolean nearGlobalEdge = EdgeSafetyUtil.getDistanceToFall(box) <= this.currentEdgeDistance;
+        if (nearDirectionalEdge || nearGlobalEdge) {
+            if (this.remainingLedgeTicks <= 0) {
+                this.remainingLedgeTicks = this.randomBridgeLedgeTicks();
+            }
+            this.releaseDelayTicks = this.getBridgeReleaseDelayTicks();
+            return true;
+        }
+
+        if (this.isHoldingBridgeEdge()) {
+            if (distanceToFall <= effectiveEdgeDistance + EdgeSafetyUtil.RELEASE_DISTANCE_HYSTERESIS) {
+                return true;
+            }
+            if (this.remainingLedgeTicks > 0) {
+                this.remainingLedgeTicks--;
+                return true;
+            }
+            if (this.releaseDelayTicks > 0) {
+                this.releaseDelayTicks--;
+                return true;
+            }
+        }
+        this.resetBridgeEdgeState();
+        return false;
+    }
+
+    private boolean isHoldingBridgeEdge() {
+        return this.remainingLedgeTicks > 0 || this.releaseDelayTicks > 0;
+    }
+
+    private double randomBridgeEdgeDistance() {
+        double min = this.bridgeEdgeDistanceMin.getValue().doubleValue();
+        double max = this.bridgeEdgeDistanceMax.getValue().doubleValue();
+        double lower = Math.max(0.0, Math.min(min, max));
+        double upper = Math.max(lower, Math.max(min, max));
+        if (upper <= lower) {
+            return lower;
+        }
+        return ThreadLocalRandom.current().nextDouble(lower, upper);
+    }
+
+    private int randomBridgeLedgeTicks() {
+        int min = this.bridgeLedgeTicksMin.getValue().intValue();
+        int max = this.bridgeLedgeTicksMax.getValue().intValue();
+        int lower = Math.max(1, Math.min(min, max));
+        int upper = Math.max(lower, Math.max(min, max));
+        return ThreadLocalRandom.current().nextInt(lower, upper + 1);
+    }
+
+    private int getBridgeReleaseDelayTicks() {
+        return Math.max(0, this.bridgeReleaseDelay.getValue().intValue());
+    }
+
+    private void resetBridgeEdgeState() {
+        this.edgeDistanceArmed = false;
+        this.currentEdgeDistance = 0.0;
+        this.remainingLedgeTicks = 0;
+        this.releaseDelayTicks = 0;
     }
 
     private void tryAutoPlace() {
@@ -392,6 +523,70 @@ public class GodBridgeAssist extends Module implements RotationProvider {
             return InteractionHand.OFF_HAND;
         }
         return null;
+    }
+
+    private void updateAutoBlockSlot() {
+        if (!this.autoBlock.getValue()) {
+            this.restoreAutoBlockSlot();
+            return;
+        }
+        if (mc.player == null) {
+            this.savedAutoBlockSlot = -1;
+            this.lockedBlockSlot = -1;
+            return;
+        }
+
+        int blockSlot = this.findAutoBlockSlot();
+        if (blockSlot == -1) {
+            this.restoreAutoBlockSlot();
+            return;
+        }
+        if (this.savedAutoBlockSlot == -1) {
+            this.savedAutoBlockSlot = mc.player.getInventory().selected;
+        }
+
+        this.lockedBlockSlot = blockSlot;
+        mc.player.getInventory().selected = blockSlot;
+    }
+
+    private void restoreAutoBlockSlot() {
+        if (mc.player != null && this.savedAutoBlockSlot >= 0 && this.savedAutoBlockSlot < 9) {
+            mc.player.getInventory().selected = this.savedAutoBlockSlot;
+        }
+        this.savedAutoBlockSlot = -1;
+        this.lockedBlockSlot = -1;
+    }
+
+    private int findAutoBlockSlot() {
+        if (mc.player == null) {
+            return -1;
+        }
+        int selected = mc.player.getInventory().selected;
+        if (this.savedAutoBlockSlot == -1 && this.isHotbarPlaceableBlock(selected)) {
+            return selected;
+        }
+        if (this.isHotbarPlaceableBlock(this.lockedBlockSlot)) {
+            return this.lockedBlockSlot;
+        }
+
+        int bestSlot = -1;
+        int bestCount = -1;
+        for (int i = 0; i < 9; i++) {
+            ItemStack stack = mc.player.getInventory().getItem(i);
+            if (stack.getItem() instanceof BlockItem && BlockUtil.isPlaceable(stack) && stack.getCount() > bestCount) {
+                bestSlot = i;
+                bestCount = stack.getCount();
+            }
+        }
+        return bestSlot;
+    }
+
+    private boolean isHotbarPlaceableBlock(int slot) {
+        if (mc.player == null || slot < 0 || slot > 8) {
+            return false;
+        }
+        ItemStack stack = mc.player.getInventory().getItem(slot);
+        return stack.getItem() instanceof BlockItem && BlockUtil.isPlaceable(stack);
     }
 
     private int getPlaceableBlockCount() {
