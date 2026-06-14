@@ -28,8 +28,8 @@ import shit.zen.render.Fonts;
 import shit.zen.render.Paint;
 import shit.zen.render.Renderer;
 import shit.zen.render.RoundedRectangle;
-import shit.zen.settings.impl.BooleanSetting;
-import shit.zen.settings.impl.NumberSetting;
+import shit.zen.value.impl.BooleanValue;
+import shit.zen.value.impl.NumberValue;
 import shit.zen.utils.game.ItemAlertTracker;
 import shit.zen.utils.math.MathUtil;
 import shit.zen.utils.math.Vector2f;
@@ -46,10 +46,10 @@ public class OpalNameTag extends NameTagStyle {
 
     public static final Map<String, AtomicInteger> scoreboardHealthMap = new ConcurrentHashMap<>();
 
-    private final NumberSetting scaleSetting;
-    private final NumberSetting distanceSetting;
-    private final BooleanSetting showHealthSetting;
-    private final BooleanSetting showArmorSetting;
+    private final NumberValue scaleSetting;
+    private final NumberValue distanceSetting;
+    private final BooleanValue showHealthSetting;
+    private final BooleanValue showArmorSetting;
     private final FontRenderer mainFont;
     private final FontRenderer nameFont;
     private final FontRenderer iconFont;
@@ -170,9 +170,9 @@ public class OpalNameTag extends NameTagStyle {
                 int alertCount = this.showArmorSetting.getValue() && !alertItems.isEmpty() ? alertItems.size() : 0;
                 boolean hasAlerts = alertCount > 0;
                 int distance = (int) mc.player.distanceTo(entity);
-                String distanceIcon = "";
+                String distanceIcon = "\ue55c";
                 String distanceText = distance + "m";
-                String nameIcon = "";
+                String nameIcon = "\ue7ff";
                 String displayName = entity.getDisplayName().getString();
                 String teamSuffix = "";
                 int health = Math.round(player.getHealth());

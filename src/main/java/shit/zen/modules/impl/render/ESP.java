@@ -29,8 +29,8 @@ import shit.zen.event.impl.Render2DEvent;
 import shit.zen.event.impl.RenderEvent;
 import shit.zen.modules.Category;
 import shit.zen.modules.Module;
-import shit.zen.settings.impl.BooleanSetting;
-import shit.zen.settings.impl.ModeSetting;
+import shit.zen.value.impl.BooleanValue;
+import shit.zen.value.impl.ModeValue;
 import shit.zen.utils.game.EntityUtil;
 import shit.zen.utils.math.Vector2f;
 import shit.zen.utils.render.ColorUtil;
@@ -48,17 +48,17 @@ public class ESP extends Module {
             }
         }
 
-    private final ModeSetting modeSetting = new ModeSetting("Mode", "Glow", "Outlined 2D").withDefault("Outlined 2D");
-    private final BooleanSetting skeletonSetting = new BooleanSetting("Skeleton", false);
-    private final BooleanSetting playersSetting = new BooleanSetting("Players", true);
-    private final BooleanSetting mobsSetting = new BooleanSetting("Mobs", false);
-    private final BooleanSetting animalsSetting = new BooleanSetting("Animals", false);
-    private final BooleanSetting itemsSetting = new BooleanSetting("Items", false);
-    private final BooleanSetting arrowsSetting = new BooleanSetting("Arrows", true);
+    private final ModeValue ModeValue = new ModeValue("Mode", "Glow", "Outlined 2D").withDefault("Outlined 2D");
+    private final BooleanValue skeletonSetting = new BooleanValue("Skeleton", false);
+    private final BooleanValue playersSetting = new BooleanValue("Players", true);
+    private final BooleanValue mobsSetting = new BooleanValue("Mobs", false);
+    private final BooleanValue animalsSetting = new BooleanValue("Animals", false);
+    private final BooleanValue itemsSetting = new BooleanValue("Items", false);
+    private final BooleanValue arrowsSetting = new BooleanValue("Arrows", true);
     private final Map<Entity, Pair<Vector4d, Boolean>> entityBoxPositions = new HashMap<>();
     private final Map<Entity, float[][]> playerBoneRotations = new HashMap<>();
-    private final BooleanSetting showHealthBarSetting = new BooleanSetting("Show Health Bar", true);
-    private final ModeSetting healthBarPositionSetting = new ModeSetting("Health Bar Position", "Bottom", "Top", "Left", "Right").withDefault("Bottom");
+    private final BooleanValue showHealthBarSetting = new BooleanValue("Show Health Bar", true);
+    private final ModeValue healthBarPositionSetting = new ModeValue("Health Bar Position", "Bottom", "Top", "Left", "Right").withDefault("Bottom");
     private final List<Entity> visibleEntities = new ArrayList<>();
     private final List<Vector2f> projectedPoints = new ArrayList<>();
 
@@ -68,7 +68,7 @@ public class ESP extends Module {
     }
 
     public boolean isGlowing(Entity entity) {
-        if (this.isEnabled() && "Glow".equalsIgnoreCase(this.modeSetting.getValue())) {
+        if (this.isEnabled() && "Glow".equalsIgnoreCase(this.ModeValue.getValue())) {
             if (entity instanceof Player && this.playersSetting.getValue()) return true;
             if (entity instanceof Animal && this.animalsSetting.getValue()) return true;
             if (entity instanceof Mob && this.mobsSetting.getValue()) return true;
@@ -107,7 +107,7 @@ public class ESP extends Module {
     @EventTarget
     public void onRender(RenderEvent renderEvent) {
         if (mc.level == null || mc.player == null) return;
-        if (!"Outlined 2D".equals(this.modeSetting.getValue())) {
+        if (!"Outlined 2D".equals(this.ModeValue.getValue())) {
             this.entityBoxPositions.clear();
             return;
         }
@@ -154,7 +154,7 @@ public class ESP extends Module {
 
     @EventTarget
     public void onRender2D(Render2DEvent event) {
-        if (!"Outlined 2D".equals(this.modeSetting.getValue()) || this.entityBoxPositions.isEmpty()) return;
+        if (!"Outlined 2D".equals(this.ModeValue.getValue()) || this.entityBoxPositions.isEmpty()) return;
         Matrix4f matrix4f = event.guiGraphics().pose().last().pose();
         RenderSystem.enableBlend();
         RenderSystem.defaultBlendFunc();

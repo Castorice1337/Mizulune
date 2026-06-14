@@ -202,7 +202,8 @@ public class ModuleListHud extends HudElement {
 
     private List<AnimatedRow> updateRows() {
         for (Module module : ZenClient.getInstance().getModuleManager().getModules()) {
-            if (module == this || module instanceof Interface || module.getName().isEmpty()) {
+            if (module == this || module.getName().isEmpty() || module.isHiddenInModuleList()) {
+                this.rowStates.remove(module);
                 continue;
             }
             AnimatedRow row = this.rowStates.get(module);
@@ -572,7 +573,4 @@ public class ModuleListHud extends HudElement {
     public void onGlRender(GlRenderEvent glRenderEvent, float x, float y) {
     }
 
-    @Override
-    public void onSettings() {
-    }
 }

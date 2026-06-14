@@ -17,15 +17,15 @@ import shit.zen.event.impl.MotionEvent;
 import shit.zen.event.impl.UpdateHeldItemEvent;
 import shit.zen.modules.Category;
 import shit.zen.modules.Module;
-import shit.zen.settings.impl.BooleanSetting;
+import shit.zen.value.impl.BooleanValue;
 import shit.zen.utils.game.ItemUtil;
 import shit.zen.event.EventTarget;
 
 public class AutoTools
 extends Module {
-    private final BooleanSetting checkSword = new BooleanSetting("Check Sword", true);
-    private final BooleanSetting switchBack = new BooleanSetting("Switch Back", true);
-    private final BooleanSetting silent = new BooleanSetting("Silent", true);
+    private final BooleanValue checkSword = new BooleanValue("Check Sword", true);
+    private final BooleanValue switchBack = new BooleanValue("Switch Back", true);
+    private final BooleanValue silent = new BooleanValue("Silent", true);
     public static String[] toolNames;
     private int previousSlot = -1;
 

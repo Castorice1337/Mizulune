@@ -18,16 +18,16 @@ import shit.zen.event.impl.PacketEvent;
 import shit.zen.event.impl.WorldChangeEvent;
 import shit.zen.modules.Category;
 import shit.zen.modules.Module;
-import shit.zen.settings.impl.BooleanSetting;
-import shit.zen.settings.impl.NumberSetting;
+import shit.zen.value.impl.BooleanValue;
+import shit.zen.value.impl.NumberValue;
 import shit.zen.utils.misc.ChatUtil;
 import shit.zen.event.EventTarget;
 
 public class AntiBots
 extends Module {
     public static AntiBots INSTANCE;
-    private final NumberSetting newPlayerTimeout = new NumberSetting("Respawn Time", 2500.0, 0.0, 10000.0, 100.0);
-    private final BooleanSetting debug = new BooleanSetting("Debug", true);
+    private final NumberValue newPlayerTimeout = new NumberValue("Respawn Time", 2500.0, 0.0, 10000.0, 100.0);
+    private final BooleanValue debug = new BooleanValue("Debug", true);
     private static final Map<UUID, String> suspectNames;
     private static final Map<Integer, String> confirmedBotNames;
     private static final Map<UUID, Long> suspectJoinTimes;
@@ -72,10 +72,10 @@ extends Module {
                     for (ClientboundPlayerInfoUpdatePacket.Entry entry : clientboundPlayerInfoUpdatePacket.entries()) {
                         if (entry.displayName() != null) {
                             if (entry.profile() != null && entry.profile().getName().contains("Sky_Yuanxiao") && this.debug.getValue()) {
-                                ChatUtil.print("汤圆来了11");
+                                ChatUtil.print("姹ゅ渾鏉ヤ簡11");
                             }
                             if (entry.displayName().getString().contains("Sky_Yuanxiao") && this.debug.getValue()) {
-                                ChatUtil.print("汤圆来了11");
+                                ChatUtil.print("姹ゅ渾鏉ヤ簡11");
                             }
                         }
                         GameProfile gameProfile = entry.profile();
@@ -129,10 +129,10 @@ extends Module {
             for (ClientboundPlayerInfoUpdatePacket.Entry entry : infoUpdate.entries()) {
                 if (entry.displayName() != null) {
                     if (entry.profile() != null && entry.profile().getName().contains("Sky_Yuanxiao") && this.debug.getValue()) {
-                        ChatUtil.print("汤圆来了1");
+                        ChatUtil.print("姹ゅ渾鏉ヤ簡1");
                     }
                     if (entry.displayName().getString().contains("Sky_Yuanxiao") && this.debug.getValue()) {
-                        ChatUtil.print("汤圆来了1");
+                        ChatUtil.print("姹ゅ渾鏉ヤ簡1");
                     }
                 }
                 if (entry.displayName() == null

@@ -11,6 +11,7 @@ import net.minecraft.util.Mth;
 import shit.zen.gui.newclickgui.CategoryPanel;
 import shit.zen.manager.ConfigManager;
 import shit.zen.modules.Category;
+import shit.zen.render.Renderer;
 import shit.zen.utils.animation.SmoothAnimationTimer;
 import shit.zen.utils.math.Easings;
 
@@ -51,9 +52,11 @@ extends Screen {
             categoryPanels.forEach(CategoryPanel::reset);
             return;
         }
-        for (CategoryPanel categoryPanel : categoryPanels) {
-            categoryPanel.render(this, guiGraphics, guiGraphics.pose(), mouseX, mouseY, closeProgress, partialTicks);
-        }
+        Renderer.render(guiGraphics, drawContext -> {
+            for (CategoryPanel categoryPanel : categoryPanels) {
+                categoryPanel.render(this, guiGraphics, guiGraphics.pose(), mouseX, mouseY, closeProgress, partialTicks);
+            }
+        });
     }
 
     public void onClose() {

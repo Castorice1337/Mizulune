@@ -5,15 +5,15 @@ import java.util.Iterator;
 import java.util.List;
 import shit.zen.modules.Category;
 import shit.zen.modules.Module;
-import shit.zen.settings.impl.ModeSetting;
-import shit.zen.settings.impl.NumberSetting;
+import shit.zen.value.impl.ModeValue;
+import shit.zen.value.impl.NumberValue;
 
 public class Notification extends Module {
     public static Notification INSTANCE;
     private static final int MAX_VISIBLE = 3;
 
-    public final ModeSetting modeSetting = new ModeSetting("Mode", "Dynamic Island").withDefault("Dynamic Island");
-    public final NumberSetting durationSetting = new NumberSetting("Duration", 2200, 800, 5000, 100);
+    public final ModeValue ModeValue = new ModeValue("Mode", "Dynamic Island").withDefault("Dynamic Island");
+    public final NumberValue durationSetting = new NumberValue("Duration", 2200, 800, 5000, 100);
     private final List<IslandNotification> queue = new ArrayList<>();
 
     public Notification() {
@@ -37,7 +37,7 @@ public class Notification extends Module {
 
     private boolean canSubmitToIsland() {
         return this.isEnabled()
-                && this.modeSetting.is("Dynamic Island")
+                && this.ModeValue.is("Dynamic Island")
                 && DynamicIsland.INSTANCE != null
                 && DynamicIsland.INSTANCE.isEnabled()
                 && DynamicIsland.INSTANCE.isLiquidGlassMode();

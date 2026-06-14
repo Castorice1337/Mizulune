@@ -21,7 +21,9 @@ import shit.zen.event.impl.EntityRemoveEvent;
 import shit.zen.event.impl.RenderEvent;
 import shit.zen.modules.Category;
 import shit.zen.modules.Module;
-import shit.zen.settings.impl.NumberSetting;
+import shit.zen.value.MizuColor;
+import shit.zen.value.Value;
+import shit.zen.value.ValueGroup;
 import shit.zen.event.EventTarget;
 
 public class DamageGlow extends Module {
@@ -36,14 +38,22 @@ public class DamageGlow extends Module {
     public static DamageGlow INSTANCE;
 
     private final Map<Integer, List<EntitySnapshot>> glowingEntities = new ConcurrentHashMap<>();
-    private final NumberSetting colorRSetting = new NumberSetting("Color R", 0, 0, 255, 1);
-    private final NumberSetting colorGSetting = new NumberSetting("Color G", 0, 0, 255, 1);
-    private final NumberSetting colorBSetting = new NumberSetting("Color B", 0, 0, 255, 1);
-    private final NumberSetting alphaSetting = new NumberSetting("Alpha", 45.0, 0.0, 255.0, 1.0);
+    private Value<MizuColor> glowColor;
 
     public DamageGlow() {
         super("DamageGlow", Category.RENDER);
         INSTANCE = this;
+    }
+
+    @Override
+    protected void configureValueTree(ValueGroup root) {
+        ValueGroup glow = root.group("glow", "Glow");
+        this.glowColor = glow.color("color", "Color", MizuColor.ofArgb(45, 0, 0, 0))
+                .alias("Color")
+                .alias("Color R")
+                .alias("Color G")
+                .alias("Color B")
+                .alias("Alpha");
     }
 
     @Override
@@ -143,10 +153,11 @@ public class DamageGlow extends Module {
                 model.setupAnim(entity, snapshot.walkAnimPos, snapshot.walkAnimSpeed, snapshot.tickCount, snapshot.headYawDelta, snapshot.pitch);
                 RenderType type = RenderType.entityTranslucentEmissive(renderer.getTextureLocation(entity));
                 VertexConsumer consumer = bufferSource.getBuffer(type);
-                float r = this.colorRSetting.getValue().intValue() / 255.0f;
-                float g = this.colorGSetting.getValue().intValue() / 255.0f;
-                float b = this.colorBSetting.getValue().intValue() / 255.0f;
-                float a = this.alphaSetting.getValue().intValue() / 255.0f * intensity;
+                MizuColor color = this.glowColor.getValue();
+                float r = color.red() / 255.0f;
+                float g = color.green() / 255.0f;
+                float b = color.blue() / 255.0f;
+                float a = color.alpha() / 255.0f * intensity;
                 model.renderToBuffer(poseStack, consumer, 0xF000F0,
                         LivingEntityRenderer.getOverlayCoords(entity, 0.0f), r, g, b, a);
                 poseStack.popPose();
@@ -162,4 +173,5 @@ public class DamageGlow extends Module {
         if (remaining <= 0L) return 0.0f;
         return Math.min(1.0f, remaining / 1500.0f);
     }
+
 }

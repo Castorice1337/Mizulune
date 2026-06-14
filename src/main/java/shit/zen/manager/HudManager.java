@@ -11,6 +11,7 @@ import shit.zen.event.impl.TickEvent;
 import shit.zen.gui.IntroAnimation;
 import shit.zen.hud.HudElement;
 import shit.zen.hud.KeyBindsHud;
+import shit.zen.hud.KeystrokesModule;
 import shit.zen.hud.LieDetector;
 import shit.zen.hud.ModuleListHud;
 import shit.zen.hud.PlayerListHud;
@@ -32,6 +33,7 @@ public class HudManager {
         this.registerHudElement(new PlayerListHud());
         this.registerHudElement(new PotionEffectsHud());
         this.registerHudElement(new LieDetector());
+        this.registerHudElement(new KeystrokesModule());
     }
 
     private void registerHudElement(HudElement hudElement) {

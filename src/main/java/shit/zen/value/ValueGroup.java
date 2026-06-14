@@ -32,7 +32,17 @@ public class ValueGroup extends Value<List<Value<?>>> {
     }
 
     public void clearChildren() {
+        for (Value<?> child : this.children) {
+            this.detach(child);
+        }
         this.children.clear();
+    }
+
+    private void detach(Value<?> child) {
+        if (child instanceof ValueGroup group) {
+            group.clearChildren();
+        }
+        child.setParent(null);
     }
 
     public <T extends Value<?>> T add(T value) {

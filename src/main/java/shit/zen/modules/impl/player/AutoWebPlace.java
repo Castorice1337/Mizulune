@@ -35,8 +35,8 @@ import shit.zen.event.impl.TickEvent;
 import shit.zen.modules.Category;
 import shit.zen.modules.Module;
 import shit.zen.modules.impl.combat.KillAura;
-import shit.zen.settings.impl.BooleanSetting;
-import shit.zen.settings.impl.NumberSetting;
+import shit.zen.value.impl.BooleanValue;
+import shit.zen.value.impl.NumberValue;
 import shit.zen.utils.animation.TickTimer;
 import shit.zen.utils.game.PlayerUtil;
 import shit.zen.utils.game.RotationUtil;
@@ -50,13 +50,13 @@ public class AutoWebPlace extends Module {
     public static AutoWebPlace INSTANCE;
     public static Rotation targetRotation;
 
-    public final NumberSetting rangeSetting = new NumberSetting("Range", 4.0, 3.0, 5.0, 0.1);
-    public final NumberSetting delaySetting = new NumberSetting("Delay", 4.0, 1.0, 20.0, 1.0);
-    public final BooleanSetting renderSetting = new BooleanSetting("Render", true);
-    public final BooleanSetting groundWebSetting = new BooleanSetting("Ground Web", false);
-    public final BooleanSetting lavaSetting = new BooleanSetting("Lava", true);
-    public final BooleanSetting lavaWaitWaterBucketSetting = new BooleanSetting("Lava Wait Water Bucket", true);
-    public final BooleanSetting debugSetting = new BooleanSetting("Debug", true);
+    public final NumberValue rangeSetting = new NumberValue("Range", 4.0, 3.0, 5.0, 0.1);
+    public final NumberValue delaySetting = new NumberValue("Delay", 4.0, 1.0, 20.0, 1.0);
+    public final BooleanValue renderSetting = new BooleanValue("Render", true);
+    public final BooleanValue groundWebSetting = new BooleanValue("Ground Web", false);
+    public final BooleanValue lavaSetting = new BooleanValue("Lava", true);
+    public final BooleanValue lavaWaitWaterBucketSetting = new BooleanValue("Lava Wait Water Bucket", true);
+    public final BooleanValue debugSetting = new BooleanValue("Debug", true);
 
     private final TickTimer placementTimer = new TickTimer();
     private Phase placementPhase = Phase.IDLE;

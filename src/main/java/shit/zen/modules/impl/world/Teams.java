@@ -6,12 +6,12 @@ import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.player.Player;
 import shit.zen.modules.Category;
 import shit.zen.modules.Module;
-import shit.zen.settings.impl.ModeSetting;
+import shit.zen.value.impl.ModeValue;
 
 public class Teams
 extends Module {
     public static Teams instance;
-    public static ModeSetting mode;
+    public static ModeValue mode;
 
     public Teams() {
         super("Teams", Category.WORLD);
@@ -47,6 +47,6 @@ extends Module {
     }
 
     static {
-        mode = new ModeSetting("Mode", "Color", "Scoreboard").withDefault("Scoreboard");
+        mode = new ModeValue("Mode", "Color", "Scoreboard").withDefault("Scoreboard");
     }
 }

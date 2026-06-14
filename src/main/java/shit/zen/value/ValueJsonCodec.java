@@ -87,7 +87,7 @@ public final class ValueJsonCodec {
     private static Object readString(Value<?> value, String raw) {
         return switch (value.getType()) {
             case BOOLEAN -> Boolean.parseBoolean(raw);
-            case INTEGER, KEY_BIND -> clampNumber(value, Integer.parseInt(raw), true);
+            case INTEGER, KEY_BIND -> clampNumber(value, Double.parseDouble(raw), true);
             case DECIMAL -> clampNumber(value, Double.parseDouble(raw), false);
             case ENUM -> readEnum(value, raw);
             case MULTI_ENUM -> List.of(raw.split(","));

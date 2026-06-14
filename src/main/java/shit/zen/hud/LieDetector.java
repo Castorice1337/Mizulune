@@ -6,7 +6,7 @@ import net.minecraft.world.entity.LivingEntity;
 import shit.zen.event.impl.GlRenderEvent;
 import shit.zen.event.impl.Render2DEvent;
 import shit.zen.modules.impl.combat.KillAura;
-import shit.zen.settings.impl.BooleanSetting;
+import shit.zen.value.impl.BooleanValue;
 import shit.zen.utils.animation.SmoothAnimationTimer;
 import shit.zen.utils.animation.Timer;
 import shit.zen.utils.math.Easings;
@@ -24,7 +24,7 @@ extends HudElement {
     float panelDisplayHeight = 68.0f;
     float panelWidth = 50.0f;
     float pointerHeight = 16.5f;
-    private final BooleanSetting soundSetting = new BooleanSetting("PlaySound", false);
+    private final BooleanValue soundSetting = new BooleanValue("PlaySound", false);
     final Timer soundTimer = new Timer();
 
     public LieDetector() {
@@ -72,7 +72,4 @@ extends HudElement {
         this.pointerTexture = TextureUtil.loadTexture("ptr.png");
     }
 
-    @Override
-    public void onSettings() {
-    }
 }

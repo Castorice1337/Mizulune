@@ -1,40 +1,28 @@
 package shit.zen.gui.newclickgui;
 
 import com.mojang.blaze3d.vertex.PoseStack;
-import java.util.ArrayList;
-import java.util.Iterator;
 import java.util.List;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.Generated;
 import net.minecraft.client.gui.GuiGraphics;
 import shit.zen.gui.NewClickGui;
-import shit.zen.gui.newclickgui.BooleanSettingElement;
 import shit.zen.gui.newclickgui.CategoryPanel;
-import shit.zen.gui.newclickgui.ModeSettingElement;
-import shit.zen.gui.newclickgui.MultiSelectSettingElement;
-import shit.zen.gui.newclickgui.NumberSettingElement;
-import shit.zen.gui.newclickgui.SettingElement;
 import shit.zen.gui.newclickgui.UIElement;
+import shit.zen.gui.newclickgui.ValueTreeElementRenderer;
 import shit.zen.modules.Module;
 import shit.zen.render.FontStore;
-import shit.zen.settings.Setting;
-import shit.zen.settings.impl.BooleanSetting;
-import shit.zen.settings.impl.ModeSetting;
-import shit.zen.settings.impl.MultiSelectSetting;
-import shit.zen.settings.impl.NumberSetting;
 import shit.zen.utils.animation.SmoothAnimationTimer;
 import shit.zen.utils.math.Easings;
 import shit.zen.utils.misc.CursorUtil;
 import shit.zen.utils.render.ColorUtil;
 import shit.zen.utils.render.RenderHelper;
 import shit.zen.utils.render.RenderUtil;
+import shit.zen.value.Value;
 
 public class ModuleElement
 extends UIElement {
     public static final int BG_COLOR;
-    @Getter
-    private final List<SettingElement<?>> settingElements = new ArrayList<>();
     @Getter
     private final CategoryPanel parentPanel;
     @Getter
@@ -58,22 +46,6 @@ extends UIElement {
     public ModuleElement(CategoryPanel categoryPanel, Module module) {
         this.parentPanel = categoryPanel;
         this.module = module;
-        for (Setting setting : module.getSettings()) {
-            if (setting instanceof BooleanSetting booleanSetting) {
-                this.settingElements.add(new BooleanSettingElement(categoryPanel, booleanSetting));
-                continue;
-            }
-            if (setting instanceof ModeSetting modeSetting) {
-                this.settingElements.add(new ModeSettingElement(categoryPanel, modeSetting));
-                continue;
-            }
-            if (setting instanceof MultiSelectSetting multiSelectSetting) {
-                this.settingElements.add(new MultiSelectSettingElement(categoryPanel, multiSelectSetting));
-                continue;
-            }
-            if (!(setting instanceof NumberSetting numberSetting)) continue;
-            this.settingElements.add(new NumberSettingElement(categoryPanel, numberSetting));
-        }
     }
 
     @Override
@@ -82,9 +54,10 @@ extends UIElement {
         float titleWidth;
         float enabledAmount;
         float settingsTotalHeight = 0.0f;
-        for (SettingElement settingElement : this.settingElements) {
-            if (!settingElement.getSetting().getVisibility().displayable()) continue;
-            settingsTotalHeight += settingElement.getHeight();
+        ValueTreeElementRenderer renderer = ValueTreeElementRenderer.getInstance();
+        List<Value<?>> values = this.visibleValues();
+        for (Value<?> value : values) {
+            settingsTotalHeight += renderer.getHeight(value);
         }
         this.settingsHeightTimer.animate(settingsTotalHeight, 0.2, Easings.EASE_OUT_POW2);
         this.settingsHeightTimer.tick();
@@ -112,7 +85,7 @@ extends UIElement {
             RenderUtil.drawShadow(poseStack, this.posX + (120.0f - titleWidth) / 2.0f, titleY + FontStore.AXIFORMA_BOLD_16.getFontHeight() / 4.0f, titleWidth, FontStore.AXIFORMA_BOLD_16.getFontHeight() / 2.0f, 12, ColorUtil.withAlpha(-13768502, alpha * enabledAmount * 0.36f));
             FontStore.AXIFORMA_BOLD_16.drawStringCentered(poseStack, this.module.getName(), this.posX + 60.0f, titleY, ColorUtil.withAlpha(-13768502, alpha * enabledAmount));
         }
-        if (!this.module.getSettings().isEmpty()) {
+        if (this.hasValues()) {
             String arrowIcon = String.valueOf('\ueb4e');
             titleY = FontStore.MATERIAL_20.getStringWidth(arrowIcon);
             float arrowX = this.posX + 120.0f - titleY - 6.0f;
@@ -123,11 +96,10 @@ extends UIElement {
         }
         if (this.isExpanded) {
             titleWidth = this.posY + 20.0f;
-            for (SettingElement settingElement : this.settingElements) {
-                settingElement.setX(this.posX);
-                settingElement.setY(titleWidth);
-                settingElement.render(clickGui, guiGraphics, poseStack, mouseX, mouseY, alpha * expandAmount, partialTicks);
-                titleWidth += settingElement.getAnimatedHeight() * settingElement.getVisibilityTimer().getValueF();
+            int valueX = Math.round(this.posX);
+            for (Value<?> value : values) {
+                int height = renderer.render(this.parentPanel, clickGui, guiGraphics, poseStack, value, valueX, titleWidth, mouseX, mouseY, alpha * expandAmount, partialTicks);
+                titleWidth += height;
             }
         }
     }
@@ -140,16 +112,22 @@ extends UIElement {
         if (CursorUtil.isInBounds((float) mouseX, (float) mouseY, this.posX, this.posY, 120.0f, 20.0f)) {
             if (button == 0) {
                 this.module.toggleFromUser();
-            } else if (button == 1 && !this.module.getSettings().isEmpty()) {
+            } else if (button == 1 && this.hasValues()) {
                 this.isExpanded = !this.isExpanded;
             }
             return true;
         }
         if (CursorUtil.isInBounds((float) mouseX, (float) mouseY, this.posX, this.posY + 20.0f, 120.0f, this.totalHeight - 20.0f)) {
-            for (SettingElement<?> settingElement : this.settingElements) {
-                if (settingElement.getSetting().getVisibility().displayable() && settingElement.mouseClicked(mouseX, mouseY, button)) {
+            int valueX = Math.round(this.posX);
+            int valueY = Math.round(this.posY + 20.0f);
+            ValueTreeElementRenderer renderer = ValueTreeElementRenderer.getInstance();
+            for (Value<?> value : this.visibleValues()) {
+                int height = renderer.getHeight(value);
+                if (mouseY >= valueY && mouseY <= valueY + height
+                        && renderer.onClick(value, valueX, valueY, (int)mouseX, (int)mouseY, button)) {
                     return true;
                 }
+                valueY += height;
             }
         }
         return this.isHovered;
@@ -157,12 +135,16 @@ extends UIElement {
 
     @Override
     public boolean mouseReleased(double mouseX, double mouseY, int button) {
-        for (SettingElement<?> settingElement : this.settingElements) {
-            if (settingElement.mouseReleased(mouseX, mouseY, button)) {
-                return true;
-            }
-        }
+        ValueTreeElementRenderer.getInstance().onMouseRelease(mouseX, mouseY, button);
         return false;
+    }
+
+    private List<Value<?>> visibleValues() {
+        return this.module.getValueTree().getVisibleChildren();
+    }
+
+    private boolean hasValues() {
+        return !this.visibleValues().isEmpty();
     }
 
     @Override

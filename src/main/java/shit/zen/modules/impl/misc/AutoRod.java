@@ -8,16 +8,16 @@ import shit.zen.event.impl.TickEvent;
 import shit.zen.modules.Category;
 import shit.zen.modules.Module;
 import shit.zen.modules.impl.player.MidPearl;
-import shit.zen.settings.impl.ModeSetting;
-import shit.zen.settings.impl.NumberSetting;
+import shit.zen.value.impl.ModeValue;
+import shit.zen.value.impl.NumberValue;
 import shit.zen.utils.game.PlayerUtil;
 import shit.zen.event.EventTarget;
 
 public class AutoRod
 extends Module {
     public static AutoRod INSTANCE;
-    private final ModeSetting mouseButton = new ModeSetting("Button", "Middle", "Mouse 4", "Mouse 5").withDefault("Mouse 4");
-    private final NumberSetting delay = new NumberSetting("Delay", 2, 0, 20, 1);
+    private final ModeValue mouseButton = new ModeValue("Button", "Middle", "Mouse 4", "Mouse 5").withDefault("Mouse 4");
+    private final NumberValue delay = new NumberValue("Delay", 2, 0, 20, 1);
     private boolean slotSwitched = false;
     private boolean isActive = false;
     private int previousSlot = -1;

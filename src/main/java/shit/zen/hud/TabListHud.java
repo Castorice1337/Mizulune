@@ -104,7 +104,7 @@ implements IHudElement {
                 headerHeight = 20.0f;
                 String title = "Player List (" + players.size() + ")";
                 float titleX = x + (width - headerFont.getWidth(title)) / 2.0f;
-                GlHelper.drawTextShadowLegacy(title, titleX, y + 10.0f + headerFont.getMetrics().ascent() + 15.0f, headerFont, -1);
+                GlHelper.drawTextWithShadow(title, titleX, y + 10.0f + headerFont.getMetrics().ascent() + 15.0f, headerFont, -1);
             }
             if (players.isEmpty() && (footer == null || footer.getString().isEmpty())) {
                 return;

@@ -6,14 +6,14 @@ import shit.zen.event.impl.PacketEvent;
 import shit.zen.event.impl.TickEvent;
 import shit.zen.modules.Category;
 import shit.zen.modules.Module;
-import shit.zen.settings.impl.NumberSetting;
+import shit.zen.value.impl.NumberValue;
 import shit.zen.utils.misc.ChatUtil;
 import shit.zen.event.EventTarget;
 
 public class AutoPlay
 extends Module {
     public static AutoPlay instance;
-    private final NumberSetting delay = new NumberSetting("Delay", 2.0, 0.0, 10.0, 0.1);
+    private final NumberValue delay = new NumberValue("Delay", 2.0, 0.0, 10.0, 0.1);
     public long disconnectTime = -1L;
     public boolean pendingDisconnect = false;
     public long reconnectTime = -1L;
@@ -52,14 +52,14 @@ extends Module {
             return;
         }
         if (packetEvent.getPacket() instanceof ClientboundSystemChatPacket chatPacket) {
-            String message = chatPacket.content().getString().replaceAll("§[0-9a-fk-or]", "").trim();
-            if (message.contains("地图评分")) {
+            String message = chatPacket.content().getString().replaceAll("\u00a7[0-9a-fk-or]", "").trim();
+            if (message.contains("\u5730\u56fe\u8bc4\u5206")) {
                 ChatUtil.print("1");
                 if (this.disconnectTime == -1L) {
                     this.disconnectTime = System.currentTimeMillis();
                     this.pendingDisconnect = true;
                 }
-            } else if (message.contains("游戏将在 1 秒 后开始")) {
+            } else if (message.contains("\u6e38\u620f\u5c06\u5728 1 \u79d2 \u540e\u5f00\u59cb")) {
                 ChatUtil.print("2");
                 this.disconnectTime = -1L;
                 this.pendingDisconnect = false;
@@ -87,7 +87,7 @@ extends Module {
         }
     }
 
-    public NumberSetting getDelay() {
+    public NumberValue getDelay() {
         return this.delay;
     }
 }

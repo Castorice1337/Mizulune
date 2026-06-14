@@ -160,7 +160,7 @@ extends TargetStyle {
             }
             float slideOff = this.slideAnim.getValueF();
             String displayName = target == mc.player ? NameProtect.getProtectedName() : target.getName().getString();
-            GlHelper.drawTextShadowLegacy(displayName, contentX, nameY + 1.0f + slideOff, this.nameFont, new Color(1.0f, 1.0f, 1.0f, fade).getRGB());
+            GlHelper.drawTextWithShadow(displayName, contentX, nameY + 1.0f + slideOff, this.nameFont, new Color(1.0f, 1.0f, 1.0f, fade).getRGB());
             float healthY = belowNameY + 16.0f;
             float healthH = 4.0f;
             float healthW = contentWidth - 2.0f;

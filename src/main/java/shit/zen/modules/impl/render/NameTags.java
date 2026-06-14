@@ -6,20 +6,20 @@ import shit.zen.event.impl.RenderEvent;
 import shit.zen.modules.Category;
 import shit.zen.modules.Module;
 import shit.zen.modules.impl.render.nametag.NameTagStyle;
-import shit.zen.settings.impl.BooleanSetting;
-import shit.zen.settings.impl.ModeSetting;
-import shit.zen.settings.impl.NumberSetting;
+import shit.zen.value.impl.BooleanValue;
+import shit.zen.value.impl.ModeValue;
+import shit.zen.value.impl.NumberValue;
 import shit.zen.event.EventTarget;
 
 public class NameTags
 extends Module {
     public static NameTags INSTANCE;
-    public final ModeSetting styleSetting = new ModeSetting("Style", "Opal", "Simple").withDefault("Opal");
-    public final NumberSetting scaleSetting = new NumberSetting("Scale", 0.3, 0.1, 1.0, 0.01);
-    public final NumberSetting distanceSetting = new NumberSetting("Max Distance", 64.0, 8.0, 256.0, 1.0);
-    public final BooleanSetting showHealthSetting = new BooleanSetting("Invisibles", false);
-    public final BooleanSetting showArmorSetting = new BooleanSetting("Show Artifacts", true);
-    public final BooleanSetting showPingSetting = new BooleanSetting("Hide Teammates", false);
+    public final ModeValue styleSetting = new ModeValue("Style", "Opal", "Simple").withDefault("Opal");
+    public final NumberValue scaleSetting = new NumberValue("Scale", 0.3, 0.1, 1.0, 0.01);
+    public final NumberValue distanceSetting = new NumberValue("Max Distance", 64.0, 8.0, 256.0, 1.0);
+    public final BooleanValue showHealthSetting = new BooleanValue("Invisibles", false);
+    public final BooleanValue showArmorSetting = new BooleanValue("Show Artifacts", true);
+    public final BooleanValue showPingSetting = new BooleanValue("Hide Teammates", false);
 
     public NameTags() {
         super("NameTags", Category.RENDER);

@@ -21,7 +21,7 @@ import shit.zen.modules.Category;
 import shit.zen.modules.Module;
 import shit.zen.modules.impl.movement.Scaffold;
 import shit.zen.modules.impl.player.Stuck;
-import shit.zen.settings.impl.NumberSetting;
+import shit.zen.value.impl.NumberValue;
 import shit.zen.utils.animation.Timer;
 import shit.zen.utils.game.PlayerUtil;
 import shit.zen.utils.game.RotationUtil;
@@ -32,9 +32,9 @@ import shit.zen.event.EventTarget;
 public class AutoThrow
 extends Module {
     public static AutoThrow INSTANCE;
-    private final NumberSetting minDistance = new NumberSetting("Min Distance", 5, 3, 30, 1);
-    private final NumberSetting maxDistance = new NumberSetting("Max Distance", 10, 3, 30, 1);
-    private final NumberSetting throwDelay = new NumberSetting("Delay", 500, 50, 2000, 50);
+    private final NumberValue minDistance = new NumberValue("Min Distance", 5, 3, 30, 1);
+    private final NumberValue maxDistance = new NumberValue("Max Distance", 10, 3, 30, 1);
+    private final NumberValue throwDelay = new NumberValue("Delay", 500, 50, 2000, 50);
     private final Timer throwTimer = new Timer();
     public Rotation targetRotation;
     public int ticksUntilThrow;

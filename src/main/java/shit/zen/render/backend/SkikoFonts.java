@@ -34,8 +34,8 @@ final class SkikoFonts {
         }
         int baseColor = toArgb(baseR, baseG, baseB, alpha);
         int baseAlpha = baseColor & 0xFF000000;
-        float startX = roundLegacy(x);
-        float topY = roundLegacy(y - 1.0f);
+        float startX = roundLayout(x);
+        float topY = roundLayout(y - 1.0f);
         float ascent = customFont.getFontMetrics().getAscent() / (float)Math.max(1, customFont.getScale());
         float penX = startX;
         float penTopY = topY;
@@ -135,7 +135,7 @@ final class SkikoFonts {
         return Math.max(0, Math.min(255, Math.round(scaled)));
     }
 
-    private static float roundLegacy(float value) {
+    private static float roundLayout(float value) {
         return (float)Math.round(value * 10.0f) / 10.0f;
     }
 }

@@ -2,6 +2,9 @@ package shit.zen.utils.rotation;
 
 import net.minecraft.network.protocol.game.ServerboundChatPacket;
 import net.minecraft.network.protocol.game.ServerboundMovePlayerPacket;
+import java.util.Comparator;
+import java.util.List;
+import java.util.concurrent.CopyOnWriteArrayList;
 import shit.zen.ClientBase;
 import shit.zen.ZenClient;
 import shit.zen.event.impl.CameraPitchEvent;
@@ -36,21 +39,110 @@ import shit.zen.event.EventTarget;
 
 public class RotationHandler
 extends ClientBase {
+    private static final List<RotationProvider> ROTATION_PROVIDERS = new CopyOnWriteArrayList<>();
+    private static final RotationSmoother PROVIDER_SMOOTHER = new RotationSmoother();
     public static Rotation targetRotation;
     public static Rotation prevRotation;
     public static Rotation sentRotation;
     public static Rotation prevSentRotation;
     public static boolean isRotating;
+    private static RotationProvider activeProvider;
+    private static boolean movementFixing;
+    private static RotationApplyMode activeApplyMode;
 
     public static void setTargetRotation(Rotation rotation) {
+        RotationHandler.setTargetRotation(rotation, true);
+    }
+
+    public static void setTargetRotation(Rotation rotation, boolean fixMovement) {
+        RotationHandler.setTargetRotation(rotation, fixMovement, RotationApplyMode.SILENT);
+    }
+
+    public static void setTargetRotation(Rotation rotation, boolean fixMovement, RotationApplyMode applyMode) {
+        if (rotation == null) {
+            return;
+        }
         targetRotation = rotation;
+        movementFixing = fixMovement;
+        activeApplyMode = applyMode == null ? RotationApplyMode.SILENT : applyMode;
         ClientBase.yaw = rotation.getYaw();
+        if (activeApplyMode == RotationApplyMode.CHANGE_LOOK) {
+            RotationHandler.applyToLocalCamera(rotation);
+        }
+    }
+
+    public static void registerProvider(RotationProvider provider) {
+        if (provider != null && !ROTATION_PROVIDERS.contains(provider)) {
+            ROTATION_PROVIDERS.add(provider);
+        }
+    }
+
+    public static void unregisterProvider(RotationProvider provider) {
+        ROTATION_PROVIDERS.remove(provider);
+        if (activeProvider == provider) {
+            RotationHandler.clearRotationState();
+        }
+    }
+
+    public static Rotation getSmoothedRotation(RotationProvider provider) {
+        if (provider != null && provider == activeProvider && isRotating && targetRotation != null) {
+            return targetRotation.clone();
+        }
+        return null;
+    }
+
+    private static RotationProvider resolveProvider() {
+        return ROTATION_PROVIDERS.stream()
+                .filter(provider -> provider.isRotationActive()
+                        && provider.getApplyMode() != RotationApplyMode.OFF
+                        && provider.getRotation() != null)
+                .max(Comparator.comparingInt(RotationProvider::getRotationPriority))
+                .orElse(null);
+    }
+
+    private static void applyToLocalCamera(Rotation rotation) {
+        if (mc.player == null) {
+            return;
+        }
+        mc.player.setYRot(rotation.getYaw());
+        mc.player.setXRot(rotation.getPitch());
+        mc.player.yRotO = rotation.getYaw();
+        mc.player.xRotO = rotation.getPitch();
+    }
+
+    private static Rotation smoothProviderRotation(RotationProvider provider) {
+        return PROVIDER_SMOOTHER.update(
+                provider.getRotation(),
+                provider.getSmoothMode(),
+                provider.getSmoothDurationTicks(),
+                provider.getSmoothSteepness(),
+                provider.getMaxYawSpeed(),
+                provider.getMaxPitchSpeed(),
+                provider.getMinStep(),
+                provider.getRotationEpsilon(),
+                provider.shouldHumanizeRotation());
+    }
+
+    private static void clearActiveProvider() {
+        activeProvider = null;
+        PROVIDER_SMOOTHER.reset();
+    }
+
+    private static void clearRotationState() {
+        RotationHandler.clearActiveProvider();
+        isRotating = false;
+        movementFixing = false;
+        activeApplyMode = RotationApplyMode.OFF;
+        targetRotation = null;
     }
 
     @EventTarget
     public void onWorldChange(WorldChangeEvent worldChangeEvent) {
         prevRotation = null;
         targetRotation = null;
+        RotationHandler.clearActiveProvider();
+        movementFixing = false;
+        activeApplyMode = RotationApplyMode.OFF;
     }
 
     @EventTarget(value=0)
@@ -93,34 +185,55 @@ extends ClientBase {
             AutoThrow autoThrow = AutoThrow.INSTANCE;
             AntiKB antiKB = AntiKB.INSTANCE;
             MidPearl midPearl = MidPearl.INSTANCE;
+            RotationProvider provider = RotationHandler.resolveProvider();
             isRotating = true;
-            if (autoMLG != null && autoMLG.isEnabled() && autoMLG.targetRotation != null) {
+            if (provider != null) {
+                activeProvider = provider;
+                Rotation smoothed = RotationHandler.smoothProviderRotation(provider);
+                if (smoothed != null) {
+                    RotationHandler.setTargetRotation(smoothed, provider.shouldFixMovement(), provider.getApplyMode());
+                } else {
+                    RotationHandler.clearRotationState();
+                }
+            } else if (autoMLG != null && autoMLG.isEnabled() && autoMLG.targetRotation != null) {
+                RotationHandler.clearActiveProvider();
                 RotationHandler.setTargetRotation(autoMLG.targetRotation);
                 autoMLG.targetRotation = null;
             } else if (crystalAura != null && crystalAura.isEnabled() && CrystalAura.aimRotation != null) {
+                RotationHandler.clearActiveProvider();
                 RotationHandler.setTargetRotation(CrystalAura.aimRotation);
             } else if (fireballBlink != null && fireballBlink.isEnabled() && FireballBlink.rotation != null) {
+                RotationHandler.clearActiveProvider();
                 RotationHandler.setTargetRotation(FireballBlink.rotation);
             } else if (midPearl != null && midPearl.isEnabled() && MidPearl.targetRotation != null) {
+                RotationHandler.clearActiveProvider();
                 RotationHandler.setTargetRotation(MidPearl.targetRotation);
             } else if (antiTNT != null && antiTNT.isEnabled() && AntiTNT.targetRotation != null) {
+                RotationHandler.clearActiveProvider();
                 RotationHandler.setTargetRotation(AntiTNT.targetRotation);
             } else if (helper != null && helper.isEnabled() && helper.hasTargetRotation() && Helper.targetRotation != null) {
+                RotationHandler.clearActiveProvider();
                 RotationHandler.setTargetRotation(Helper.targetRotation);
             } else if (antiWeb != null && antiWeb.isEnabled() && AntiWeb.currentPhase != AntiWeb.Phase.IDLE && AntiWeb.targetRotation != null) {
+                RotationHandler.clearActiveProvider();
                 RotationHandler.setTargetRotation(AntiWeb.targetRotation);
             } else if (autoWebPlace != null && autoWebPlace.isEnabled() && AutoWebPlace.targetRotation != null) {
+                RotationHandler.clearActiveProvider();
                 RotationHandler.setTargetRotation(AutoWebPlace.targetRotation);
             } else if (autoThrow != null && autoThrow.isEnabled() && autoThrow.targetRotation != null) {
+                RotationHandler.clearActiveProvider();
                 RotationHandler.setTargetRotation(autoThrow.targetRotation);
             } else if (scaffold != null && scaffold.isEnabled() && scaffold.rots != null) {
+                RotationHandler.clearActiveProvider();
                 RotationHandler.setTargetRotation(scaffold.rots);
             } else if (killAura != null && killAura.isEnabled() && KillAura.target != null && killAura.rotation != null) {
+                RotationHandler.clearActiveProvider();
                 RotationHandler.setTargetRotation(new Rotation(killAura.rotation.getYaw(), killAura.rotation.getPitch()));
             } else if (antiKB != null && antiKB.isEnabled() && AntiKB.rotation != null) {
+                RotationHandler.clearActiveProvider();
                 RotationHandler.setTargetRotation(AntiKB.rotation);
             } else {
-                isRotating = false;
+                RotationHandler.clearRotationState();
             }
         }
     }
@@ -170,7 +283,7 @@ extends ClientBase {
 
     @EventTarget
     public void onStrafe(StrafeEvent strafeEvent) {
-        if (isRotating && targetRotation != null) {
+        if (isRotating && movementFixing && targetRotation != null) {
             float yaw = targetRotation.getYaw();
             MovementUtil.handleStrafe(strafeEvent, yaw);
         }
@@ -194,26 +307,28 @@ extends ClientBase {
 
     @EventTarget
     public void onRotation(RotationEvent rotationEvent) {
-        if (isRotating && targetRotation != null) {
+        if (isRotating && movementFixing && targetRotation != null) {
             rotationEvent.setYaw(targetRotation.getYaw());
         }
     }
 
     @EventTarget
     public void onJump(JumpMarkerEvent jumpMarkerEvent) {
-        if (isRotating && targetRotation != null) {
+        if (isRotating && movementFixing && targetRotation != null) {
             jumpMarkerEvent.setYaw(targetRotation.getYaw());
         }
     }
 
     @EventTarget
     public void onFallFlying(FallFlyingEvent fallFlyingEvent) {
-        if (targetRotation != null) {
+        if (isRotating && targetRotation != null) {
             fallFlyingEvent.setPitch(targetRotation.getPitch());
         }
     }
 
     static {
         isRotating = false;
+        movementFixing = false;
+        activeApplyMode = RotationApplyMode.OFF;
     }
 }

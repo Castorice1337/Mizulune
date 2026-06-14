@@ -10,13 +10,13 @@ import shit.zen.event.impl.ChatReceiveEvent;
 import shit.zen.event.impl.DisconnectEvent;
 import shit.zen.modules.Category;
 import shit.zen.modules.Module;
-import shit.zen.settings.impl.ModeSetting;
+import shit.zen.value.impl.ModeValue;
 import shit.zen.event.EventTarget;
 
 public class NameProtect
 extends Module {
     public static NameProtect INSTANCE;
-    private final ModeSetting modeSetting = new ModeSetting("Mode", "Fixed", "Random").withDefault("Fixed");
+    private final ModeValue ModeValue = new ModeValue("Mode", "Fixed", "Random").withDefault("Fixed");
     private String cachedRandomName = null;
     private final Random random = new Random();
 
@@ -27,7 +27,7 @@ extends Module {
 
     @EventTarget
     public void onDisconnect(DisconnectEvent disconnectEvent) {
-        if (this.modeSetting.is("Random")) {
+        if (this.ModeValue.is("Random")) {
             this.cachedRandomName = null;
         }
     }

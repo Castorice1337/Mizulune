@@ -5,8 +5,8 @@ import net.minecraft.world.item.Items;
 import shit.zen.event.impl.SprintEvent;
 import shit.zen.modules.Category;
 import shit.zen.modules.Module;
-import shit.zen.settings.impl.BooleanSetting;
-import shit.zen.settings.impl.NumberSetting;
+import shit.zen.value.impl.BooleanValue;
+import shit.zen.value.impl.NumberValue;
 import shit.zen.utils.animation.Timer;
 import shit.zen.utils.game.ItemUtil;
 import shit.zen.utils.game.PlayerUtil;
@@ -15,10 +15,10 @@ import shit.zen.event.EventTarget;
 public class AutoSoup
 extends Module {
     public static AutoSoup INSTANCE;
-    private final NumberSetting health = new NumberSetting("Health", 15, 0, 20, 1);
-    private final NumberSetting delay = new NumberSetting("Delay", 300, 0, 1000, 1);
-    private final NumberSetting switchDelay = new NumberSetting("Switch Delay", 100, 0, 1000, 1);
-    private final BooleanSetting drop = new BooleanSetting("Drop", true);
+    private final NumberValue health = new NumberValue("Health", 15, 0, 20, 1);
+    private final NumberValue delay = new NumberValue("Delay", 300, 0, 1000, 1);
+    private final NumberValue switchDelay = new NumberValue("Switch Delay", 100, 0, 1000, 1);
+    private final BooleanValue drop = new BooleanValue("Drop", true);
     private final Timer switchDelayTimer = new Timer();
     private final Timer delayTimer = new Timer();
     private int prevSelectedSlot = -1;

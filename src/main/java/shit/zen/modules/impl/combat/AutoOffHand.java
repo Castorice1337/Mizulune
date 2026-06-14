@@ -17,8 +17,8 @@ import net.minecraft.world.phys.Vec3;
 import shit.zen.event.impl.TickEvent;
 import shit.zen.modules.Category;
 import shit.zen.modules.Module;
-import shit.zen.settings.impl.BooleanSetting;
-import shit.zen.settings.impl.NumberSetting;
+import shit.zen.value.impl.BooleanValue;
+import shit.zen.value.impl.NumberValue;
 import shit.zen.utils.misc.PacketUtil;
 import shit.zen.utils.misc.ThreadPool;
 import shit.zen.event.EventTarget;
@@ -28,11 +28,11 @@ public class AutoOffHand extends Module {
 
     public enum ItemType { SNOWBALL, GAPPLE, NONE }
 
-    public final NumberSetting range = new NumberSetting("Range", 6.0, 1.0, 12.0, 0.5);
-    public final BooleanSetting gapple = new BooleanSetting("Gapple", true);
-    public final BooleanSetting snowball = new BooleanSetting("SnowBall", true);
-    public final NumberSetting health = new NumberSetting("Health", 10.0, 1.0, 20.0, 0.5);
-    public final BooleanSetting revertOnRegen = new BooleanSetting("RevertOnRegen", true);
+    public final NumberValue range = new NumberValue("Range", 6.0, 1.0, 12.0, 0.5);
+    public final BooleanValue gapple = new BooleanValue("Gapple", true);
+    public final BooleanValue snowball = new BooleanValue("SnowBall", true);
+    public final NumberValue health = new NumberValue("Health", 10.0, 1.0, 20.0, 0.5);
+    public final BooleanValue revertOnRegen = new BooleanValue("RevertOnRegen", true);
     private int equipCooldown = 0;
 
     public AutoOffHand() {

@@ -38,15 +38,15 @@ public class NeverloseWatermark {
         float blurRadius = 15.0f;
         float zenWidth = this.measureText("MIZULUNE", this.boldFont);
         currentX += zenWidth + gap;
-        currentX = this.renderSectionLegacy(render2DEvent.poseStack(), currentX, y, this.getServerName(), this.smallFont, "\uE8A6", cornerRadius, blurRadius, gap);
-        currentX = this.renderSectionLegacy(render2DEvent.poseStack(), currentX, y, this.getPingText(), this.regularFont, "\uE8B8", cornerRadius, blurRadius, gap);
-        currentX = this.renderSectionLegacy(render2DEvent.poseStack(), currentX, y, this.getFpsText(), this.regularFont, "\uEBCA", cornerRadius, blurRadius, gap);
-        currentX = this.renderSectionLegacy(render2DEvent.poseStack(), currentX, y, this.getTimeText(), this.regularFont, "\uEB66", cornerRadius, blurRadius, gap);
-        currentX = this.renderSectionLegacy(render2DEvent.poseStack(), currentX, y, this.getCpsText(), this.regularFont, "\uE0C8", cornerRadius, blurRadius, gap);
-        this.renderSectionLegacy(render2DEvent.poseStack(), currentX, y, this.getCoordText(), this.regularFont, "\uE192", cornerRadius, blurRadius, gap);
+        currentX = this.measureSection(render2DEvent.poseStack(), currentX, y, this.getServerName(), this.smallFont, "\uE8A6", cornerRadius, blurRadius, gap);
+        currentX = this.measureSection(render2DEvent.poseStack(), currentX, y, this.getPingText(), this.regularFont, "\uE8B8", cornerRadius, blurRadius, gap);
+        currentX = this.measureSection(render2DEvent.poseStack(), currentX, y, this.getFpsText(), this.regularFont, "\uEBCA", cornerRadius, blurRadius, gap);
+        currentX = this.measureSection(render2DEvent.poseStack(), currentX, y, this.getTimeText(), this.regularFont, "\uEB66", cornerRadius, blurRadius, gap);
+        currentX = this.measureSection(render2DEvent.poseStack(), currentX, y, this.getCpsText(), this.regularFont, "\uE0C8", cornerRadius, blurRadius, gap);
+        this.measureSection(render2DEvent.poseStack(), currentX, y, this.getCoordText(), this.regularFont, "\uE192", cornerRadius, blurRadius, gap);
     }
 
-    private float renderSectionLegacy(PoseStack poseStack, float x, float y, String text, FontRenderer fontRenderer, String icon, float cornerRadius, float blurRadius, float gap) {
+    private float measureSection(PoseStack poseStack, float x, float y, String text, FontRenderer fontRenderer, String icon, float cornerRadius, float blurRadius, float gap) {
         float sectionWidth = this.measureTextWithSub(text, fontRenderer, icon);
         return x + sectionWidth + gap;
     }
@@ -61,12 +61,12 @@ public class NeverloseWatermark {
         float gap = 6.0f;
         float cornerRadius = 4.5f;
         currentX = this.renderSection(glRenderEvent.drawContext(), currentX, y, "MIZULUNE", this.boldFont, cornerRadius, gap);
-        currentX = this.renderSectionWithSub(glRenderEvent.drawContext(), currentX, y, this.getServerName(), this.smallFont, "", cornerRadius, gap);
-        currentX = this.renderSectionWithSub(glRenderEvent.drawContext(), currentX, y, this.getPingText(), this.regularFont, "", cornerRadius, gap);
-        currentX = this.renderSectionWithSub(glRenderEvent.drawContext(), currentX, y, this.getFpsText(), this.regularFont, "", cornerRadius, gap);
-        currentX = this.renderSectionWithSub(glRenderEvent.drawContext(), currentX, y, this.getTimeText(), this.regularFont, "", cornerRadius, gap);
-        currentX = this.renderSectionWithSub(glRenderEvent.drawContext(), currentX, y, this.getCpsText(), this.regularFont, "", cornerRadius, gap);
-        this.renderSectionWithSub(glRenderEvent.drawContext(), currentX, y, this.getCoordText(), this.regularFont, "", cornerRadius, gap);
+        currentX = this.renderSectionWithSub(glRenderEvent.drawContext(), currentX, y, this.getServerName(), this.smallFont, "\uE8A6", cornerRadius, gap);
+        currentX = this.renderSectionWithSub(glRenderEvent.drawContext(), currentX, y, this.getPingText(), this.regularFont, "\uE8B8", cornerRadius, gap);
+        currentX = this.renderSectionWithSub(glRenderEvent.drawContext(), currentX, y, this.getFpsText(), this.regularFont, "\uEBCA", cornerRadius, gap);
+        currentX = this.renderSectionWithSub(glRenderEvent.drawContext(), currentX, y, this.getTimeText(), this.regularFont, "\uEB66", cornerRadius, gap);
+        currentX = this.renderSectionWithSub(glRenderEvent.drawContext(), currentX, y, this.getCpsText(), this.regularFont, "\uE0C8", cornerRadius, gap);
+        this.renderSectionWithSub(glRenderEvent.drawContext(), currentX, y, this.getCoordText(), this.regularFont, "\uE192", cornerRadius, gap);
     }
 
     private float renderSection(DrawContext drawContext, float x, float y, String text, FontRenderer fontRenderer, float cornerRadius, float gap) {
@@ -76,7 +76,7 @@ public class NeverloseWatermark {
         float boxWidth = padding + textWidth + padding - 5.0f;
         GlHelper.drawRoundedRect(x, y, boxWidth, boxHeight, cornerRadius, this.backgroundPaint);
         float textY = y + (boxHeight - (float)GlHelper.getFontAscent(fontRenderer)) / 2.0f + 3.5f;
-        GlHelper.drawTextShadowLegacy(text, x + padding - 2.0f, textY, fontRenderer, this.textPaint.getColor());
+        GlHelper.drawTextWithShadow(text, x + padding - 2.0f, textY, fontRenderer, this.textPaint.getColor());
         return x + boxWidth + gap;
     }
 
@@ -88,9 +88,9 @@ public class NeverloseWatermark {
         float boxWidth = padding + iconWidth + 5.0f + textWidth + padding - 4.0f;
         GlHelper.drawRoundedRect(x, y, boxWidth, boxHeight, cornerRadius, this.backgroundPaint);
         float iconY = y + (boxHeight - (float)GlHelper.getFontAscent(this.tinyFont)) / 2.0f + 3.0f;
-        GlHelper.drawTextShadowLegacy(icon, x + padding - 1.0f, iconY, this.tinyFont, this.accentPaint.getColor());
+        GlHelper.drawTextWithShadow(icon, x + padding - 1.0f, iconY, this.tinyFont, this.accentPaint.getColor());
         float textY = y + (boxHeight - (float)GlHelper.getFontAscent(fontRenderer)) / 2.0f + 1.0f;
-        GlHelper.drawTextShadowLegacy(text, x + padding + iconWidth + 5.0f - 3.0f, textY, fontRenderer, this.textPaint.getColor());
+        GlHelper.drawTextWithShadow(text, x + padding + iconWidth + 5.0f - 3.0f, textY, fontRenderer, this.textPaint.getColor());
         return x + boxWidth + gap;
     }
 

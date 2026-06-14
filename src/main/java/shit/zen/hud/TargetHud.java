@@ -14,8 +14,8 @@ import shit.zen.event.impl.PacketEvent;
 import shit.zen.event.impl.Render2DEvent;
 import shit.zen.hud.target.TargetStyle;
 import shit.zen.modules.impl.combat.KillAura;
-import shit.zen.settings.impl.BooleanSetting;
-import shit.zen.settings.impl.ModeSetting;
+import shit.zen.value.impl.BooleanValue;
+import shit.zen.value.impl.ModeValue;
 import shit.zen.utils.animation.SmoothAnimationTimer;
 import shit.zen.utils.math.Easings;
 import shit.zen.event.EventTarget;
@@ -27,8 +27,8 @@ extends HudElement {
     public static final Map<String, AtomicInteger> playerHealthMap = new HashMap<>();
     private float lastHealth;
     private float healthDelta;
-    private final ModeSetting styleMode = new ModeSetting("Mode", "Round", "Lite").withDefault("Lite");
-    private final BooleanSetting liquidGlass = new BooleanSetting("Liquid Glass", true, () -> this.styleMode.is("Lite"));
+    private final ModeValue styleMode = new ModeValue("Mode", "Round", "Lite").withDefault("Lite");
+    private final BooleanValue liquidGlass = new BooleanValue("Liquid Glass", true, () -> this.styleMode.is("Lite"));
 
     public TargetHud() {
         super("TargetHUD");
@@ -46,10 +46,6 @@ extends HudElement {
                 playerHealthMap.computeIfAbsent(clientboundSetScorePacket.getOwner(), string -> new AtomicInteger()).set(clientboundSetScorePacket.getScore());
             }
         }
-    }
-
-    @Override
-    public void onSettings() {
     }
 
     @Override

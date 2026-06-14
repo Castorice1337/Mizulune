@@ -16,7 +16,7 @@ import shit.zen.event.impl.PreMotionEvent;
 import shit.zen.event.impl.TickEvent;
 import shit.zen.modules.Category;
 import shit.zen.modules.Module;
-import shit.zen.settings.impl.BooleanSetting;
+import shit.zen.value.impl.BooleanValue;
 import shit.zen.utils.game.RotationUtil;
 import shit.zen.utils.misc.PacketUtil;
 import shit.zen.utils.rotation.Rotation;
@@ -28,7 +28,7 @@ extends Module {
     public static CrystalAura INSTANCE;
     public static Rotation aimRotation;
     private Entity crystalTarget;
-    public final BooleanSetting attackOnPacket = new BooleanSetting("Attack on Packet (Danger)", false);
+    public final BooleanValue attackOnPacket = new BooleanValue("Attack on Packet (Danger)", false);
 
     public CrystalAura() {
         super("CrystalAura", Category.COMBAT);

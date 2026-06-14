@@ -8,10 +8,13 @@ import java.util.Map;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.util.Mth;
 import shit.zen.gui.PanelClickGui;
+import shit.zen.gui.value.ValueColorPicker;
+import shit.zen.render.CustomFont;
 import shit.zen.manager.ConfigManager;
 import shit.zen.render.FontPresets;
 import shit.zen.render.FontRenderer;
 import shit.zen.render.GlHelper;
+import shit.zen.render.Renderer;
 import shit.zen.render.TextGlow;
 import shit.zen.utils.render.RenderUtil;
 import shit.zen.value.GradientSpec;
@@ -25,6 +28,7 @@ import shit.zen.value.ValueType;
 
 public final class ValueRendererRegistry {
     private static final ValueRendererRegistry INSTANCE = new ValueRendererRegistry();
+    private static final ValueColorPicker COLOR_PICKER = ValueColorPicker.getInstance();
     private final Map<Value<?>, Boolean> expanded = new HashMap<>();
 
     private ValueRendererRegistry() {
@@ -115,6 +119,7 @@ public final class ValueRendererRegistry {
     }
 
     public void onMouseRelease(double mouseX, double mouseY, int button) {
+        COLOR_PICKER.onMouseRelease();
     }
 
     private int renderGroupHeader(GuiGraphics guiGraphics, ValueGroup group, int x, int y, int width, float alpha, float scale) {
@@ -126,7 +131,7 @@ public final class ValueRendererRegistry {
                 ? new Color(255, 255, 255, 10).getRGB()
                 : new Color(255, 255, 255, 16).getRGB();
         RenderUtil.drawRoundedRect(guiGraphics.pose(), x, y + Math.round(3.0f * scale), width, rowHeight - Math.round(6.0f * scale), 4.0f * scale, this.applyAlpha(bg, alpha));
-        TextGlow.drawGlowText(prefix + group.getDisplayName(), x + Math.round(6.0f * scale), textY, font,
+        this.drawText(guiGraphics, prefix + group.getDisplayName(), x + Math.round(6.0f * scale), textY, font,
                 this.applyAlpha(0xFFEAF7FF, alpha), this.applyAlpha(0x66FFFFFF, alpha), 6.0f * scale);
         if (group instanceof ToggleValueGroup toggleGroup) {
             this.drawToggle(guiGraphics, x + width - Math.round(28.0f * scale), y + Math.round(7.0f * scale), toggleGroup.isEnabled(), alpha, scale);
@@ -140,9 +145,10 @@ public final class ValueRendererRegistry {
     private int renderLeaf(GuiGraphics guiGraphics, Value<?> value, int x, int y, int width,
                            int mouseX, int mouseY, float alpha, float scale) {
         int rowHeight = this.leafHeight(value, scale);
+        int baseHeight = this.leafBaseHeight(scale);
         FontRenderer nameFont = FontPresets.axiformaRegular(13.0f * scale);
         float nameY = y + Math.round(24.0f * scale) / 2.0f - nameFont.getMetrics().capHeight() / 2.0f;
-        TextGlow.drawGlowText(value.getDisplayName(), x + Math.round(3.0f * scale), nameY, nameFont,
+        this.drawText(guiGraphics, value.getDisplayName(), x + Math.round(3.0f * scale), nameY, nameFont,
                 this.applyAlpha(-1, alpha), this.applyAlpha(new Color(255, 255, 255, 90).getRGB(), alpha), 6.0f * scale);
 
         switch (value.getType()) {
@@ -160,6 +166,9 @@ public final class ValueRendererRegistry {
             default -> this.drawPill(guiGraphics, String.valueOf(value.getValue()),
                     x + width - Math.round(110.0f * scale), y + Math.round(5.0f * scale), Math.round(104.0f * scale), Math.round(14.0f * scale), alpha, scale);
         }
+        if (value.getType() == ValueType.COLOR || value.getType() == ValueType.GRADIENT) {
+            COLOR_PICKER.render(guiGraphics.pose(), value, x, y + baseHeight, width, mouseX, mouseY, alpha, scale);
+        }
         return rowHeight;
     }
 
@@ -170,7 +179,7 @@ public final class ValueRendererRegistry {
             if (button == 0 && inBounds(mouseX, mouseY, toggleX, toggleY, Math.round(20.0f * scale), Math.round(10.0f * scale))) {
                 toggleGroup.setEnabled(!toggleGroup.isEnabled());
                 ConfigManager.saveAllIfReady();
-                PanelClickGui.panelClickGui.addToast(group.getDisplayName() + (toggleGroup.isEnabled() ? " On" : " Off"));
+                this.addToast(group.getDisplayName() + (toggleGroup.isEnabled() ? " On" : " Off"));
                 return true;
             }
         }
@@ -195,6 +204,11 @@ public final class ValueRendererRegistry {
         if (button != 0 && button != 1) {
             return false;
         }
+        int baseHeight = this.leafBaseHeight(scale);
+        if ((value.getType() == ValueType.COLOR || value.getType() == ValueType.GRADIENT)
+                && COLOR_PICKER.onClick(value, x, y + baseHeight, width, mouseX, mouseY, button, scale)) {
+            return true;
+        }
         switch (value.getType()) {
             case BOOLEAN -> {
                 value.setRawValue(!Boolean.TRUE.equals(value.getValue()));
@@ -215,13 +229,11 @@ public final class ValueRendererRegistry {
                 return this.onMultiEnumClick((Value<List<String>>)value, x, y + Math.round(22.0f * scale), width, mouseX, mouseY, scale);
             }
             case COLOR -> {
-                this.cycleColor((Value<MizuColor>)value, button);
-                ConfigManager.saveAllIfReady();
+                COLOR_PICKER.toggle(value, ValueColorPicker.Channel.SINGLE);
                 return true;
             }
             case GRADIENT -> {
-                this.cycleGradient((Value<GradientSpec>)value, button);
-                ConfigManager.saveAllIfReady();
+                COLOR_PICKER.toggle(value, this.gradientChannel(value, x, width, mouseX, button, scale));
                 return true;
             }
             case INT_RANGE, DECIMAL_RANGE -> {
@@ -289,30 +301,6 @@ public final class ValueRendererRegistry {
         return false;
     }
 
-    private void cycleColor(Value<MizuColor> value, int button) {
-        MizuColor color = value.getValue();
-        if (button == 1) {
-            value.setValue(color.withAlpha(Math.floorMod(color.alpha() - 16, 256)));
-            return;
-        }
-        float[] hsb = color.toHsb();
-        value.setValue(MizuColor.ofHsb((hsb[0] + 0.045f) % 1.0f, hsb[1], hsb[2], color.alpha()));
-    }
-
-    private void cycleGradient(Value<GradientSpec> value, int button) {
-        GradientSpec gradient = value.getValue();
-        if (button == 1) {
-            value.setValue(new GradientSpec(gradient.start(), this.shiftHue(gradient.end())));
-        } else {
-            value.setValue(new GradientSpec(this.shiftHue(gradient.start()), gradient.end()));
-        }
-    }
-
-    private MizuColor shiftHue(MizuColor color) {
-        float[] hsb = color.toHsb();
-        return MizuColor.ofHsb((hsb[0] + 0.045f) % 1.0f, hsb[1], hsb[2], color.alpha());
-    }
-
     private void bumpRange(Value<NumericRange> value, boolean upper, double direction) {
         NumericRange range = value.getValue();
         double step = range.step() <= 0.0 ? 1.0 : range.step();
@@ -340,7 +328,7 @@ public final class ValueRendererRegistry {
             boolean on = selected.contains(option);
             int color = on ? 0xFF8FD694 : 0xFFAAAAAA;
             float textY = y + rowHeight / 2.0f - font.getMetrics().capHeight() / 2.0f;
-            GlHelper.drawText((on ? "[x] " : "[ ] ") + option, x + Math.round(8.0f * scale), textY, font, this.applyAlpha(color, alpha));
+            this.drawText(guiGraphics, (on ? "[x] " : "[ ] ") + option, x + Math.round(8.0f * scale), textY, font, this.applyAlpha(color, alpha));
             y += rowHeight;
         }
     }
@@ -381,7 +369,34 @@ public final class ValueRendererRegistry {
         }
         float textX = x + (width - GlHelper.getStringWidth(clipped, font)) / 2.0f;
         float textY = y + height / 2.0f - font.getMetrics().capHeight() / 2.0f;
-        GlHelper.drawText(clipped, textX, textY, font, this.applyAlpha(0xFFEAF7FF, alpha));
+        this.drawText(guiGraphics, clipped, textX, textY, font, this.applyAlpha(0xFFEAF7FF, alpha));
+    }
+
+    private float drawText(GuiGraphics guiGraphics, String text, float x, float y, FontRenderer fontRenderer, int color) {
+        return this.drawText(guiGraphics, text, x, y, fontRenderer, color, 0, 0.0f);
+    }
+
+    private float drawText(GuiGraphics guiGraphics, String text, float x, float y, FontRenderer fontRenderer,
+                           int color, int glowColor, float radius) {
+        if (Renderer.getCanvas() != null) {
+            return TextGlow.drawGlowText(text, x, y, fontRenderer, color, glowColor, radius);
+        }
+        CustomFont customFont = fontRenderer.getFont();
+        if (customFont == null) {
+            return x;
+        }
+        if ((glowColor >>> 24) > 0 && radius > 0.0f) {
+            customFont.drawStringWithShadow(guiGraphics.pose(), text, x, y, color);
+        } else {
+            customFont.drawString(guiGraphics.pose(), text, x, y, color);
+        }
+        return x + customFont.getStringWidth(text);
+    }
+
+    private void addToast(String message) {
+        if (PanelClickGui.panelClickGui != null) {
+            PanelClickGui.panelClickGui.addToast(message);
+        }
     }
 
     private int groupHeaderHeight(float scale) {
@@ -392,7 +407,25 @@ public final class ValueRendererRegistry {
         if (value.getType() == ValueType.MULTI_ENUM && value.getMetadata().get("options") instanceof List<?> options) {
             return Math.round(22.0f * scale) + Math.round(options.size() * 18.0f * scale);
         }
+        int height = this.leafBaseHeight(scale);
+        if (value.getType() == ValueType.COLOR || value.getType() == ValueType.GRADIENT) {
+            height += COLOR_PICKER.getExtraHeight(value, scale);
+        }
+        return height;
+    }
+
+    private int leafBaseHeight(float scale) {
         return Math.round(24.0f * scale);
+    }
+
+    private ValueColorPicker.Channel gradientChannel(Value<?> value, int x, int width, int mouseX, int button, float scale) {
+        if (button == 1) {
+            return ValueColorPicker.Channel.GRADIENT_END;
+        }
+        int swatchX = x + width - Math.round(98.0f * scale);
+        int swatchSize = Math.round(14.0f * scale);
+        int endX = swatchX + swatchSize + Math.round(4.0f * scale);
+        return mouseX >= endX ? ValueColorPicker.Channel.GRADIENT_END : ValueColorPicker.Channel.GRADIENT_START;
     }
 
     private boolean isExpanded(ValueGroup group) {

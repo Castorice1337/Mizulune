@@ -16,7 +16,7 @@ import shit.zen.event.impl.TickEvent;
 import shit.zen.modules.Category;
 import shit.zen.modules.Module;
 import shit.zen.modules.impl.movement.Scaffold;
-import shit.zen.settings.impl.NumberSetting;
+import shit.zen.value.impl.NumberValue;
 import shit.zen.utils.game.MotionSimulator;
 import shit.zen.utils.game.PlayerUtil;
 import shit.zen.utils.misc.PacketUtil;
@@ -25,7 +25,7 @@ import shit.zen.event.EventTarget;
 public class AntiVoid
 extends Module {
     public static AntiVoid INSTANCE;
-    private final NumberSetting fallDistanceSetting = new NumberSetting("Fall Distance", 5.0, 1.0, 10.0, 0.5);
+    private final NumberValue fallDistanceSetting = new NumberValue("Fall Distance", 5.0, 1.0, 10.0, 0.5);
     private final LinkedBlockingDeque<Packet<ServerGamePacketListener>> bufferedPackets = new LinkedBlockingDeque();
     private boolean scaffoldWasActive = false;
     public boolean bufferingPackets = false;

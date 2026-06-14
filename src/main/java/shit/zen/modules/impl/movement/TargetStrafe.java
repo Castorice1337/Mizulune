@@ -8,8 +8,8 @@ import shit.zen.event.impl.SneakEvent;
 import shit.zen.modules.Category;
 import shit.zen.modules.Module;
 import shit.zen.modules.impl.combat.KillAura;
-import shit.zen.settings.impl.BooleanSetting;
-import shit.zen.settings.impl.NumberSetting;
+import shit.zen.value.impl.BooleanValue;
+import shit.zen.value.impl.NumberValue;
 import shit.zen.utils.animation.Timer;
 import shit.zen.utils.game.MovementUtil;
 import shit.zen.event.EventTarget;
@@ -18,9 +18,9 @@ public class TargetStrafe
 extends Module {
     public static TargetStrafe INSTANCE;
     private final Timer collisionTimer = new Timer();
-    private final BooleanSetting smartStrafe = new BooleanSetting("Jump Key Only", true);
-    private final NumberSetting range = new NumberSetting("Range", 0.5f, 0.1f, 2.0f, 0.1f);
-    private final NumberSetting switchDelay = new NumberSetting("Switch Delay", 1000, 100, 5000, 100);
+    private final BooleanValue smartStrafe = new BooleanValue("Jump Key Only", true);
+    private final NumberValue range = new NumberValue("Range", 0.5f, 0.1f, 2.0f, 0.1f);
+    private final NumberValue switchDelay = new NumberValue("Switch Delay", 1000, 100, 5000, 100);
     public static int strafeDirectionSign;
     public static Entity strafeTarget;
     private final Timer switchTimer = new Timer();

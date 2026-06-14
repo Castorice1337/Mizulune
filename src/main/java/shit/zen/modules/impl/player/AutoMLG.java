@@ -13,8 +13,8 @@ import net.minecraft.world.phys.Vec3;
 import shit.zen.event.impl.TickEvent;
 import shit.zen.modules.Category;
 import shit.zen.modules.Module;
-import shit.zen.settings.impl.BooleanSetting;
-import shit.zen.settings.impl.NumberSetting;
+import shit.zen.value.impl.BooleanValue;
+import shit.zen.value.impl.NumberValue;
 import shit.zen.utils.game.ItemUtil;
 import shit.zen.utils.game.RotationUtil;
 import shit.zen.utils.rotation.Rotation;
@@ -23,10 +23,10 @@ import shit.zen.event.EventTarget;
 public class AutoMLG
 extends Module {
     public static AutoMLG INSTANCE;
-    private final NumberSetting triggerDistanceSetting = new NumberSetting("Fall distance", 3.0f, 1.0f, 10.0f, 0.1f);
-    private final NumberSetting predictTicksSetting = new NumberSetting("Predict Ticks", 2.0f, 1.0f, 5.0f, 1.0f);
-    private final BooleanSetting solidCheckSetting = new BooleanSetting("Solid check", true);
-    private final BooleanSetting recoverySetting = new BooleanSetting("Recorvey", true);
+    private final NumberValue triggerDistanceSetting = new NumberValue("Fall distance", 3.0f, 1.0f, 10.0f, 0.1f);
+    private final NumberValue predictTicksSetting = new NumberValue("Predict Ticks", 2.0f, 1.0f, 5.0f, 1.0f);
+    private final BooleanValue solidCheckSetting = new BooleanValue("Solid check", true);
+    private final BooleanValue recoverySetting = new BooleanValue("Recorvey", true);
     public Rotation targetRotation = null;
     private float accumulatedFall;
     private double lastY;

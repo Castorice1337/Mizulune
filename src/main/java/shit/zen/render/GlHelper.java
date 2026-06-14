@@ -124,11 +124,8 @@ public final class GlHelper {
         return GlHelper.drawTextFormatted(text, x, y, fontRenderer, paint, false);
     }
 
-    public static float drawTextShadowLegacy(String text, float x, float y, FontRenderer fontRenderer, int color) {
-        Paint paint = GlHelper.toPaint(color);
-        float alpha = (float)(color >> 24 & 0xFF) / 255.0f;
-        GlHelper.drawTextFormatted(text, x + 0.5f, y + 0.5f, fontRenderer, GlHelper.toPaint(ColorUtil.fromARGB(0, 0, 0, (int)(alpha * 0.65f * 255.0f))), true);
-        return GlHelper.drawTextFormatted(text, x, y, fontRenderer, paint, false);
+    public static float drawTextWithShadow(String text, float x, float y, FontRenderer fontRenderer, int color) {
+        return GlHelper.drawTextWithShadow(text, x, y, fontRenderer, GlHelper.toPaint(color));
     }
 
     public static float drawTextBlurred(String text, float x, float y, FontRenderer fontRenderer, int color, int blurColor, float radius) {

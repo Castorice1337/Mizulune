@@ -13,7 +13,6 @@ import org.lwjgl.opengl.GL33;
 import shit.zen.ClientBase;
 import com.mojang.blaze3d.vertex.PoseStack;
 import shit.zen.render.backend.BackendType;
-import shit.zen.render.backend.LegacyGlBackend;
 import shit.zen.render.backend.RenderBackend;
 import shit.zen.render.backend.SkikoBackend;
 
@@ -22,9 +21,7 @@ extends ClientBase {
     private static float guiScale = 1.0f;
     private static boolean verified = false;
     private static DrawContext currentCanvas;
-    private static final RenderBackend LEGACY_BACKEND = new LegacyGlBackend();
-    private static boolean backendFailed = false;
-    private static BackendType configuredBackend = BackendType.fromProperty(System.getProperty("mizulune.render.backend"));
+    private static BackendType configuredBackend = BackendType.SKIKO;
     private static RenderBackend backend = Renderer.createBackend(configuredBackend);
 
     public static DrawContext getCanvas() {
@@ -32,18 +29,15 @@ extends ClientBase {
     }
 
     public static boolean isSkikoEnabled() {
-        return configuredBackend == BackendType.SKIKO && !backendFailed && backend.handles2D();
+        return backend != null && backend.handles2D();
     }
 
     public static boolean canUseSkiko2D(PoseStack poseStack) {
         if (!Renderer.isSkikoEnabled()) {
             return false;
         }
-        if (StencilHelper.isStencilActive()) {
-            return false;
-        }
         if (currentCanvas != null) {
-            return currentCanvas.getBackend() == backend && currentCanvas.getBackend().handles2D();
+            return currentCanvas.getBackend() != null && currentCanvas.getBackend() == backend && currentCanvas.getBackend().handles2D();
         }
         return Renderer.isGuiAffinePose(poseStack);
     }
@@ -57,25 +51,27 @@ extends ClientBase {
     }
 
     public static BackendType getActiveBackendType() {
-        return Renderer.getEffectiveBackend().type();
+        return configuredBackend;
     }
 
     public static boolean isBackendFailed() {
-        return backendFailed;
+        return backend == null;
     }
 
     public static String getBackendDebugSummary() {
         RenderBackend effectiveBackend = Renderer.getEffectiveBackend();
+        if (effectiveBackend == null) {
+            return "SkikoBackend unavailable";
+        }
         return effectiveBackend.getClass().getSimpleName() + " " + effectiveBackend.debugSummary();
     }
 
     public static void setBackend(BackendType type) {
-        BackendType nextBackend = type == null ? BackendType.SKIKO : type;
-        if (configuredBackend == nextBackend && !backendFailed && backend != null) {
+        BackendType nextBackend = BackendType.SKIKO;
+        if (configuredBackend == nextBackend && backend != null) {
             return;
         }
         configuredBackend = nextBackend;
-        backendFailed = false;
         backend = Renderer.createBackend(configuredBackend);
     }
 
@@ -162,11 +158,15 @@ extends ClientBase {
                 return;
             }
         }
+        if (backend == null) {
+            logger.error("Skiko render backend is unavailable; skipping 2D render pass");
+            return;
+        }
         if (currentCanvas != null) {
             PoseStack requestedPoseStack = poseStack != null
                     ? poseStack
                     : guiGraphics != null ? guiGraphics.pose() : null;
-            RenderBackend effectiveBackend = Renderer.getEffectiveBackend(requestedPoseStack);
+            RenderBackend effectiveBackend = backend;
             if (effectiveBackend != currentCanvas.getBackend()) {
                 boolean ownsExternalGlSection = currentCanvas.getBackend() != null
                         && currentCanvas.getBackend().handles2D()
@@ -204,7 +204,7 @@ extends ClientBase {
         PoseStack effectivePoseStack = poseStack != null
                 ? poseStack
                 : guiGraphics != null ? guiGraphics.pose() : null;
-        RenderBackend effectiveBackend = Renderer.getEffectiveBackend(effectivePoseStack);
+        RenderBackend effectiveBackend = backend;
         boolean applyInitialPose = effectivePoseStack != null && effectiveBackend.handles2D();
         DrawContext drawContext = effectivePoseStack == null
                 ? new DrawContext(guiGraphics, effectiveBackend)
@@ -220,12 +220,7 @@ extends ClientBase {
             }
             consumer.accept(drawContext);
         } catch (Throwable throwable) {
-            if (effectiveBackend.handles2D()) {
-                logger.error("Render backend {} failed, falling back to legacy OpenGL", effectiveBackend.type(), throwable);
-                backendFailed = true;
-            } else {
-                throw new RuntimeException(throwable);
-            }
+            logger.error("Render backend {} failed; skipping 2D render pass", effectiveBackend.type(), throwable);
         } finally {
             drawContext.clearClipStack();
             if (effectiveBackend.handles2D()) {
@@ -234,14 +229,12 @@ extends ClientBase {
                         effectiveBackend.popExternalPose();
                     } catch (Throwable throwable) {
                         logger.error("Render backend {} failed while restoring external pose", effectiveBackend.type(), throwable);
-                        backendFailed = true;
                     }
                 }
                 try {
                     effectiveBackend.end();
                 } catch (Throwable throwable) {
-                    logger.error("Render backend {} failed during end, falling back to legacy OpenGL", effectiveBackend.type(), throwable);
-                    backendFailed = true;
+                    logger.error("Render backend {} failed during end; no alternate backend is available", effectiveBackend.type(), throwable);
                 }
             }
             currentCanvas = previousCanvas;
@@ -262,29 +255,16 @@ extends ClientBase {
     }
 
     private static RenderBackend getEffectiveBackend() {
-        return Renderer.getEffectiveBackend(null);
-    }
-
-    private static RenderBackend getEffectiveBackend(PoseStack poseStack) {
-        if (backendFailed || backend == null) {
-            return LEGACY_BACKEND;
-        }
-        if (backend.handles2D() && !Renderer.canUseSkiko2D(poseStack)) {
-            return LEGACY_BACKEND;
-        }
         return backend;
     }
 
     private static RenderBackend createBackend(BackendType type) {
-        if (type == BackendType.SKIKO) {
-            try {
-                return new SkikoBackend();
-            } catch (Throwable throwable) {
-                logger.error("Failed to create Skiko backend, using legacy OpenGL", throwable);
-                backendFailed = true;
-            }
+        try {
+            return new SkikoBackend();
+        } catch (Throwable throwable) {
+            logger.error("Failed to create Skiko backend; no alternate backend is available", throwable);
+            return null;
         }
-        return LEGACY_BACKEND;
     }
 
     private static boolean isGuiAffinePose(PoseStack poseStack) {

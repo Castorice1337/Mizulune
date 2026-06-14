@@ -234,7 +234,7 @@ extends HudElement {
         Packet<?> packet = packetEvent.getPacket();
         if (packet instanceof ClientboundEntityEventPacket && (entityEventPacket = (ClientboundEntityEventPacket)packet).getEventId() == 35 && (entity = entityEventPacket.getEntity(mc.level)) instanceof Player) {
             player = (Player)entity;
-            ChatUtil.print("§e[提示] §f" + player.getName().getString() + " 触发了不死图腾!");
+            ChatUtil.print("§e[提示] §f" + player.getName().getString() + " 触发了不死图�?");
             this.updatePlayerItem(player, Items.TOTEM_OF_UNDYING);
         }
         if (packet instanceof ClientboundSetEntityDataPacket dataPacket
@@ -343,10 +343,10 @@ extends HudElement {
         if (!this.rightAlignAnim.isDone()) {
             float prevSideFade = 1.0f - this.rightAlignAnim.getValueF();
             leftFade = this.rightAlignAnim.getValueF();
-            this.renderLegacy(guiGraphics.pose(), finalX, y, panelWidth, this.rightAlign, globalAlpha * prevSideFade, entryHeight, spacing, cornerRadius, blurStrength, padding);
-            this.renderLegacy(guiGraphics.pose(), finalX, y, panelWidth, this.wasRightAligned, globalAlpha * leftFade, entryHeight, spacing, cornerRadius, blurStrength, padding);
+            this.renderBlurLayer(guiGraphics.pose(), finalX, y, panelWidth, this.rightAlign, globalAlpha * prevSideFade, entryHeight, spacing, cornerRadius, blurStrength, padding);
+            this.renderBlurLayer(guiGraphics.pose(), finalX, y, panelWidth, this.wasRightAligned, globalAlpha * leftFade, entryHeight, spacing, cornerRadius, blurStrength, padding);
         } else {
-            this.renderLegacy(guiGraphics.pose(), finalX, y, panelWidth, this.wasRightAligned, globalAlpha, entryHeight, spacing, cornerRadius, blurStrength, padding);
+            this.renderBlurLayer(guiGraphics.pose(), finalX, y, panelWidth, this.wasRightAligned, globalAlpha, entryHeight, spacing, cornerRadius, blurStrength, padding);
         }
         DrawContext drawContext = glRenderEvent.drawContext();
         if (!this.rightAlignAnim.isDone()) {
@@ -373,7 +373,7 @@ extends HudElement {
         this.setHeight(entryY - y);
     }
 
-    private void renderLegacy(PoseStack poseStack, float x, float y, float width, boolean rightAligned, float alpha, float entryHeight, float spacing, float cornerRadius, float blurStrength, float padding) {
+    private void renderBlurLayer(PoseStack poseStack, float x, float y, float width, boolean rightAligned, float alpha, float entryHeight, float spacing, float cornerRadius, float blurStrength, float padding) {
         if (alpha <= 0.01f) {
             return;
         }
@@ -436,7 +436,7 @@ extends HudElement {
                     GlHelper.drawPlayerHeadRounded((AbstractClientPlayer)entry.player, headDrawX, contentY, headSize, headSize, entryAlpha, spacing);
                 }
                 float nameX = headDrawX - spacing - entry.nameWidth;
-                GlHelper.drawTextShadowLegacy(entry.displayName, nameX, nameY, this.headerFont, nameAlpha);
+                GlHelper.drawTextWithShadow(entry.displayName, nameX, nameY, this.headerFont, nameAlpha);
                 continue;
             }
             if (entry.player instanceof AbstractClientPlayer) {
@@ -444,7 +444,7 @@ extends HudElement {
                 GlHelper.drawPlayerHeadRounded((AbstractClientPlayer)entry.player, headX, contentY, headSize, headSize, entryAlpha, spacing);
             }
             headX = entryX + padding + headSize + spacing;
-            GlHelper.drawTextShadowLegacy(entry.displayName, headX, nameY, this.headerFont, nameAlpha);
+            GlHelper.drawTextWithShadow(entry.displayName, headX, nameY, this.headerFont, nameAlpha);
         }
     }
 
@@ -495,7 +495,4 @@ extends HudElement {
         guiGraphics.flush();
     }
 
-    @Override
-    public void onSettings() {
-    }
 }

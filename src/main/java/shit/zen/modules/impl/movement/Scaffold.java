@@ -40,9 +40,9 @@ import shit.zen.event.impl.UpdateHeldItemEvent;
 import shit.zen.modules.Category;
 import shit.zen.modules.Module;
 import shit.zen.modules.impl.render.DynamicIsland;
-import shit.zen.settings.impl.BooleanSetting;
-import shit.zen.settings.impl.ModeSetting;
-import shit.zen.settings.impl.NumberSetting;
+import shit.zen.value.impl.BooleanValue;
+import shit.zen.value.impl.ModeValue;
+import shit.zen.value.impl.NumberValue;
 import shit.zen.utils.game.BlockUtil;
 import shit.zen.utils.game.MotionSimulator;
 import shit.zen.utils.game.MovementUtil;
@@ -59,14 +59,14 @@ import shit.zen.event.EventTarget;
 public class Scaffold extends Module {
     public static Scaffold INSTANCE;
 
-    public final ModeSetting mode = new ModeSetting("Mode", "Normal", "Telly Bridge", "Old Telly", "Keep Y").withDefault("Normal");
-    public final BooleanSetting eagle = new BooleanSetting("Eagle", true, () -> this.mode.is("Normal"));
-    public final BooleanSetting sneak = new BooleanSetting("Sneak", true);
-    public final BooleanSetting snap = new BooleanSetting("Snap", true, () -> this.mode.is("Normal"));
-    public final BooleanSetting renderItemSpoof = new BooleanSetting("Render Item Spoof", true);
-    public final BooleanSetting scaffoldCounterOnIsland = new BooleanSetting("Scaffold Counter On Island", false);
-    public final NumberSetting rotationTick = new NumberSetting("Rotation Tick", 3, 1, 6, 1);
-    public final BooleanSetting clutch = new BooleanSetting("Clutch", true);
+    public final ModeValue mode = new ModeValue("Mode", "Normal", "Telly Bridge", "Old Telly", "Keep Y").withDefault("Normal");
+    public final BooleanValue eagle = new BooleanValue("Eagle", true, () -> this.mode.is("Normal"));
+    public final BooleanValue sneak = new BooleanValue("Sneak", true);
+    public final BooleanValue snap = new BooleanValue("Snap", true, () -> this.mode.is("Normal"));
+    public final BooleanValue renderItemSpoof = new BooleanValue("Render Item Spoof", true);
+    public final BooleanValue scaffoldCounterOnIsland = new BooleanValue("Scaffold Counter On Island", false);
+    public final NumberValue rotationTick = new NumberValue("Rotation Tick", 3, 1, 6, 1);
+    public final BooleanValue clutch = new BooleanValue("Clutch", true);
 
     public Rotation correctRotation = new Rotation();
     public Rotation rots = new Rotation();

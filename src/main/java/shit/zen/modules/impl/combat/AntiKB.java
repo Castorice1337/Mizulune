@@ -18,9 +18,9 @@ import shit.zen.modules.Module;
 import shit.zen.modules.impl.combat.antikb.AntiKBMode;
 import shit.zen.modules.impl.movement.FireballBlink;
 import shit.zen.modules.impl.movement.HighJump;
-import shit.zen.settings.impl.BooleanSetting;
-import shit.zen.settings.impl.ModeSetting;
-import shit.zen.settings.impl.NumberSetting;
+import shit.zen.value.impl.BooleanValue;
+import shit.zen.value.impl.ModeValue;
+import shit.zen.value.impl.NumberValue;
 import shit.zen.utils.rotation.Rotation;
 import shit.zen.event.EventTarget;
 
@@ -28,16 +28,16 @@ public class AntiKB
 extends Module {
     public static AntiKB INSTANCE;
     public static Rotation rotation;
-    public static ModeSetting mode;
-    public final BooleanSetting autoJump = new BooleanSetting("Auto Jump", false, () -> mode.is("Grim Full") || mode.is("Grim Fast"));
-    public final BooleanSetting rotate = new BooleanSetting("Rotate", false, () -> mode.is("Jump Reset") || mode.is("Mix"));
-    public final BooleanSetting tryAttack = new BooleanSetting("Try Attack", false, () -> mode.is("Mix"));
-    public final BooleanSetting movementOverride = new BooleanSetting("Movement Override", false, () -> mode.is("Mix"));
-    public final BooleanSetting followDirection = new BooleanSetting("Follow Direction", false, () -> mode.is("Jump Reset"));
-    public final NumberSetting rotateTicks = new NumberSetting("Rotate Ticks", 12, 3, 20, 1, () -> mode.is("Jump Reset") && (this.rotate.getValue() != false || this.followDirection.getValue() != false));
-    public final NumberSetting attackAmount = new NumberSetting("Attack amount", 5.0, 1.0, 20.0, 1, () -> mode.is("NoXZ"));
-    public final BooleanSetting instantAttack = new BooleanSetting("Instant Attack", false, () -> mode.is("NoXZ"));
-    public final BooleanSetting sprintStateCheck = new BooleanSetting("Sprint state check", true, () -> mode.is("NoXZ"));
+    public static ModeValue mode;
+    public final BooleanValue autoJump = new BooleanValue("Auto Jump", false, () -> mode.is("Grim Full") || mode.is("Grim Fast"));
+    public final BooleanValue rotate = new BooleanValue("Rotate", false, () -> mode.is("Jump Reset") || mode.is("Mix"));
+    public final BooleanValue tryAttack = new BooleanValue("Try Attack", false, () -> mode.is("Mix"));
+    public final BooleanValue movementOverride = new BooleanValue("Movement Override", false, () -> mode.is("Mix"));
+    public final BooleanValue followDirection = new BooleanValue("Follow Direction", false, () -> mode.is("Jump Reset"));
+    public final NumberValue rotateTicks = new NumberValue("Rotate Ticks", 12, 3, 20, 1, () -> mode.is("Jump Reset") && (this.rotate.getValue() != false || this.followDirection.getValue() != false));
+    public final NumberValue attackAmount = new NumberValue("Attack amount", 5.0, 1.0, 20.0, 1, () -> mode.is("NoXZ"));
+    public final BooleanValue instantAttack = new BooleanValue("Instant Attack", false, () -> mode.is("NoXZ"));
+    public final BooleanValue sprintStateCheck = new BooleanValue("Sprint state check", true, () -> mode.is("NoXZ"));
 
     public AntiKB() {
         super("AntiKB", Category.COMBAT);
@@ -168,6 +168,6 @@ extends Module {
     }
 
     static {
-        mode = new ModeSetting("Mode", "Jump Reset", "Mix", "NoXZ").withDefault("NoXZ");
+        mode = new ModeValue("Mode", "Jump Reset", "Mix", "NoXZ").withDefault("NoXZ");
     }
 }
