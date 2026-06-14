@@ -1,15 +1,15 @@
 package shit.zen.modules;
 
 import java.lang.reflect.Field;
-import java.util.ArrayList;
-import java.util.List;
+import java.lang.reflect.Modifier;
+import java.util.Collections;
+import java.util.IdentityHashMap;
+import java.util.Set;
 import lombok.Getter;
 import lombok.Generated;
 import shit.zen.ClientBase;
 import shit.zen.ZenClient;
 import shit.zen.modules.impl.render.Notification;
-import shit.zen.settings.Setting;
-import shit.zen.value.LegacySettingValue;
 import shit.zen.value.Value;
 import shit.zen.value.ValueGroup;
 
@@ -27,9 +27,8 @@ extends ClientBase {
     @Getter
     private boolean enabled;
     @Getter
-    private final List<Setting<?>> settings;
-    @Getter
     private final ValueGroup valueTree;
+    private Value<Boolean> hideInModuleList;
     private static final String REGISTER_FAIL_MSG = "Failed to register value for module ";
 
     protected Module(String name, Category category) {
@@ -38,7 +37,6 @@ extends ClientBase {
         this.category = category;
         this.keyCode = 0;
         this.bind = new KeyBind(this.keyCode);
-        this.settings = new ArrayList<>();
         this.valueTree = new ValueGroup(this.id, name);
     }
 
@@ -48,7 +46,6 @@ extends ClientBase {
         this.category = category;
         this.keyCode = keyCode;
         this.bind = new KeyBind(this.keyCode);
-        this.settings = new ArrayList<>();
         this.valueTree = new ValueGroup(this.id, name);
     }
 
@@ -57,29 +54,32 @@ extends ClientBase {
         this.bind.setKey(keyCode);
     }
 
-    public void addSetting(Setting<?> setting) {
-        this.settings.add(setting);
-    }
-
     public void registerSettings() {
-        this.settings.clear();
         this.valueTree.clearChildren();
+        ValueGroup commonGroup = this.valueTree.group("common", "Common");
+        this.hideInModuleList = commonGroup.bool("hide_in_module_list", "Hide in ModuleList", this.defaultHiddenInModuleList())
+                .alias("Hide in ModuleList")
+                .alias("Hide in modulelist")
+                .alias("Hidden");
         this.configureValueTree(this.valueTree);
-        ValueGroup legacyGroup = null;
-        for (Class<?> clazz = this.getClass(); clazz != null && Module.class.isAssignableFrom(clazz); clazz = clazz.getSuperclass()) {
+        ValueGroup reflectedGroup = null;
+        Set<Value<?>> seenValues = Collections.newSetFromMap(new IdentityHashMap<>());
+        for (Class<?> clazz = this.getClass(); clazz != null && clazz != Module.class && Module.class.isAssignableFrom(clazz); clazz = clazz.getSuperclass()) {
             for (Field field : clazz.getDeclaredFields()) {
                 try {
-                    Object value;
                     if (!field.isAccessible()) {
                         field.setAccessible(true);
                     }
-                    if (!((value = field.get(this)) instanceof Setting)) continue;
-                    Setting<?> setting = (Setting<?>)value;
-                    this.addSetting(setting);
-                    if (legacyGroup == null) {
-                        legacyGroup = this.valueTree.group("legacy", "Legacy Settings");
+                    Object value = field.get(Modifier.isStatic(field.getModifiers()) ? null : this);
+                    if (value instanceof Value<?> moduleValue) {
+                        if (moduleValue.getParent() != null || !seenValues.add(moduleValue)) {
+                            continue;
+                        }
+                        if (reflectedGroup == null) {
+                            reflectedGroup = this.valueTree.group("settings", "Settings");
+                        }
+                        reflectedGroup.add(moduleValue);
                     }
-                    legacyGroup.add(LegacySettingValue.from(setting));
                 } catch (IllegalAccessException ex) {
                     System.out.println(REGISTER_FAIL_MSG + this.getName() + "!");
                 }
@@ -88,6 +88,18 @@ extends ClientBase {
     }
 
     protected void configureValueTree(ValueGroup root) {
+    }
+
+    protected boolean defaultHiddenInModuleList() {
+        return false;
+    }
+
+    public boolean isHiddenInModuleList() {
+        return this.hideInModuleList != null && Boolean.TRUE.equals(this.hideInModuleList.getValue());
+    }
+
+    public Value<Boolean> getHideInModuleListValue() {
+        return this.hideInModuleList;
     }
 
     public Value<?> findValue(String pathOrName) {

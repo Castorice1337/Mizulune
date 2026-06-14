@@ -47,9 +47,9 @@ import shit.zen.modules.Category;
 import shit.zen.modules.Module;
 import shit.zen.modules.impl.movement.GuiMove;
 import shit.zen.modules.impl.movement.Scaffold;
-import shit.zen.settings.impl.BooleanSetting;
-import shit.zen.settings.impl.ModeSetting;
-import shit.zen.settings.impl.NumberSetting;
+import shit.zen.value.impl.BooleanValue;
+import shit.zen.value.impl.ModeValue;
+import shit.zen.value.impl.NumberValue;
 import shit.zen.utils.animation.Timer;
 import shit.zen.utils.game.BlockUtil;
 import shit.zen.utils.game.ItemUtil;
@@ -61,30 +61,30 @@ import shit.zen.event.EventTarget;
 public class InventoryManager extends Module {
     public static InventoryManager INSTANCE;
 
-    private final NumberSetting actionDelaySetting = new NumberSetting("Delay", 200, 0, 500, 10);
-    private final NumberSetting sprintDelayTicksSetting = new NumberSetting("Open Delay", 2, 0, 10, 1);
-    private final NumberSetting dropDelaySetting = new NumberSetting("Drop Delay", 200, 0, 500, 10);
-    private final BooleanSetting autoArmorSetting = new BooleanSetting("Auto Armor", true);
-    private final BooleanSetting throwItemsSetting = new BooleanSetting("Throw Items", true);
-    private final ModeSetting offhandItemSetting = new ModeSetting("Offhand Items", "Golden Apple", "Fishing Rod", "None").withDefault("Projectile");
-    private final ModeSetting bowPrioritySetting = new ModeSetting("Bow Priority", "Crossbow", "Punch Bow").withDefault("Crossbow");
-    private final BooleanSetting inventoryOnlySetting = new BooleanSetting("Inventory Only", true);
-    private final BooleanSetting fastThrowSetting = new BooleanSetting("Fast Throw", false);
-    private final NumberSetting maxEggsSnowballsSetting = new NumberSetting("Max Eggs & Snowballs Size", 64, 16, 256, 16);
-    public final NumberSetting maxBlockSizeSetting = new NumberSetting("Max Block Size", 256, 64, 512, 64);
-    private final NumberSetting maxFoodSizeSetting = new NumberSetting("Max Food Size", 128, 32, 256, 32);
-    private final NumberSetting maxRodSizeSetting = new NumberSetting("Max Rod Size", 1, 1, 16, 1);
-    private final NumberSetting swordSlotSetting = new NumberSetting("Sword Slot", 0, 0, 9, 1);
-    private final NumberSetting blockSlotSetting = new NumberSetting("Block Slot", 0, 0, 9, 1);
-    private final NumberSetting axeSlotSetting = new NumberSetting("Axe Slot", 0, 0, 9, 1);
-    private final NumberSetting pickaxeSlotSetting = new NumberSetting("Pickaxe Slot", 0, 0, 9, 1);
-    private final NumberSetting bowSlotSetting = new NumberSetting("Bow Slot", 0, 0, 9, 1);
-    private final NumberSetting waterBucketSlotSetting = new NumberSetting("Water Bucket Slot", 0, 0, 9, 1);
-    private final NumberSetting pearlSlotSetting = new NumberSetting("Ender Pearl Slot", 0, 0, 9, 1);
-    private final NumberSetting goldenAppleSlotSetting = new NumberSetting("Golden Apple Slot", 0, 0, 9, 1);
-    private final NumberSetting eggsSnowballsSlotSetting = new NumberSetting("Eggs & Snowballs Slot", 0, 0, 9, 1);
-    private final NumberSetting slimeBallSlotSetting = new NumberSetting("Slime Ball Slot", 0, 0, 9, 1);
-    private final NumberSetting crystalSlotSetting = new NumberSetting("Crystal Slot", 0, 0, 9, 1);
+    private final NumberValue actionDelaySetting = new NumberValue("Delay", 200, 0, 500, 10);
+    private final NumberValue sprintDelayTicksSetting = new NumberValue("Open Delay", 2, 0, 10, 1);
+    private final NumberValue dropDelaySetting = new NumberValue("Drop Delay", 200, 0, 500, 10);
+    private final BooleanValue autoArmorSetting = new BooleanValue("Auto Armor", true);
+    private final BooleanValue throwItemsSetting = new BooleanValue("Throw Items", true);
+    private final ModeValue offhandItemSetting = new ModeValue("Offhand Items", "Golden Apple", "Fishing Rod", "None").withDefault("Projectile");
+    private final ModeValue bowPrioritySetting = new ModeValue("Bow Priority", "Crossbow", "Punch Bow").withDefault("Crossbow");
+    private final BooleanValue inventoryOnlySetting = new BooleanValue("Inventory Only", true);
+    private final BooleanValue fastThrowSetting = new BooleanValue("Fast Throw", false);
+    private final NumberValue maxEggsSnowballsSetting = new NumberValue("Max Eggs & Snowballs Size", 64, 16, 256, 16);
+    public final NumberValue maxBlockSizeSetting = new NumberValue("Max Block Size", 256, 64, 512, 64);
+    private final NumberValue maxFoodSizeSetting = new NumberValue("Max Food Size", 128, 32, 256, 32);
+    private final NumberValue maxRodSizeSetting = new NumberValue("Max Rod Size", 1, 1, 16, 1);
+    private final NumberValue swordSlotSetting = new NumberValue("Sword Slot", 0, 0, 9, 1);
+    private final NumberValue blockSlotSetting = new NumberValue("Block Slot", 0, 0, 9, 1);
+    private final NumberValue axeSlotSetting = new NumberValue("Axe Slot", 0, 0, 9, 1);
+    private final NumberValue pickaxeSlotSetting = new NumberValue("Pickaxe Slot", 0, 0, 9, 1);
+    private final NumberValue bowSlotSetting = new NumberValue("Bow Slot", 0, 0, 9, 1);
+    private final NumberValue waterBucketSlotSetting = new NumberValue("Water Bucket Slot", 0, 0, 9, 1);
+    private final NumberValue pearlSlotSetting = new NumberValue("Ender Pearl Slot", 0, 0, 9, 1);
+    private final NumberValue goldenAppleSlotSetting = new NumberValue("Golden Apple Slot", 0, 0, 9, 1);
+    private final NumberValue eggsSnowballsSlotSetting = new NumberValue("Eggs & Snowballs Slot", 0, 0, 9, 1);
+    private final NumberValue slimeBallSlotSetting = new NumberValue("Slime Ball Slot", 0, 0, 9, 1);
+    private final NumberValue crystalSlotSetting = new NumberValue("Crystal Slot", 0, 0, 9, 1);
 
     private static final Timer actionTimer = new Timer();
 
@@ -218,7 +218,7 @@ public class InventoryManager extends Module {
     }
 
     private boolean validateSlotConfig() {
-        List<Pair<Boolean, NumberSetting>> entries = new ArrayList<>();
+        List<Pair<Boolean, NumberValue>> entries = new ArrayList<>();
         entries.add(Pair.of(this.swordSlotSetting.getValue().intValue() != 0, this.swordSlotSetting));
         entries.add(Pair.of(this.axeSlotSetting.getValue().intValue() != 0, this.axeSlotSetting));
         entries.add(Pair.of(this.pickaxeSlotSetting.getValue().intValue() != 0, this.pickaxeSlotSetting));
@@ -235,7 +235,7 @@ public class InventoryManager extends Module {
             entries.add(Pair.of(this.blockSlotSetting.getValue().intValue() != 0, this.blockSlotSetting));
         }
         HashSet<Integer> usedSlots = new HashSet<>();
-        for (Pair<Boolean, NumberSetting> entry : entries) {
+        for (Pair<Boolean, NumberValue> entry : entries) {
             if (!entry.getKey()) continue;
             int slot = entry.getValue().getValue().intValue() - 1;
             if (!usedSlots.add(slot)) return false;
@@ -667,7 +667,7 @@ public class InventoryManager extends Module {
     public boolean isUsefulItem(ItemStack stack) {
         if (stack.isEmpty()) return false;
         if (ItemUtil.isWeaponItem(stack)) return true;
-        if (stack.getDisplayName().getString().contains("点击使用")) return true;
+        if (stack.getDisplayName().getString().contains("鐐瑰嚮浣跨敤")) return true;
         if (stack.getItem() == Items.COBWEB) return true;
         if (stack.getItem() instanceof ArmorItem armor) {
             float score = ItemUtil.getArmorScore(stack);

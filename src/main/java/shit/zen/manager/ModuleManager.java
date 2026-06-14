@@ -32,6 +32,7 @@ import shit.zen.modules.impl.movement.NoSlow;
 import shit.zen.modules.impl.movement.FastWeb;
 import shit.zen.modules.impl.movement.FireballBlink;
 import shit.zen.modules.impl.movement.Fly;
+import shit.zen.modules.impl.movement.GodBridgeAssist;
 import shit.zen.modules.impl.movement.GuiMove;
 import shit.zen.modules.impl.movement.HighJump;
 import shit.zen.modules.impl.movement.NoDelay;
@@ -111,6 +112,7 @@ public class ModuleManager extends ClientBase {
         this.register(new FastWeb());
         this.register(new FireballBlink());
         this.register(new Fly());
+        this.register(new GodBridgeAssist());
         this.register(new GuiMove());
         this.register(new HighJump());
         this.register(new NoDelay());

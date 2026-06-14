@@ -13,8 +13,8 @@ import shit.zen.event.EventTarget;
 import shit.zen.event.impl.GameTickEvent;
 import shit.zen.modules.Category;
 import shit.zen.modules.Module;
-import shit.zen.settings.impl.BooleanSetting;
-import shit.zen.settings.impl.NumberSetting;
+import shit.zen.value.impl.BooleanValue;
+import shit.zen.value.impl.NumberValue;
 import shit.zen.utils.game.BlockUtil;
 
 public class SafeWalk
@@ -31,17 +31,17 @@ extends Module {
     private static final double TRUE_EDGE_FALL_DISTANCE = 0.015;
     private static final int AIRBORNE_SNEAK_GRACE_TICKS = 2;
 
-    public final NumberSetting edgeDistanceMin = new NumberSetting("Edge Distance Min", 0.08, 0.01, 0.5, 0.01);
-    public final NumberSetting edgeDistanceMax = new NumberSetting("Edge Distance Max", 0.22, 0.01, 0.5, 0.01);
-    public final NumberSetting sneakTicksMin = new NumberSetting("Sneak Ticks Min", 2, 1, 20, 1);
-    public final NumberSetting sneakTicksMax = new NumberSetting("Sneak Ticks Max", 5, 1, 20, 1);
-    public final NumberSetting releaseDelay = new NumberSetting("Release Delay", 2, 1, 3, 1);
-    public final BooleanSetting onlyBlocks = new BooleanSetting("Only Blocks", true);
-    public final BooleanSetting ignoreForward = new BooleanSetting("Ignore Forward", true);
-    public final BooleanSetting adaptive = new BooleanSetting("Adaptive", true);
-    public final NumberSetting adaptiveChance = new NumberSetting("Adaptive Chance", 0.16, 0.02, 0.4, 0.01);
-    public final BooleanSetting debug = new BooleanSetting("Debug", false);
-    public final NumberSetting debugInterval = new NumberSetting("Debug Interval", 1, 1, 20, 1);
+    public final NumberValue edgeDistanceMin = new NumberValue("Edge Distance Min", 0.08, 0.01, 0.5, 0.01);
+    public final NumberValue edgeDistanceMax = new NumberValue("Edge Distance Max", 0.22, 0.01, 0.5, 0.01);
+    public final NumberValue sneakTicksMin = new NumberValue("Sneak Ticks Min", 2, 1, 20, 1);
+    public final NumberValue sneakTicksMax = new NumberValue("Sneak Ticks Max", 5, 1, 20, 1);
+    public final NumberValue releaseDelay = new NumberValue("Release Delay", 2, 1, 3, 1);
+    public final BooleanValue onlyBlocks = new BooleanValue("Only Blocks", true);
+    public final BooleanValue ignoreForward = new BooleanValue("Ignore Forward", true);
+    public final BooleanValue adaptive = new BooleanValue("Adaptive", true);
+    public final NumberValue adaptiveChance = new NumberValue("Adaptive Chance", 0.16, 0.02, 0.4, 0.01);
+    public final BooleanValue debug = new BooleanValue("Debug", false);
+    public final NumberValue debugInterval = new NumberValue("Debug Interval", 1, 1, 20, 1);
 
     private boolean moduleSneaking;
     private boolean edgeDistanceArmed;

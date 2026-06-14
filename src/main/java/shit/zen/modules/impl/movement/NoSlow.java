@@ -40,9 +40,9 @@ import shit.zen.event.impl.SlowdownEvent;
 import shit.zen.event.impl.TickEvent;
 import shit.zen.modules.Category;
 import shit.zen.modules.Module;
-import shit.zen.settings.impl.BooleanSetting;
-import shit.zen.settings.impl.ModeSetting;
-import shit.zen.settings.impl.NumberSetting;
+import shit.zen.value.impl.BooleanValue;
+import shit.zen.value.impl.ModeValue;
+import shit.zen.value.impl.NumberValue;
 import shit.zen.utils.animation.Timer;
 import shit.zen.utils.misc.PacketUtil;
 import shit.zen.utils.misc.Triple;
@@ -57,14 +57,14 @@ public class NoSlow extends Module {
         IDLE, WAITING, SWAPPING, USING
     }
 
-    public final ModeSetting mode             = new ModeSetting("Mode", "Grim V3", "NoSlow").withDefault("Grim V3");
-    public final BooleanSetting bowNoSlow      = new BooleanSetting("Bow", false, this::isGrimSlowMode);
-    public final BooleanSetting keepSprinting  = new BooleanSetting("Keep Sprinting", true);
-    public final BooleanSetting crossbowNoSlow = new BooleanSetting("Crossbow", false);
-    public final BooleanSetting foodNoSlow     = new BooleanSetting("Food", true);
-    public final BooleanSetting potionNoSlow   = new BooleanSetting("Potion", true);
-    public final BooleanSetting shieldNoSlow   = new BooleanSetting("Shield NoSlow", true);
-    public final NumberSetting useItemTicks    = new NumberSetting("Use Item Ticks", 1, 1, 20, 1,
+    public final ModeValue mode             = new ModeValue("Mode", "Grim V3", "NoSlow").withDefault("Grim V3");
+    public final BooleanValue bowNoSlow      = new BooleanValue("Bow", false, this::isGrimSlowMode);
+    public final BooleanValue keepSprinting  = new BooleanValue("Keep Sprinting", true);
+    public final BooleanValue crossbowNoSlow = new BooleanValue("Crossbow", false);
+    public final BooleanValue foodNoSlow     = new BooleanValue("Food", true);
+    public final BooleanValue potionNoSlow   = new BooleanValue("Potion", true);
+    public final BooleanValue shieldNoSlow   = new BooleanValue("Shield NoSlow", true);
+    public final NumberValue useItemTicks    = new NumberValue("Use Item Ticks", 1, 1, 20, 1,
             () -> this.isGrimSlowMode() && this.bowNoSlow.getValue());
 
     private final Timer timer = new Timer();

@@ -10,14 +10,14 @@ import shit.zen.event.impl.StrafeEvent;
 import shit.zen.event.impl.TickEvent;
 import shit.zen.modules.Category;
 import shit.zen.modules.Module;
-import shit.zen.settings.impl.NumberSetting;
+import shit.zen.value.impl.NumberValue;
 import shit.zen.utils.misc.PacketUtil;
 import shit.zen.event.EventTarget;
 
 public class NoFall
 extends Module {
     public static NoFall INSTANCE;
-    private final NumberSetting fallDistanceSetting = new NumberSetting("Fall Distance", 3.0, 0.0, 10.0, 0.5);
+    private final NumberValue fallDistanceSetting = new NumberValue("Fall Distance", 3.0, 0.0, 10.0, 0.5);
     private boolean isFalling = false;
     private boolean sentFlyPacket = false;
     public boolean jumpLandingBoost = false;

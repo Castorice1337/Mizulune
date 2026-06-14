@@ -33,8 +33,6 @@ extends Module {
 
     public abstract void onGlRender(GlRenderEvent var1, float var2, float var3);
 
-    public abstract void onSettings();
-
     public boolean mousePressed(int mouseX, int mouseY, int button) {
         if (this.isHovered(mouseX, mouseY) && button == 0) {
             this.dragging = true;

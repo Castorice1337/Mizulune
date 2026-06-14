@@ -301,8 +301,8 @@ public final class SkikoBackend implements RenderBackend {
         try (org.jetbrains.skia.Paint skPaint = this.toSkPaint(paint)) {
             Font font = this.getSkFont(fontRenderer);
             GlyphMetrics glyphMetrics = fontRenderer.getMetrics();
-            float baselineY = this.toLegacyTextBaseline(y, glyphMetrics);
-            this.drawFormattedString(text, this.roundLegacy(x), baselineY, Math.max(1.0f, glyphMetrics.height()), font, skPaint, paint.getColor());
+            float baselineY = this.toHudTextBaseline(y, glyphMetrics);
+            this.drawFormattedString(text, this.roundLayout(x), baselineY, Math.max(1.0f, glyphMetrics.height()), font, skPaint, paint.getColor());
         }
     }
 
@@ -332,8 +332,8 @@ public final class SkikoBackend implements RenderBackend {
         }
         Font font = this.getSkFont(fontRenderer);
         GlyphMetrics glyphMetrics = fontRenderer.getMetrics();
-        float baselineY = this.toLegacyTextBaseline(y, glyphMetrics);
-        float roundedX = this.roundLegacy(x);
+        float baselineY = this.toHudTextBaseline(y, glyphMetrics);
+        float roundedX = this.roundLayout(x);
         try (org.jetbrains.skia.Paint glowPaint = this.toSkPaint(new Paint().setColor(glowColor))) {
             if (radius > 0.001f && (glowColor >>> 24) != 0) {
                 glowPaint.setImageFilter(org.jetbrains.skia.ImageFilter.Companion.makeBlur(radius, radius, FilterTileMode.DECAL, null, null));
@@ -629,17 +629,17 @@ public final class SkikoBackend implements RenderBackend {
     }
 
     private float getSkiaFontSize(FontRenderer fontRenderer) {
-        // The legacy atlas path halves FontRenderer.size in Fonts.getCustomFont(...)
-        // before applying GUI-scale atlas oversampling. Keep Skia in the same GUI
-        // coordinate size so existing HUD layout math remains valid.
+        // The atlas path halves FontRenderer.size in Fonts.getCustomFont(...)
+        // before applying GUI-scale atlas oversampling. Keep Skia in the same
+        // GUI coordinate size so existing HUD layout math remains valid.
         return Math.max(1.0f, fontRenderer.getSize() * 0.5f);
     }
 
-    private float toLegacyTextBaseline(float y, GlyphMetrics glyphMetrics) {
-        return this.roundLegacy(y - glyphMetrics.ascent() * 0.2f - 1.0f);
+    private float toHudTextBaseline(float y, GlyphMetrics glyphMetrics) {
+        return this.roundLayout(y - glyphMetrics.ascent() * 0.2f - 1.0f);
     }
 
-    private float roundLegacy(float value) {
+    private float roundLayout(float value) {
         return (float)Math.round(value * 10.0f) / 10.0f;
     }
 

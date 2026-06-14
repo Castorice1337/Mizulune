@@ -18,8 +18,8 @@ import shit.zen.modules.impl.combat.KillAura;
 import shit.zen.modules.impl.misc.AutoRod;
 import shit.zen.modules.impl.movement.FireballBlink;
 import shit.zen.modules.impl.render.Projectiles;
-import shit.zen.settings.impl.BooleanSetting;
-import shit.zen.settings.impl.ModeSetting;
+import shit.zen.value.impl.BooleanValue;
+import shit.zen.value.impl.ModeValue;
 import shit.zen.utils.animation.Timer;
 import shit.zen.utils.game.ItemUtil;
 import shit.zen.utils.game.RotationUtil;
@@ -31,11 +31,11 @@ public class MidPearl extends Module {
     public static MidPearl INSTANCE;
     public static Rotation targetRotation;
 
-    private final ModeSetting mainButtonSetting = new ModeSetting("Button", "Middle", "Mouse 4", "Mouse 5").withDefault("Middle");
-    private final BooleanSetting interceptSetting = new BooleanSetting("Intercept", false);
-    private final ModeSetting interceptButtonSetting = new ModeSetting("Intercept Button", "Mouse 4", "Mouse 5").withDefault("Mouse 4");
-    private final BooleanSetting holdModeSetting = new BooleanSetting("On Release", false);
-    private final BooleanSetting losCheckSetting = new BooleanSetting("Block Check", true);
+    private final ModeValue mainButtonSetting = new ModeValue("Button", "Middle", "Mouse 4", "Mouse 5").withDefault("Middle");
+    private final BooleanValue interceptSetting = new BooleanValue("Intercept", false);
+    private final ModeValue interceptButtonSetting = new ModeValue("Intercept Button", "Mouse 4", "Mouse 5").withDefault("Mouse 4");
+    private final BooleanValue holdModeSetting = new BooleanValue("On Release", false);
+    private final BooleanValue losCheckSetting = new BooleanValue("Block Check", true);
     private final Timer throwTimer = new Timer();
     private boolean isHoldingIntercept = false;
     private boolean isHoldingButton = false;
@@ -90,7 +90,7 @@ public class MidPearl extends Module {
         this.isHoldingIntercept = false;
     }
 
-    private int getMouseButton(ModeSetting setting) {
+    private int getMouseButton(ModeValue setting) {
         return switch (setting.getValue()) {
             case "Mouse 4" -> 3;
             case "Mouse 5" -> 4;

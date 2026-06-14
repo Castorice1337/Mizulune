@@ -27,7 +27,7 @@ import shit.zen.render.Rectangle;
 import shit.zen.render.Renderer;
 import shit.zen.render.RoundedRectangle;
 import shit.zen.render.Texture;
-import shit.zen.settings.impl.ModeSetting;
+import shit.zen.value.impl.ModeValue;
 import shit.zen.utils.animation.SpringAnimation;
 import shit.zen.utils.game.MovementUtil;
 import shit.zen.utils.render.ColorUtil;
@@ -44,7 +44,7 @@ public class DynamicIsland extends Module {
     private static final float STACK_GAP = 6.0f;
     private static final float SCAFFOLD_HEIGHT = 48.0f;
 
-    public final ModeSetting modeSetting = new ModeSetting("Mode", "Old", "Liquid Glass").withDefault("Liquid Glass");
+    public final ModeValue ModeValue = new ModeValue("Mode", "Old", "Liquid Glass").withDefault("Liquid Glass");
 
     private final shit.zen.hud.DynamicIsland oldIsland = new shit.zen.hud.DynamicIsland();
     private final FontRenderer nameFont = FontPresets.poppinsBold(17.0f);
@@ -70,11 +70,11 @@ public class DynamicIsland extends Module {
     }
 
     public boolean isLiquidGlassMode() {
-        return this.modeSetting.is("Liquid Glass");
+        return this.ModeValue.is("Liquid Glass");
     }
 
     public boolean isOldMode() {
-        return this.modeSetting.is("Old");
+        return this.ModeValue.is("Old");
     }
 
     public static boolean shouldSuppressChestScreen(ContainerScreen screen) {

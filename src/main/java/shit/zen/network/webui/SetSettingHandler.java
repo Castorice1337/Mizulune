@@ -7,17 +7,11 @@ import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.Optional;
-import java.util.stream.Stream;
 import shit.zen.ZenClient;
 import shit.zen.exception.ModuleNotFoundException;
 import shit.zen.manager.ConfigManager;
 import shit.zen.modules.Module;
 import shit.zen.modules.impl.world.WebUI;
-import shit.zen.settings.Setting;
-import shit.zen.settings.impl.BooleanSetting;
-import shit.zen.settings.impl.ModeSetting;
-import shit.zen.settings.impl.NumberSetting;
 import shit.zen.utils.render.TextureUtil;
 import shit.zen.value.Value;
 import shit.zen.value.ValueJsonCodec;
@@ -46,39 +40,7 @@ public class SetSettingHandler extends AbstractHttpHandler {
                         success = true;
                         result = ValueJsonCodec.writeValue(value);
                     } else {
-                        Optional<Setting<?>> match = module.getSettings().stream()
-                                .filter(setting -> setting.getName().equals(key))
-                                .findFirst();
-                        if (match.isEmpty()) {
-                            reason = "setting not found";
-                        } else {
-                            Setting setting = match.get();
-                            String raw = query.get("value");
-                            if (setting instanceof NumberSetting) {
-                                try {
-                                    setting.setValue(Double.valueOf(raw));
-                                    success = true;
-                                } catch (NumberFormatException ignored) {
-                                }
-                            } else if (setting instanceof BooleanSetting) {
-                                setting.setValue(Boolean.valueOf(raw));
-                                success = true;
-                            } else if (setting instanceof ModeSetting modeSetting) {
-                                String matchedMode = Stream.of(modeSetting.getModes())
-                                        .filter(mode -> mode.equals(raw))
-                                        .findFirst()
-                                        .orElse(null);
-                                if (matchedMode != null) {
-                                    modeSetting.setValue(matchedMode);
-                                    success = true;
-                                }
-                            }
-                            if (success) {
-                                result = setting.getValue();
-                            } else {
-                                reason = "invalid value";
-                            }
-                        }
+                        reason = value == null ? "setting not found" : "invalid value";
                     }
                     if (success) {
                         ConfigManager.saveAllIfReady();

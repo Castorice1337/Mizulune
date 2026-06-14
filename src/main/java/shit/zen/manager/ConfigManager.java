@@ -14,27 +14,27 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import shit.zen.ZenClient;
 import shit.zen.config.Config;
-import shit.zen.config.ModulesConfig;
-import shit.zen.config.ValuesConfig;
 import shit.zen.config.json.JsonValuesConfig;
 
 public class ConfigManager {
     public static final Logger LOGGER = LogManager.getLogger("ConfigManager");
     public static final File CONFIG_DIR = new File(ZenClient.configDir, "configs");
-    private final List<Config> configs;
+    private final List<Config> loadConfigs;
+    private final List<Config> saveConfigs;
 
     public ConfigManager() {
-        this.configs = new ArrayList<>();
+        this.loadConfigs = new ArrayList<>();
+        this.saveConfigs = new ArrayList<>();
         if (!CONFIG_DIR.exists() && CONFIG_DIR.mkdir()) {
             LOGGER.info("Created config directory");
         }
-        this.configs.add(new ModulesConfig());
-        this.configs.add(new ValuesConfig());
-        this.configs.add(new JsonValuesConfig());
+        JsonValuesConfig jsonValuesConfig = new JsonValuesConfig();
+        this.loadConfigs.add(jsonValuesConfig);
+        this.saveConfigs.add(jsonValuesConfig);
     }
 
     public void loadAll() {
-        for (Config config : this.configs) {
+        for (Config config : this.loadConfigs) {
             try {
                 File file = config.getFile();
                 if (file.exists()) {
@@ -54,7 +54,7 @@ public class ConfigManager {
     }
 
     public void saveAll() {
-        for (Config config : this.configs) {
+        for (Config config : this.saveConfigs) {
             this.saveConfig(config);
         }
         LOGGER.info("Saved all configs");

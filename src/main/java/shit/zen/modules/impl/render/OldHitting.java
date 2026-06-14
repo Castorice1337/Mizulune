@@ -7,15 +7,15 @@ import org.joml.Quaternionf;
 import shit.zen.modules.Category;
 import shit.zen.modules.Module;
 import shit.zen.modules.impl.combat.KillAura;
-import shit.zen.settings.impl.ModeSetting;
-import shit.zen.settings.impl.NumberSetting;
+import shit.zen.value.impl.ModeValue;
+import shit.zen.value.impl.NumberValue;
 
 public class OldHitting
 extends Module {
-    private final ModeSetting animationModeSetting = new ModeSetting("Animation", "Vanilla", "Leaked", "Slide").withDefault("Leaked");
-    private final NumberSetting sizeSetting = new NumberSetting("Size", 1.0, 0.1, 3.0, 0.1);
-    private final NumberSetting speedSetting = new NumberSetting("Speed", 1.0, 0.1, 5.0, 0.1);
-    private final NumberSetting yOffsetSetting = new NumberSetting("Y-Offset", 0.0, -1.0, 1.0, 0.1);
+    private final ModeValue animationModeSetting = new ModeValue("Animation", "Vanilla", "Leaked", "Slide").withDefault("Leaked");
+    private final NumberValue sizeSetting = new NumberValue("Size", 1.0, 0.1, 3.0, 0.1);
+    private final NumberValue speedSetting = new NumberValue("Speed", 1.0, 0.1, 5.0, 0.1);
+    private final NumberValue yOffsetSetting = new NumberValue("Y-Offset", 0.0, -1.0, 1.0, 0.1);
     public static OldHitting INSTANCE;
 
     public OldHitting() {

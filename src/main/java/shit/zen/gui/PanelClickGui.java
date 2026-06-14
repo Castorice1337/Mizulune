@@ -16,7 +16,6 @@ import shit.zen.gui.panel.ModuleListPanel;
 import shit.zen.gui.panel.ProfileWidget;
 import shit.zen.gui.panel.ScaleSwitchOverlay;
 import shit.zen.gui.panel.SettingsPanel;
-import shit.zen.gui.panel.setting.NumberSettingRenderer;
 import shit.zen.modules.Category;
 import shit.zen.modules.Module;
 import shit.zen.render.FontPresets;
@@ -254,9 +253,6 @@ extends Screen {
                 handled = true;
             }
         }
-        if (!handled) {
-            NumberSettingRenderer.clearEditing();
-        }
         return handled || super.mouseClicked(mouseX, mouseY, button);
     }
 
@@ -322,9 +318,6 @@ extends Screen {
                 }
             }
         }
-        if (NumberSettingRenderer.onKeyPress(keyCode, scanCode, modifiers)) {
-            return true;
-        }
         if (keyCode == 256 && !this.keybindOverlay.isVisible() && !this.searchActive) {
             this.onClose();
             return true;
@@ -337,9 +330,6 @@ extends Screen {
             this.searchCursorTime = System.currentTimeMillis();
             this.searchQuery = this.searchQuery + c;
             this.moduleListPanel.setSearchQuery(this.searchQuery);
-            return true;
-        }
-        if (NumberSettingRenderer.onCharTyped(c)) {
             return true;
         }
         return super.charTyped(c, modifiers);

@@ -24,9 +24,9 @@ import shit.zen.modules.impl.player.helper.impl.BlockLava;
 import shit.zen.modules.impl.player.helper.impl.BlockWater;
 import shit.zen.modules.impl.player.helper.impl.ExtinguishFire;
 import shit.zen.modules.impl.player.helper.impl.SelfExtinguish;
-import shit.zen.settings.impl.BooleanSetting;
-import shit.zen.settings.impl.MultiSelectSetting;
-import shit.zen.settings.impl.NumberSetting;
+import shit.zen.value.impl.BooleanValue;
+import shit.zen.value.impl.MultiEnumValue;
+import shit.zen.value.impl.NumberValue;
 import shit.zen.utils.game.RotationUtil;
 import shit.zen.utils.rotation.Rotation;
 import shit.zen.utils.rotation.RotationHandler;
@@ -40,13 +40,13 @@ public class Helper extends Module {
     private static final Map<BlockPos, Integer> lavaPlacements = new HashMap<>();
     private static FluidTracker fluidTracker;
 
-    private final MultiSelectSetting modulesSetting = new MultiSelectSetting(
+    private final MultiEnumValue modulesSetting = new MultiEnumValue(
             "Mode", "Self Extinguish", "Extinguish Fire", "Block Lava", "Block Water")
             .withDefaults("Self Extinguish", "Extinguish Fire", "Block Lava", "Block Water");
-    private final BooleanSetting smoothRotationSetting = new BooleanSetting("Legit", false);
-    private final NumberSetting rotationSpeedSetting = new NumberSetting(
+    private final BooleanValue smoothRotationSetting = new BooleanValue("Legit", false);
+    private final NumberValue rotationSpeedSetting = new NumberValue(
             "Speed", 45, 2, 180, 1, this.smoothRotationSetting::getValue);
-    private final NumberSetting rotationFovSetting = new NumberSetting(
+    private final NumberValue rotationFovSetting = new NumberValue(
             "FOV", 90, 30, 180, 1, this.smoothRotationSetting::getValue);
 
     private final List<HelperBase> subModuleList = new ArrayList<>();

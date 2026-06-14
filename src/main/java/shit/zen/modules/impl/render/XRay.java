@@ -44,15 +44,15 @@ import shit.zen.event.impl.Render2DEvent;
 import shit.zen.event.impl.RenderEvent;
 import shit.zen.modules.Category;
 import shit.zen.modules.Module;
-import shit.zen.settings.impl.BooleanSetting;
-import shit.zen.settings.impl.ModeSetting;
-import shit.zen.settings.impl.NumberSetting;
+import shit.zen.value.impl.BooleanValue;
+import shit.zen.value.impl.ModeValue;
+import shit.zen.value.impl.NumberValue;
 import lombok.EqualsAndHashCode;
 import shit.zen.utils.game.PlayerUtil;
 import shit.zen.utils.misc.ChatUtil;
 
 /**
- * XRay — ore locator with two visual layers:
+ * XRay 鈥?ore locator with two visual layers:
  * <ul>
  *     <li><b>True see-through</b>: when this module is enabled, {@link shit.zen.patch.BlockPatch}
  *         hooks {@code Block.shouldRenderFace} and renders only the target blocks (the rest of the
@@ -68,33 +68,33 @@ import shit.zen.utils.misc.ChatUtil;
 public class XRay extends Module {
     public static XRay INSTANCE;
 
-    private final ModeSetting xrayModeSetting = new ModeSetting("Block Type", "Ores", "Valuables").withDefault("Ores");
-    private final NumberSetting scanRangeSetting = new NumberSetting("Range", 48, 16, 100, 4);
-    private final NumberSetting scanIntervalSetting = new NumberSetting("Scan Delay", 500, 50, 3000, 100);
-    private final BooleanSetting tracersSetting = new BooleanSetting("Tracers", true);
-    private final NumberSetting maxBlocksSetting = new NumberSetting("MaxBlocks", 80000, 10000, 500000, 10000);
-    private final BooleanSetting antiFakeOreSetting = new BooleanSetting("Anti-Fake Ore", true);
-    private final NumberSetting minAuthScoreSetting = new NumberSetting("Min Auth Score", 1.0, 1.0, 15.0, 0.5, this.antiFakeOreSetting::getValue);
-    private final BooleanSetting patternAnalysisSetting = new BooleanSetting("Pattern Analysis", false, this.antiFakeOreSetting::getValue);
-    private final BooleanSetting strictHostRockSetting = new BooleanSetting("Strict Host Rock Check", true, this.antiFakeOreSetting::getValue);
-    private final BooleanSetting altStartSetting = new BooleanSetting("Enable Alternative Start", true);
-    private final NumberSetting minAirBlocksSetting = new NumberSetting("Min Air Blocks Required", 50, 10, 1000, 50);
-    private final NumberSetting altSearchRadiusSetting = new NumberSetting("Alternative Search Radius", 5, 1, 10, 1);
-    private final BooleanSetting blindScanSetting = new BooleanSetting("Blind Scan", true);
-    private final NumberSetting blindRenderRangeSetting = new NumberSetting("Blind Render Range", 32, 8, 1024, 4, this.blindScanSetting::getValue);
-    private final NumberSetting minVeinSizeSetting = new NumberSetting("Minimum Vein Size", 1, 1, 10, 1, this.antiFakeOreSetting::getValue);
-    private final BooleanSetting diamondSetting = new BooleanSetting("Diamond", true);
-    private final BooleanSetting emeraldSetting = new BooleanSetting("Emerald", true);
-    private final BooleanSetting redstoneSetting = new BooleanSetting("Redstone", true);
-    private final BooleanSetting ironSetting = new BooleanSetting("Iron", true);
-    private final BooleanSetting goldSetting = new BooleanSetting("Gold", true);
-    private final BooleanSetting copperSetting = new BooleanSetting("Copper", true);
-    private final BooleanSetting lapisSetting = new BooleanSetting("Lapis", true);
-    private final BooleanSetting coalSetting = new BooleanSetting("Coal", true);
-    private final BooleanSetting quartzSetting = new BooleanSetting("Quartz", true);
-    private final BooleanSetting ancientDebrisSetting = new BooleanSetting("Ancient Debris", true);
-    private final BooleanSetting spawnerSetting = new BooleanSetting("Spawner", true);
-    private final BooleanSetting endPortalSetting = new BooleanSetting("EndPortalFrame", true);
+    private final ModeValue xrayModeSetting = new ModeValue("Block Type", "Ores", "Valuables").withDefault("Ores");
+    private final NumberValue scanRangeSetting = new NumberValue("Range", 48, 16, 100, 4);
+    private final NumberValue scanIntervalSetting = new NumberValue("Scan Delay", 500, 50, 3000, 100);
+    private final BooleanValue tracersSetting = new BooleanValue("Tracers", true);
+    private final NumberValue maxBlocksSetting = new NumberValue("MaxBlocks", 80000, 10000, 500000, 10000);
+    private final BooleanValue antiFakeOreSetting = new BooleanValue("Anti-Fake Ore", true);
+    private final NumberValue minAuthScoreSetting = new NumberValue("Min Auth Score", 1.0, 1.0, 15.0, 0.5, this.antiFakeOreSetting::getValue);
+    private final BooleanValue patternAnalysisSetting = new BooleanValue("Pattern Analysis", false, this.antiFakeOreSetting::getValue);
+    private final BooleanValue strictHostRockSetting = new BooleanValue("Strict Host Rock Check", true, this.antiFakeOreSetting::getValue);
+    private final BooleanValue altStartSetting = new BooleanValue("Enable Alternative Start", true);
+    private final NumberValue minAirBlocksSetting = new NumberValue("Min Air Blocks Required", 50, 10, 1000, 50);
+    private final NumberValue altSearchRadiusSetting = new NumberValue("Alternative Search Radius", 5, 1, 10, 1);
+    private final BooleanValue blindScanSetting = new BooleanValue("Blind Scan", true);
+    private final NumberValue blindRenderRangeSetting = new NumberValue("Blind Render Range", 32, 8, 1024, 4, this.blindScanSetting::getValue);
+    private final NumberValue minVeinSizeSetting = new NumberValue("Minimum Vein Size", 1, 1, 10, 1, this.antiFakeOreSetting::getValue);
+    private final BooleanValue diamondSetting = new BooleanValue("Diamond", true);
+    private final BooleanValue emeraldSetting = new BooleanValue("Emerald", true);
+    private final BooleanValue redstoneSetting = new BooleanValue("Redstone", true);
+    private final BooleanValue ironSetting = new BooleanValue("Iron", true);
+    private final BooleanValue goldSetting = new BooleanValue("Gold", true);
+    private final BooleanValue copperSetting = new BooleanValue("Copper", true);
+    private final BooleanValue lapisSetting = new BooleanValue("Lapis", true);
+    private final BooleanValue coalSetting = new BooleanValue("Coal", true);
+    private final BooleanValue quartzSetting = new BooleanValue("Quartz", true);
+    private final BooleanValue ancientDebrisSetting = new BooleanValue("Ancient Debris", true);
+    private final BooleanValue spawnerSetting = new BooleanValue("Spawner", true);
+    private final BooleanValue endPortalSetting = new BooleanValue("EndPortalFrame", true);
     private final Color diamondColor = new Color(0, 255, 255);
     private final Color emeraldColor = new Color(0, 255, 0);
     private final Color redstoneColor = new Color(255, 0, 0);

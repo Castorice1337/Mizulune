@@ -42,7 +42,7 @@ public class ModulesHandler extends AbstractHttpHandler {
             entry.put("id", module.getId());
             entry.put("desc", "");
             entry.put("state", module.isEnabled());
-            entry.put("settings", !module.getSettings().isEmpty() || !module.getValueTree().getChildren().isEmpty());
+            entry.put("settings", !module.getValueTree().getChildren().isEmpty());
             result.put(module.getName(), entry);
         }
         response.put("result", result);

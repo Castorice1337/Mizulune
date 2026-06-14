@@ -11,9 +11,9 @@ import net.minecraftforge.client.ForgeHooksClient;
 import shit.zen.event.impl.SprintEvent;
 import shit.zen.modules.Category;
 import shit.zen.modules.Module;
-import shit.zen.settings.impl.BooleanSetting;
-import shit.zen.settings.impl.ModeSetting;
-import shit.zen.settings.impl.NumberSetting;
+import shit.zen.value.impl.BooleanValue;
+import shit.zen.value.impl.ModeValue;
+import shit.zen.value.impl.NumberValue;
 import shit.zen.utils.animation.Timer;
 import shit.zen.utils.game.CpsUtil;
 import shit.zen.utils.misc.ReflectionUtil;
@@ -21,11 +21,11 @@ import shit.zen.utils.misc.UnsafeUtil;
 import shit.zen.event.EventTarget;
 
 public class AutoClicker extends Module {
-    private final NumberSetting cps = new NumberSetting("CPS", 7, 4, 25, 1);
-    private final ModeSetting clickSide = new ModeSetting("Mode", "Left", "Right", "Both").withDefault("Left");
-    private final ModeSetting clickMethod = new ModeSetting("Click Mode", "Method", "Key", "Mouse").withDefault("Key");
-    private final ModeSetting cpsMode = new ModeSetting("CPS Mode", "Normal", "DBC").withDefault("Normal");
-    private final BooleanSetting breakBlock = new BooleanSetting("Break Block", true);
+    private final NumberValue cps = new NumberValue("CPS", 7, 4, 25, 1);
+    private final ModeValue clickSide = new ModeValue("Mode", "Left", "Right", "Both").withDefault("Left");
+    private final ModeValue clickMethod = new ModeValue("Click Mode", "Method", "Key", "Mouse").withDefault("Key");
+    private final ModeValue cpsMode = new ModeValue("CPS Mode", "Normal", "DBC").withDefault("Normal");
+    private final BooleanValue breakBlock = new BooleanValue("Break Block", true);
     private final Timer leftClickTimer = new Timer();
     private final Timer rightClickTimer = new Timer();
 

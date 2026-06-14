@@ -251,7 +251,4 @@ extends HudElement {
     public void onRender2D(Render2DEvent render2DEvent, float x, float y) {
     }
 
-    @Override
-    public void onSettings() {
-    }
 }

@@ -55,9 +55,13 @@ public class Value<T> {
             return;
         }
         this.value = value;
+        this.onChanged(oldValue, value);
         for (ValueListener<T> listener : this.listeners) {
             listener.onChanged(this, oldValue, value);
         }
+    }
+
+    protected void onChanged(T previous, T current) {
     }
 
     @SuppressWarnings("unchecked")

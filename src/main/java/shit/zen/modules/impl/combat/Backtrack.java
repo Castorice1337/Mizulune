@@ -24,8 +24,8 @@ import shit.zen.event.impl.TickEvent;
 import shit.zen.modules.Category;
 import shit.zen.modules.Module;
 import shit.zen.modules.impl.combat.antikb.AntiKBMode;
-import shit.zen.settings.impl.BooleanSetting;
-import shit.zen.settings.impl.NumberSetting;
+import shit.zen.value.impl.BooleanValue;
+import shit.zen.value.impl.NumberValue;
 import shit.zen.utils.game.RotationUtil;
 import shit.zen.utils.render.RenderUtil;
 import shit.zen.event.EventTarget;
@@ -78,12 +78,12 @@ public class Backtrack extends Module {
         }
     }
 
-    private final NumberSetting minRange = new NumberSetting("Min Range", 3.0, 1.0, 6.0, 0.1);
-    private final NumberSetting maxRange = new NumberSetting("Max Range", 6.0, 1.0, 6.0, 0.1);
-    private final NumberSetting delay = new NumberSetting("Delay", 200.0, 0.0, 1000.0, 10.0);
-    private final NumberSetting chance = new NumberSetting("Chance", 100.0, 5.0, 100.0, 1.0);
-    private final BooleanSetting resetOnVelocity = new BooleanSetting("Reset On Velocity", true);
-    private final BooleanSetting render = new BooleanSetting("Render", true);
+    private final NumberValue minRange = new NumberValue("Min Range", 3.0, 1.0, 6.0, 0.1);
+    private final NumberValue maxRange = new NumberValue("Max Range", 6.0, 1.0, 6.0, 0.1);
+    private final NumberValue delay = new NumberValue("Delay", 200.0, 0.0, 1000.0, 10.0);
+    private final NumberValue chance = new NumberValue("Chance", 100.0, 5.0, 100.0, 1.0);
+    private final BooleanValue resetOnVelocity = new BooleanValue("Reset On Velocity", true);
+    private final BooleanValue render = new BooleanValue("Render", true);
     private final ConcurrentLinkedQueue<PacketEntry> packetQueue = new ConcurrentLinkedQueue<>();
     private volatile PositionTracker positionTracker;
     private volatile boolean isBacktrackingActive;

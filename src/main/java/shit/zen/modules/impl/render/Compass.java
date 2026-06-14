@@ -17,13 +17,13 @@ import shit.zen.render.Paint;
 import shit.zen.render.Path;
 import shit.zen.render.ShadowFactory;
 import shit.zen.render.ShadowMode;
-import shit.zen.settings.impl.BooleanSetting;
+import shit.zen.value.impl.BooleanValue;
 import shit.zen.event.EventTarget;
 
 public class Compass
 extends Module {
-    private final BooleanSetting compassOnly = new BooleanSetting("Compass Only", true);
-    private final BooleanSetting noPlayerOnly = new BooleanSetting("No Player Only", true);
+    private final BooleanValue compassOnly = new BooleanValue("Compass Only", true);
+    private final BooleanValue noPlayerOnly = new BooleanValue("No Player Only", true);
     private boolean hasCompassItemCached = false;
     private BlockPos spawnPosition;
     private float renderYaw;

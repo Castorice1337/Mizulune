@@ -6,7 +6,6 @@ import net.minecraft.client.gui.screens.ChatScreen;
 import net.minecraft.world.inventory.InventoryMenu;
 import shit.zen.event.impl.StrafeEvent;
 import shit.zen.gui.NewClickGui;
-import shit.zen.gui.OldClickGui;
 import shit.zen.modules.Category;
 import shit.zen.modules.Module;
 import shit.zen.modules.impl.player.InventoryManager;
@@ -34,7 +33,7 @@ extends Module {
         if (mc.screen instanceof ChatScreen) {
             return false;
         }
-        if (mc.screen instanceof OldClickGui || mc.screen instanceof NewClickGui) {
+        if (mc.screen instanceof NewClickGui) {
             return true;
         }
         if (mc.player == null) {

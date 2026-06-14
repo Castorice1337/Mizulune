@@ -12,7 +12,6 @@ import net.minecraft.util.Mth;
 import shit.zen.ZenClient;
 import shit.zen.gui.NewClickGui;
 import shit.zen.gui.newclickgui.ModuleElement;
-import shit.zen.gui.newclickgui.SettingElement;
 import shit.zen.gui.newclickgui.UIElement;
 import shit.zen.modules.Category;
 import shit.zen.modules.Module;
@@ -22,7 +21,6 @@ import shit.zen.render.Paint;
 import shit.zen.render.Rectangle;
 import shit.zen.render.Renderer;
 import shit.zen.render.RoundedRectangle;
-import shit.zen.render.StencilHelper;
 import shit.zen.utils.animation.SmoothAnimationTimer;
 import shit.zen.utils.math.Easings;
 import shit.zen.utils.misc.CursorUtil;
@@ -62,8 +60,6 @@ extends UIElement {
     private final SmoothAnimationTimer tooltipTimer = new SmoothAnimationTimer();
     @Getter
     private final SmoothAnimationTimer collapseTimer = new SmoothAnimationTimer();
-    @Getter @Setter
-    private SettingElement<?> hoveredSettingElement;
     @Getter @Setter
     private String tooltipText = "";
     @Getter @Setter
@@ -148,18 +144,9 @@ extends UIElement {
                 }
             }
         } else {
-            boolean headerStencilStarted = false;
-            try {
-                StencilHelper.beginWrite(false);
-                headerStencilStarted = true;
-                RenderUtil.drawRoundedRect(poseStack, this.posX + 0.5f, this.posY, 118.0f, 20.0f, 6.0f, -1);
-                StencilHelper.beginRead(true);
-                RenderUtil.drawGradientH(poseStack, this.posX, this.posY, 120.0f, 1.0f, ColorUtil.withAlpha(ColorUtil.animateColorOffset(-13768502, ACCENT_COLOR_DARK, 100L), alpha), ColorUtil.withAlpha(ColorUtil.animateColorOffset(-13768502, ACCENT_COLOR_DARK, 2000L), alpha));
-            } finally {
-                if (headerStencilStarted) {
-                    StencilHelper.end();
-                }
-            }
+            RenderUtil.drawGradientH(poseStack, this.posX, this.posY, 120.0f, 1.0f,
+                    ColorUtil.withAlpha(ColorUtil.animateColorOffset(-13768502, ACCENT_COLOR_DARK, 100L), alpha),
+                    ColorUtil.withAlpha(ColorUtil.animateColorOffset(-13768502, ACCENT_COLOR_DARK, 2000L), alpha));
         }
         FontStore.AXIFORMA_EXTRABOLD_18.drawString(poseStack, this.category.displayName, this.posX + 8.0f, this.posY + (20.0f - FontStore.AXIFORMA_EXTRABOLD_18.getFontHeight()) / 2.0f + 3.0f, ColorUtil.withAlpha(-1, alpha));
         float scrollOffset = this.scrollTimer.getValueF();
@@ -196,25 +183,14 @@ extends UIElement {
                 }
             }
         } else {
-            boolean bodyStencilStarted = false;
-            try {
-                StencilHelper.beginWrite(false);
-                bodyStencilStarted = true;
-                RenderUtil.drawFilledRect(poseStack, this.posX + 0.5f, this.posY + 20.0f, 119.0f, 6.0f, -1);
-                RenderUtil.drawRoundedRect(poseStack, this.posX, this.posY + 20.0f, 120.0f, this.panelHeight - 20.0f - 0.5f, 6.0f, -1);
-                StencilHelper.beginRead(true);
-                for (ModuleElement moduleElement : this.moduleElements) {
-                    moduleElement.setX(this.posX);
-                    moduleElement.setY(elementY);
-                    moduleElement.render(clickGui, guiGraphics, poseStack, mouseX, mouseY, alpha, partialTicks);
-                    elementY += moduleElement.getHeight();
-                }
-                RenderUtil.drawGradientV(poseStack, this.posX + 0.5f, this.posY + 20.0f - 0.5f, 119.0f, 6.0f, ColorUtil.withAlpha(-16777216, 0.36f * alpha), ColorUtil.withAlpha(-16777216, 0.0f));
-            } finally {
-                if (bodyStencilStarted) {
-                    StencilHelper.end();
-                }
+            for (ModuleElement moduleElement : this.moduleElements) {
+                moduleElement.setX(this.posX);
+                moduleElement.setY(elementY);
+                moduleElement.render(clickGui, guiGraphics, poseStack, mouseX, mouseY, alpha, partialTicks);
+                elementY += moduleElement.getHeight();
             }
+            RenderUtil.drawGradientV(poseStack, this.posX + 0.5f, this.posY + 20.0f - 0.5f, 119.0f, 6.0f,
+                    ColorUtil.withAlpha(-16777216, 0.36f * alpha), ColorUtil.withAlpha(-16777216, 0.0f));
         }
         float tooltipAmount = this.tooltipTimer.getValueF();
         if (tooltipAmount > 0.0f) {

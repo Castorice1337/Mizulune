@@ -233,7 +233,7 @@ implements Closeable {
             currentDrawContext.beforeExternalGlDraw();
         }
         try {
-            this.drawStringRGBFullLegacy(poseStack, text, x, y, baseR, baseG, baseB, alpha, rainbow, rainbowOffset);
+            this.drawStringRGBFullAtlas(poseStack, text, x, y, baseR, baseG, baseB, alpha, rainbow, rainbowOffset);
         } finally {
             if (externalGlDraw) {
                 currentDrawContext.afterExternalGlDraw();
@@ -258,7 +258,7 @@ implements Closeable {
         }
     }
 
-    private void drawStringRGBFullLegacy(PoseStack poseStack, String text, float x, float y, float baseR, float baseG, float baseB, float alpha, boolean rainbow, int rainbowOffset) {
+    private void drawStringRGBFullAtlas(PoseStack poseStack, String text, float x, float y, float baseR, float baseG, float baseB, float alpha, boolean rainbow, int rainbowOffset) {
         float curR = baseR;
         float curG = baseG;
         float curB = baseB;

@@ -3,16 +3,15 @@ package shit.zen.modules.impl.render;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import shit.zen.gui.NewClickGui;
-import shit.zen.gui.OldClickGui;
 import shit.zen.gui.PanelClickGui;
 import shit.zen.modules.Category;
 import shit.zen.modules.Module;
-import shit.zen.settings.impl.ModeSetting;
+import shit.zen.value.impl.ModeValue;
 
 public class ClickGuiModule
 extends Module {
     public static final Logger LOGGER = LogManager.getLogger(ClickGuiModule.class);
-    public final ModeSetting styleSetting = new ModeSetting("Mode", "Old", "Panel", "New").withDefault("Old");
+    public final ModeValue styleSetting = new ModeValue("Mode", "New", "Panel").withDefault("New");
 
     public ClickGuiModule() {
         super("ClickGui", Category.RENDER, 344);
@@ -21,9 +20,7 @@ extends Module {
     @Override
     protected void onEnable() {
         try {
-            if (this.styleSetting.is("Old")) {
-                mc.setScreen(new OldClickGui());
-            } else if (this.styleSetting.is("Panel")) {
+            if (this.styleSetting.is("Panel")) {
                 mc.setScreen(PanelClickGui.panelClickGui);
             } else {
                 mc.setScreen(new NewClickGui());

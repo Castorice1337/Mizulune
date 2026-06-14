@@ -220,8 +220,8 @@ public class LiteTargetStyle extends TargetStyle {
         float textWidth = width - (PADDING + AVATAR_SIZE + CONTENT_GAP) - PADDING;
         String name = this.displayName(target);
         String hpText = this.healthText(target);
-        GlHelper.drawTextShadowLegacy(name, textX, y + 6.0f, this.nameFont, this.withAlpha(0xFFFFFFFF, alpha));
-        GlHelper.drawTextShadowLegacy(hpText, textX, y + 24.0f, this.hpFont, this.withAlpha(0xE8F0F0F0, alpha));
+        GlHelper.drawTextWithShadow(name, textX, y + 6.0f, this.nameFont, this.withAlpha(0xFFFFFFFF, alpha));
+        GlHelper.drawTextWithShadow(hpText, textX, y + 24.0f, this.hpFont, this.withAlpha(0xE8F0F0F0, alpha));
 
         float barX = x + PADDING;
         float barY = y + HEIGHT - BAR_BOTTOM_GAP - BAR_HEIGHT;

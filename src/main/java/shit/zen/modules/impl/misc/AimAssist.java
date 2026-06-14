@@ -12,8 +12,8 @@ import shit.zen.event.impl.Render2DEvent;
 import shit.zen.modules.Category;
 import shit.zen.modules.Module;
 import shit.zen.modules.impl.combat.KillAura;
-import shit.zen.settings.impl.BooleanSetting;
-import shit.zen.settings.impl.NumberSetting;
+import shit.zen.value.impl.BooleanValue;
+import shit.zen.value.impl.NumberValue;
 import shit.zen.utils.game.RotationUtil;
 import shit.zen.utils.math.MathUtil;
 import shit.zen.utils.rotation.Rotation;
@@ -21,15 +21,15 @@ import shit.zen.event.EventTarget;
 
 public class AimAssist
 extends Module {
-    private final NumberSetting randomYawOffset = new NumberSetting("Random Yaw Offset", 2, 0, 10, 0.01);
-    private final NumberSetting randomPitchOffset = new NumberSetting("Random Pitch Offset", 0.075f, 0, 1, 0.01);
-    private final NumberSetting range = new NumberSetting("Range", 5, 3, 30, 0.1);
-    private final NumberSetting fov = new NumberSetting("Fov", 120, 1, 360, 1);
-    private final BooleanSetting mouseDown = new BooleanSetting("Mouse down", true);
-    private final BooleanSetting adaptive = new BooleanSetting("Adaptive", true);
-    private final NumberSetting adaptiveOffset = new NumberSetting("Adaptive Offset", 3, 0.1f, 15.0f, 0.01);
-    private final NumberSetting smoothAmount = new NumberSetting("Smooth amount", 15, 1.0f, 90.0f, 0.1);
-    private final BooleanSetting breakBlock = new BooleanSetting("Break Block", true);
+    private final NumberValue randomYawOffset = new NumberValue("Random Yaw Offset", 2, 0, 10, 0.01);
+    private final NumberValue randomPitchOffset = new NumberValue("Random Pitch Offset", 0.075f, 0, 1, 0.01);
+    private final NumberValue range = new NumberValue("Range", 5, 3, 30, 0.1);
+    private final NumberValue fov = new NumberValue("Fov", 120, 1, 360, 1);
+    private final BooleanValue mouseDown = new BooleanValue("Mouse down", true);
+    private final BooleanValue adaptive = new BooleanValue("Adaptive", true);
+    private final NumberValue adaptiveOffset = new NumberValue("Adaptive Offset", 3, 0.1f, 15.0f, 0.01);
+    private final NumberValue smoothAmount = new NumberValue("Smooth amount", 15, 1.0f, 90.0f, 0.1);
+    private final BooleanValue breakBlock = new BooleanValue("Break Block", true);
     private Vec3 targetOffset;
     private Vec3 aimOffset;
     private boolean isPitchAdjusting = false;

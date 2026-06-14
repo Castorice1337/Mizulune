@@ -424,7 +424,4 @@ extends HudElement {
         }
     }
 
-    @Override
-    public void onSettings() {
-    }
 }
