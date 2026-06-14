@@ -46,6 +46,7 @@ import shit.zen.patch.LivingEntityPatch;
 import shit.zen.patch.LivingEntityRendererPatch;
 import shit.zen.patch.LocalPlayerPatch;
 import shit.zen.patch.MinecraftPatch;
+import shit.zen.patch.MouseHandlerPatch;
 import shit.zen.patch.PacketUtilsPatch;
 import shit.zen.patch.PlayerPatch;
 import shit.zen.patch.PlayerTabOverlayPatch;
@@ -232,6 +233,7 @@ public class ZenClient extends ClientBase {
         PatchRegistry.register(BlockPatch.class);
         PatchRegistry.register(CameraPatch.class);
         PatchRegistry.register(GameRendererPatch.class);
+        PatchRegistry.register(MouseHandlerPatch.class);
         PatchRegistry.register(ItemInHandRendererPatch.class);
         PatchRegistry.register(ItemInHandLayerPatch.class);
         PatchRegistry.register(HumanoidModelPatch.class);

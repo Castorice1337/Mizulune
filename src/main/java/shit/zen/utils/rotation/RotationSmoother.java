@@ -83,6 +83,15 @@ public class RotationSmoother extends ClientBase {
         return this.currentRotation == null ? null : this.currentRotation.clone();
     }
 
+    public void offsetCurrentRotation(float yawDelta, float pitchDelta) {
+        if (this.currentRotation != null) {
+            this.currentRotation = this.offset(this.currentRotation, yawDelta, pitchDelta);
+        }
+        if (this.targetRotation != null) {
+            this.targetRotation = this.offset(this.targetRotation, yawDelta, pitchDelta);
+        }
+    }
+
     public void reset() {
         this.currentRotation = null;
         this.targetRotation = null;
@@ -97,6 +106,12 @@ public class RotationSmoother extends ClientBase {
 
     private Rotation clampPitch(Rotation rotation) {
         return new Rotation(rotation.getYaw(), Mth.clamp(rotation.getPitch(), -90.0f, 90.0f));
+    }
+
+    private Rotation offset(Rotation rotation, float yawDelta, float pitchDelta) {
+        return new Rotation(
+                rotation.getYaw() + yawDelta,
+                Mth.clamp(rotation.getPitch() + pitchDelta, -90.0f, 90.0f));
     }
 
     private double[] resolveSpeeds(

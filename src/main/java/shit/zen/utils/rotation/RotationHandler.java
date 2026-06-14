@@ -107,6 +107,24 @@ extends ClientBase {
                 Mth.clamp(Mth.lerp(tickDelta, previous.getPitch(), currentVisualRotation.getPitch()), -90.0f, 90.0f));
     }
 
+    public static void offsetChangeLookRotation(float yawDelta, float pitchDelta) {
+        if (activeApplyMode != RotationApplyMode.CHANGE_LOOK
+                || currentVisualRotation == null
+                || mc.player == null
+                || (Math.abs(yawDelta) <= 1.0E-6f && Math.abs(pitchDelta) <= 1.0E-6f)) {
+            return;
+        }
+        currentVisualRotation = RotationHandler.offsetRotation(currentVisualRotation, yawDelta, pitchDelta);
+        if (previousVisualRotation != null) {
+            previousVisualRotation = RotationHandler.offsetRotation(previousVisualRotation, yawDelta, pitchDelta);
+        }
+        if (targetRotation != null) {
+            targetRotation = RotationHandler.offsetRotation(targetRotation, yawDelta, pitchDelta);
+            ClientBase.yaw = targetRotation.getYaw();
+        }
+        PROVIDER_SMOOTHER.offsetCurrentRotation(yawDelta, pitchDelta);
+    }
+
     private static RotationProvider resolveProvider() {
         return ROTATION_PROVIDERS.stream()
                 .filter(provider -> provider.isRotationActive()
@@ -144,6 +162,12 @@ extends ClientBase {
             previousVisualRotation = currentVisualRotation.clone();
         }
         currentVisualRotation = rotation.clone();
+    }
+
+    private static Rotation offsetRotation(Rotation rotation, float yawDelta, float pitchDelta) {
+        return new Rotation(
+                rotation.getYaw() + yawDelta,
+                Mth.clamp(rotation.getPitch() + pitchDelta, -90.0f, 90.0f));
     }
 
     private static void clearVisualRotation() {
