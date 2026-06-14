@@ -11,7 +11,7 @@ else()
     configure_file(${JAR_SOURCE} ${JAR_STAGED} COPYONLY)
 endif()
 
-add_library(OpenZen SHARED
+add_library(Mizulune SHARED
     src/main.cpp
     src/jvm_attach.cpp
     src/jar_extract.cpp
@@ -20,7 +20,7 @@ add_library(OpenZen SHARED
     res/openzen.rc
 )
 
-target_include_directories(OpenZen PRIVATE
+target_include_directories(Mizulune PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src
     ${CMAKE_CURRENT_SOURCE_DIR}/res
 )
@@ -31,12 +31,12 @@ set_source_files_properties(res/openzen.rc PROPERTIES
     COMPILE_FLAGS "/I\"${CMAKE_CURRENT_BINARY_DIR}\""
 )
 
-target_compile_definitions(OpenZen PRIVATE
-    OPENZEN_DLL_EXPORTS
+target_compile_definitions(Mizulune PRIVATE
+    MIZULUNE_DLL_EXPORTS
 )
 
-set_target_properties(OpenZen PROPERTIES
-    OUTPUT_NAME "OpenZen"
+set_target_properties(Mizulune PROPERTIES
+    OUTPUT_NAME "Mizulune"
     PREFIX ""
 )
 

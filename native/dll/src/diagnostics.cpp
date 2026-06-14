@@ -48,7 +48,7 @@ void init() {
     if (n == 0 || n > MAX_PATH) return;
 
     wchar_t path[MAX_PATH];
-    std::swprintf(path, MAX_PATH, L"%sopenzen.log", tmp);
+    std::swprintf(path, MAX_PATH, L"%smizulune.log", tmp);
 
     g_file = CreateFileW(path, GENERIC_WRITE, FILE_SHARE_READ, nullptr,
                           CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);

@@ -685,10 +685,10 @@ tasks.register('packageDist') {
     // about to produce does not exist yet. doLast runs after buildNative,
     // by which point the file is definitely on disk.
     doLast {
-        def src = file("$nativeBuildDir/loader/Release/OpenZenLoader.exe")
+        def src = file("$nativeBuildDir/loader/Release/MizuluneLoader.exe")
         if (!src.isFile()) {
             throw new GradleException(
-                "Expected OpenZenLoader.exe at ${src} after buildNative; missing")
+                "Expected MizuluneLoader.exe at ${src} after buildNative; missing")
         }
         copy {
             from src
@@ -728,7 +728,7 @@ tasks.register('upxCompress') {
                   'do not need it installed.'
     dependsOn 'packageDist'
     doLast {
-        def exe = file("$buildDir/dist/OpenZenLoader.exe")
+        def exe = file("$buildDir/dist/MizuluneLoader.exe")
         if (!exe.isFile()) {
             throw new GradleException("packageDist did not produce ${exe}")
         }
