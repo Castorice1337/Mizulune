@@ -26,6 +26,7 @@ import shit.zen.manager.LagManager;
 import shit.zen.manager.ModuleManager;
 import shit.zen.manager.TargetManager;
 import shit.zen.patch.BlockPatch;
+import shit.zen.patch.CameraPatch;
 import shit.zen.patch.ChatScreenPatch;
 import shit.zen.patch.ClientLevelPatch;
 import shit.zen.patch.ConnectionPatch;
@@ -229,6 +230,7 @@ public class ZenClient extends ClientBase {
         PatchRegistry.register(EntityRendererPatch.class);
         PatchRegistry.register(LevelRendererPatch.class);
         PatchRegistry.register(BlockPatch.class);
+        PatchRegistry.register(CameraPatch.class);
         PatchRegistry.register(GameRendererPatch.class);
         PatchRegistry.register(ItemInHandRendererPatch.class);
         PatchRegistry.register(ItemInHandLayerPatch.class);

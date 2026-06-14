@@ -2,6 +2,7 @@ package shit.zen.utils.rotation;
 
 import net.minecraft.network.protocol.game.ServerboundChatPacket;
 import net.minecraft.network.protocol.game.ServerboundMovePlayerPacket;
+import net.minecraft.util.Mth;
 import java.util.Comparator;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -49,6 +50,8 @@ extends ClientBase {
     private static RotationProvider activeProvider;
     private static boolean movementFixing;
     private static RotationApplyMode activeApplyMode;
+    private static Rotation previousVisualRotation;
+    private static Rotation currentVisualRotation;
 
     public static void setTargetRotation(Rotation rotation) {
         RotationHandler.setTargetRotation(rotation, true);
@@ -68,6 +71,8 @@ extends ClientBase {
         ClientBase.yaw = rotation.getYaw();
         if (activeApplyMode == RotationApplyMode.CHANGE_LOOK) {
             RotationHandler.applyToLocalCamera(rotation);
+        } else {
+            RotationHandler.clearVisualRotation();
         }
     }
 
@@ -91,6 +96,17 @@ extends ClientBase {
         return null;
     }
 
+    public static Rotation getVisualRotation(float partialTick) {
+        if (activeApplyMode != RotationApplyMode.CHANGE_LOOK || currentVisualRotation == null) {
+            return null;
+        }
+        Rotation previous = previousVisualRotation == null ? currentVisualRotation : previousVisualRotation;
+        float tickDelta = Mth.clamp(partialTick, 0.0f, 1.0f);
+        return new Rotation(
+                Mth.rotLerp(tickDelta, previous.getYaw(), currentVisualRotation.getYaw()),
+                Mth.clamp(Mth.lerp(tickDelta, previous.getPitch(), currentVisualRotation.getPitch()), -90.0f, 90.0f));
+    }
+
     private static RotationProvider resolveProvider() {
         return ROTATION_PROVIDERS.stream()
                 .filter(provider -> provider.isRotationActive()
@@ -104,10 +120,35 @@ extends ClientBase {
         if (mc.player == null) {
             return;
         }
-        mc.player.setYRot(rotation.getYaw());
-        mc.player.setXRot(rotation.getPitch());
-        mc.player.yRotO = rotation.getYaw();
-        mc.player.xRotO = rotation.getPitch();
+        float yaw = rotation.getYaw();
+        float pitch = Mth.clamp(rotation.getPitch(), -90.0f, 90.0f);
+        if (Float.isNaN(yaw) || Float.isNaN(pitch)) {
+            return;
+        }
+        RotationHandler.updateVisualRotation(new Rotation(yaw, pitch));
+        Rotation previous = previousVisualRotation == null
+                ? new Rotation(mc.player.getYRot(), mc.player.getXRot())
+                : previousVisualRotation;
+        mc.player.yRotO = previous.getYaw();
+        mc.player.xRotO = Mth.clamp(previous.getPitch(), -90.0f, 90.0f);
+        mc.player.setYRot(yaw);
+        mc.player.setXRot(pitch);
+    }
+
+    private static void updateVisualRotation(Rotation rotation) {
+        if (currentVisualRotation == null) {
+            previousVisualRotation = mc.player == null
+                    ? rotation.clone()
+                    : new Rotation(mc.player.getYRot(), Mth.clamp(mc.player.getXRot(), -90.0f, 90.0f));
+        } else {
+            previousVisualRotation = currentVisualRotation.clone();
+        }
+        currentVisualRotation = rotation.clone();
+    }
+
+    private static void clearVisualRotation() {
+        previousVisualRotation = null;
+        currentVisualRotation = null;
     }
 
     private static Rotation smoothProviderRotation(RotationProvider provider) {
@@ -130,6 +171,7 @@ extends ClientBase {
 
     private static void clearRotationState() {
         RotationHandler.clearActiveProvider();
+        RotationHandler.clearVisualRotation();
         isRotating = false;
         movementFixing = false;
         activeApplyMode = RotationApplyMode.OFF;
@@ -141,6 +183,7 @@ extends ClientBase {
         prevRotation = null;
         targetRotation = null;
         RotationHandler.clearActiveProvider();
+        RotationHandler.clearVisualRotation();
         movementFixing = false;
         activeApplyMode = RotationApplyMode.OFF;
     }
@@ -330,5 +373,7 @@ extends ClientBase {
         isRotating = false;
         movementFixing = false;
         activeApplyMode = RotationApplyMode.OFF;
+        previousVisualRotation = null;
+        currentVisualRotation = null;
     }
 }
