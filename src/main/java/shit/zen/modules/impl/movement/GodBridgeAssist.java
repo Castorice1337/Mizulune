@@ -39,6 +39,7 @@ import shit.zen.utils.rotation.RotationApplyMode;
 import shit.zen.utils.rotation.RotationHandler;
 import shit.zen.utils.rotation.RotationProvider;
 import shit.zen.utils.rotation.SmoothMode;
+import shit.zen.value.ValueGroup;
 import shit.zen.value.impl.BooleanValue;
 import shit.zen.value.impl.ModeValue;
 import shit.zen.value.impl.NumberValue;
@@ -50,6 +51,26 @@ public class GodBridgeAssist extends Module implements RotationProvider {
     private static final double LEDGE_PREDICT_DISTANCE = 0.24;
     private static final double EDGE_INFLATE = 0.08;
     private static final double MAX_PLACE_DISTANCE_SQ = 20.25;
+    private static final BlockPos[] PLACEMENT_OFFSETS = {
+            new BlockPos(0, 0, 0),
+            new BlockPos(0, -1, 0),
+            new BlockPos(-1, 0, 0),
+            new BlockPos(0, 0, -1),
+            new BlockPos(0, 0, 1),
+            new BlockPos(1, 0, 0),
+            new BlockPos(-1, -1, 0),
+            new BlockPos(0, -1, -1),
+            new BlockPos(0, -1, 1),
+            new BlockPos(1, -1, 0),
+            new BlockPos(-1, 0, -1),
+            new BlockPos(-1, 0, 1),
+            new BlockPos(1, 0, -1),
+            new BlockPos(1, 0, 1),
+            new BlockPos(-1, -1, -1),
+            new BlockPos(-1, -1, 1),
+            new BlockPos(1, -1, -1),
+            new BlockPos(1, -1, 1)
+    };
 
     private final GodBridgeAngleSolver angleSolver = new GodBridgeAngleSolver();
 
@@ -66,6 +87,7 @@ public class GodBridgeAssist extends Module implements RotationProvider {
     public final BooleanValue movementFix = new BooleanValue("Movement Fix", false, () -> !this.rotationMode.is("Off"));
     public final ModeValue placeMode = new ModeValue("Place Mode", "ManualPlaceOnly", "AutoPlace").withDefault("ManualPlaceOnly");
     public final BooleanValue autoBlock = new BooleanValue("Auto Block", false);
+    public final BooleanValue counterOnIsland = new BooleanValue("Counter On Island", false);
     public final BooleanValue ledgeAssist = new BooleanValue("Ledge Assist", true);
     public final ModeValue ledgeDetection = new ModeValue("Ledge Detection", "SafeWalkDistance", "PredictProbe")
             .withDefault("SafeWalkDistance")
@@ -94,12 +116,47 @@ public class GodBridgeAssist extends Module implements RotationProvider {
     private int releaseDelayTicks;
 
     public GodBridgeAssist() {
-        super("GodBridgeAssist", Category.MISC);
+        super("BridgeAssist", Category.MISC);
         INSTANCE = this;
     }
 
     @Override
+    protected void configureValueTree(ValueGroup root) {
+        ValueGroup rotation = root.group("rotation", "Rotation");
+        rotation.add(this.rotationMode);
+        rotation.add(this.smoothMode);
+        rotation.add(this.timing);
+        rotation.add(this.smoothDuration);
+        rotation.add(this.smoothSteepness);
+        rotation.add(this.maxYawSpeed);
+        rotation.add(this.maxPitchSpeed);
+        rotation.add(this.minStep);
+        rotation.add(this.epsilon);
+        rotation.add(this.humanizeRotation);
+        rotation.add(this.movementFix);
+
+        ValueGroup placement = root.group("placement", "Placement");
+        placement.add(this.placeMode);
+        placement.add(this.autoBlock);
+        placement.add(this.counterOnIsland);
+
+        ValueGroup ledge = root.group("ledge", "Ledge");
+        ledge.add(this.ledgeAssist);
+        ledge.add(this.ledgeDetection);
+        ledge.add(this.ledgeAction);
+        ledge.add(this.bridgeEdgeDistanceMin);
+        ledge.add(this.bridgeEdgeDistanceMax);
+        ledge.add(this.bridgeLedgeTicksMin);
+        ledge.add(this.bridgeLedgeTicksMax);
+        ledge.add(this.bridgeReleaseDelay);
+        ledge.add(this.forceTrueEdgeSneak);
+    }
+
+    @Override
     protected void onEnable() {
+        if (Scaffold.INSTANCE != null && Scaffold.INSTANCE.isEnabled()) {
+            Scaffold.INSTANCE.setEnabled(false);
+        }
         this.currentTargetRotation = null;
         this.currentTarget = null;
         this.stopInputThisTick = false;
@@ -173,7 +230,7 @@ public class GodBridgeAssist extends Module implements RotationProvider {
 
     @Override
     public String getName() {
-        return "GodBridgeAssist";
+        return "BridgeAssist";
     }
 
     @Override
@@ -276,7 +333,7 @@ public class GodBridgeAssist extends Module implements RotationProvider {
             return true;
         }
         Rotation smoothedRotation = RotationHandler.getSmoothedRotation(this);
-        return smoothedRotation == null || !this.doesRotationHitTarget(smoothedRotation, this.currentTarget);
+        return smoothedRotation == null || !this.canPlaceWithRotation(smoothedRotation);
     }
 
     private void applyLedgeAssist() {
@@ -392,17 +449,22 @@ public class GodBridgeAssist extends Module implements RotationProvider {
             return;
         }
         Rotation placeRotation = RotationHandler.getSmoothedRotation(this);
-        if (this.currentTarget == null || placeRotation == null || mc.gameMode == null || mc.player.tickCount == this.lastPlaceTick) {
+        if (placeRotation == null || mc.gameMode == null || mc.player.tickCount == this.lastPlaceTick) {
             return;
         }
         InteractionHand hand = this.getPlaceHand();
-        if (hand == null || !this.isValidPlacementTarget(this.currentTarget)) {
+        if (hand == null) {
             return;
         }
-        BlockHitResult hit = this.getPlacementHit(placeRotation, this.currentTarget);
+        BlockHitResult hit = this.getPlacementHit(placeRotation);
         if (hit == null) {
             return;
         }
+        PlacementTarget target = this.findMatchingPlacementTarget(hit);
+        if (target == null) {
+            return;
+        }
+        this.currentTarget = target;
 
         InteractionResult result = mc.gameMode.useItemOn(mc.player, hand, hit);
         this.lastPlaceTick = mc.player.tickCount;
@@ -413,20 +475,67 @@ public class GodBridgeAssist extends Module implements RotationProvider {
 
     private PlacementTarget findPlacementTarget() {
         BlockPos placePos = this.getTargetPlacePos();
-        if (placePos == null || !this.isReplaceable(placePos)) {
+        if (placePos == null) {
             return null;
         }
+        return this.findBestPlacementTarget(placePos, null);
+    }
 
-        Direction[] directions = {Direction.DOWN, Direction.EAST, Direction.WEST, Direction.NORTH, Direction.SOUTH, Direction.UP};
-        for (Direction direction : directions) {
-            BlockPos support = placePos.relative(direction);
-            Direction facing = direction.getOpposite();
-            PlacementTarget target = new PlacementTarget(support, facing);
-            if (this.isValidPlacementTarget(target)) {
-                return target;
+    private PlacementTarget findMatchingPlacementTarget(BlockHitResult hit) {
+        if (hit == null || hit.getType() != HitResult.Type.BLOCK) {
+            return null;
+        }
+        if (this.isValidPlacementTarget(this.currentTarget) && this.doesHitMatchTarget(hit, this.currentTarget)) {
+            return this.currentTarget;
+        }
+        BlockPos placePos = this.getTargetPlacePos();
+        if (placePos == null) {
+            return null;
+        }
+        return this.findBestPlacementTarget(placePos, hit);
+    }
+
+    private PlacementTarget findBestPlacementTarget(BlockPos basePlacePos, BlockHitResult requiredHit) {
+        PlacementTarget bestTarget = null;
+        double bestScore = Double.POSITIVE_INFINITY;
+        for (BlockPos offset : PLACEMENT_OFFSETS) {
+            BlockPos placedBlock = basePlacePos.offset(offset);
+            for (Direction facing : Direction.values()) {
+                PlacementTarget target = this.createPlacementTarget(placedBlock, facing);
+                if (target == null) {
+                    continue;
+                }
+                if (requiredHit != null && !this.doesHitMatchTarget(requiredHit, target)) {
+                    continue;
+                }
+                double score = this.getPlacementTargetScore(target, basePlacePos, requiredHit);
+                if (score < bestScore) {
+                    bestScore = score;
+                    bestTarget = target;
+                }
             }
         }
-        return null;
+        return bestTarget;
+    }
+
+    private PlacementTarget createPlacementTarget(BlockPos placedBlock, Direction facing) {
+        if (mc.level == null || mc.player == null || mc.level.isOutsideBuildHeight(placedBlock) || !this.isReplaceable(placedBlock)) {
+            return null;
+        }
+        BlockPos interactedBlock = placedBlock.relative(facing.getOpposite());
+        if (mc.level.isOutsideBuildHeight(interactedBlock)) {
+            return null;
+        }
+        BlockState state = mc.level.getBlockState(interactedBlock);
+        if (state.isAir() || state.canBeReplaced() || !BlockUtil.isSolid(state) || state.getCollisionShape(mc.level, interactedBlock).isEmpty()) {
+            return null;
+        }
+        FaceTarget faceTarget = this.getFaceTarget(interactedBlock, state, facing);
+        if (faceTarget == null || !this.isFaceVisibleToPlayer(faceTarget.point(), facing)) {
+            return null;
+        }
+        PlacementTarget target = new PlacementTarget(interactedBlock, placedBlock, facing, faceTarget.point(), faceTarget.minPlacementY());
+        return this.isValidPlacementTarget(target) ? target : null;
     }
 
     private BlockPos getTargetPlacePos() {
@@ -441,15 +550,14 @@ public class GodBridgeAssist extends Module implements RotationProvider {
         if (target == null || mc.level == null || mc.player == null) {
             return false;
         }
-        BlockPos placePos = target.position().relative(target.facing());
-        if (mc.level.isOutsideBuildHeight(placePos) || !this.isReplaceable(placePos)) {
+        if (mc.level.isOutsideBuildHeight(target.placedBlockPos()) || !this.isReplaceable(target.placedBlockPos())) {
             return false;
         }
-        BlockState state = mc.level.getBlockState(target.position());
-        if (state.isAir() || !BlockUtil.isSolid(state) || state.getCollisionShape(mc.level, target.position()).isEmpty()) {
+        BlockState state = mc.level.getBlockState(target.interactedBlockPos());
+        if (state.isAir() || state.canBeReplaced() || !BlockUtil.isSolid(state) || state.getCollisionShape(mc.level, target.interactedBlockPos()).isEmpty()) {
             return false;
         }
-        return mc.player.getEyePosition().distanceToSqr(this.getHitVec(target)) <= MAX_PLACE_DISTANCE_SQ;
+        return mc.player.getEyePosition().distanceToSqr(target.targetPoint()) <= MAX_PLACE_DISTANCE_SQ;
     }
 
     private boolean isReplaceable(BlockPos pos) {
@@ -460,18 +568,151 @@ public class GodBridgeAssist extends Module implements RotationProvider {
         return this.getPlacementHit(rotation, target) != null;
     }
 
+    private boolean canPlaceWithRotation(Rotation rotation) {
+        BlockHitResult hit = this.getPlacementHit(rotation);
+        return hit != null && this.findMatchingPlacementTarget(hit) != null;
+    }
+
     private BlockHitResult getPlacementHit(Rotation rotation, PlacementTarget target) {
-        if (rotation == null || target == null || mc.player == null || mc.level == null) {
+        BlockHitResult blockHit = this.getPlacementHit(rotation);
+        if (blockHit == null || !this.doesHitMatchTarget(blockHit, target)) {
+            return null;
+        }
+        return blockHit;
+    }
+
+    private BlockHitResult getPlacementHit(Rotation rotation) {
+        if (rotation == null || mc.player == null || mc.level == null) {
             return null;
         }
         HitResult result = this.rayTrace(rotation, 4.5);
         if (!(result instanceof BlockHitResult blockHit) || blockHit.getType() != HitResult.Type.BLOCK) {
             return null;
         }
-        if (!blockHit.getBlockPos().equals(target.position()) || blockHit.getDirection() != target.facing()) {
+        return blockHit;
+    }
+
+    private boolean doesHitMatchTarget(BlockHitResult blockHit, PlacementTarget target) {
+        return blockHit != null
+                && target != null
+                && blockHit.getType() == HitResult.Type.BLOCK
+                && blockHit.getBlockPos().equals(target.interactedBlockPos())
+                && blockHit.getDirection() == target.facing()
+                && blockHit.getLocation().y + 1.0E-4 >= target.minPlacementY()
+                && this.isReplaceable(target.placedBlockPos());
+    }
+
+    private double getPlacementTargetScore(PlacementTarget target, BlockPos basePlacePos, BlockHitResult requiredHit) {
+        if (requiredHit != null) {
+            return requiredHit.getLocation().distanceToSqr(target.targetPoint());
+        }
+        Rotation smoothedRotation = RotationHandler.getSmoothedRotation(this);
+        if (smoothedRotation != null && this.getPlacementHit(smoothedRotation, target) != null) {
+            return -1000.0 + this.blockDistanceSqr(target.placedBlockPos(), basePlacePos);
+        }
+        Rotation preferredRotation = this.angleSolver.solve(
+                this.toSolverTarget(target),
+                this.getPhysicalForward(),
+                this.getPhysicalStrafe());
+        Rotation lookRotation = this.getRotationToPoint(target.targetPoint());
+        double score = this.blockDistanceSqr(target.placedBlockPos(), basePlacePos);
+        if (preferredRotation != null) {
+            if (this.getPlacementHit(preferredRotation, target) != null) {
+                score -= 500.0;
+            }
+            score += this.rotationDistance(preferredRotation, lookRotation) * 0.05;
+        }
+        return score;
+    }
+
+    private double blockDistanceSqr(BlockPos a, BlockPos b) {
+        double dx = a.getX() - b.getX();
+        double dy = a.getY() - b.getY();
+        double dz = a.getZ() - b.getZ();
+        return dx * dx + dy * dy + dz * dz;
+    }
+
+    private double rotationDistance(Rotation first, Rotation second) {
+        return Math.abs(Mth.wrapDegrees(first.getYaw() - second.getYaw()))
+                + Math.abs(first.getPitch() - second.getPitch());
+    }
+
+    private Rotation getRotationToPoint(Vec3 point) {
+        Vec3 eye = mc.player.getEyePosition(1.0f);
+        double dx = point.x - eye.x;
+        double dy = point.y - eye.y;
+        double dz = point.z - eye.z;
+        double horizontal = Math.sqrt(dx * dx + dz * dz);
+        float yaw = (float) Math.toDegrees(Math.atan2(dz, dx)) - 90.0f;
+        float pitch = (float) -Math.toDegrees(Math.atan2(dy, horizontal));
+        return new Rotation(Mth.wrapDegrees(yaw), Mth.clamp(pitch, -90.0f, 90.0f));
+    }
+
+    private FaceTarget getFaceTarget(BlockPos interactedBlock, BlockState state, Direction facing) {
+        AABB bestBox = null;
+        double bestPlane = 0.0;
+        for (AABB box : state.getShape(mc.level, interactedBlock).toAabbs()) {
+            double plane = this.getFacePlane(box, facing);
+            if (bestBox == null || this.isBetterFaceBox(box, plane, bestBox, bestPlane, facing)) {
+                bestBox = box;
+                bestPlane = plane;
+            }
+        }
+        if (bestBox == null) {
             return null;
         }
-        return blockHit;
+
+        double x = interactedBlock.getX() + (bestBox.minX + bestBox.maxX) * 0.5;
+        double y = interactedBlock.getY() + (bestBox.minY + bestBox.maxY) * 0.5;
+        double z = interactedBlock.getZ() + (bestBox.minZ + bestBox.maxZ) * 0.5;
+        double minPlacementY = interactedBlock.getY() + bestBox.minY;
+        switch (facing) {
+            case EAST -> x = interactedBlock.getX() + bestBox.maxX;
+            case WEST -> x = interactedBlock.getX() + bestBox.minX;
+            case SOUTH -> z = interactedBlock.getZ() + bestBox.maxZ;
+            case NORTH -> z = interactedBlock.getZ() + bestBox.minZ;
+            case UP -> {
+                y = interactedBlock.getY() + bestBox.maxY;
+                minPlacementY = y;
+            }
+            case DOWN -> {
+                y = interactedBlock.getY() + bestBox.minY;
+                minPlacementY = y;
+            }
+        }
+        return new FaceTarget(new Vec3(x, y, z), minPlacementY);
+    }
+
+    private double getFacePlane(AABB box, Direction facing) {
+        return switch (facing) {
+            case EAST -> box.maxX;
+            case WEST -> box.minX;
+            case SOUTH -> box.maxZ;
+            case NORTH -> box.minZ;
+            case UP -> box.maxY;
+            case DOWN -> box.minY;
+        };
+    }
+
+    private boolean isBetterFaceBox(AABB box, double plane, AABB bestBox, double bestPlane, Direction facing) {
+        double epsilon = 1.0E-5;
+        boolean betterPlane = switch (facing) {
+            case EAST, SOUTH, UP -> plane > bestPlane + epsilon;
+            case WEST, NORTH, DOWN -> plane < bestPlane - epsilon;
+        };
+        if (betterPlane) {
+            return true;
+        }
+        if (Math.abs(plane - bestPlane) <= epsilon) {
+            return box.maxY > bestBox.maxY;
+        }
+        return false;
+    }
+
+    private boolean isFaceVisibleToPlayer(Vec3 targetPoint, Direction facing) {
+        Vec3 delta = mc.player.getEyePosition(1.0f).subtract(targetPoint);
+        double length = delta.length();
+        return length > 1.0E-5 && delta.dot(Vec3.atLowerCornerOf(facing.getNormal())) >= 0.0;
     }
 
     private HitResult rayTrace(Rotation rotation, double range) {
@@ -482,11 +723,7 @@ public class GodBridgeAssist extends Module implements RotationProvider {
     }
 
     private Vec3 getHitVec(PlacementTarget target) {
-        Vec3 center = new Vec3(
-                target.position().getX() + 0.5,
-                target.position().getY() + 0.5,
-                target.position().getZ() + 0.5);
-        return center.add(Vec3.atLowerCornerOf(target.facing().getNormal()).scale(0.5));
+        return target.targetPoint();
     }
 
     private boolean willWalkOffEdge() {
@@ -589,7 +826,38 @@ public class GodBridgeAssist extends Module implements RotationProvider {
         return stack.getItem() instanceof BlockItem && BlockUtil.isPlaceable(stack);
     }
 
-    private int getPlaceableBlockCount() {
+    public boolean isCounterOnIslandActive() {
+        return this.isEnabled() && this.counterOnIsland.getValue() && this.getPlaceableBlockCount() > 0;
+    }
+
+    public ItemStack getCounterBlockItem() {
+        if (mc.player == null) {
+            return ItemStack.EMPTY;
+        }
+        ItemStack selected = mc.player.getMainHandItem();
+        if (selected.getItem() instanceof BlockItem && BlockUtil.isPlaceable(selected)) {
+            return selected;
+        }
+        for (int i = 0; i < 9; i++) {
+            ItemStack stack = mc.player.getInventory().getItem(i);
+            if (stack.getItem() instanceof BlockItem && BlockUtil.isPlaceable(stack)) {
+                return stack;
+            }
+        }
+        for (int i = 9; i < 36; i++) {
+            ItemStack stack = mc.player.getInventory().getItem(i);
+            if (stack.getItem() instanceof BlockItem && BlockUtil.isPlaceable(stack)) {
+                return stack;
+            }
+        }
+        ItemStack offhand = mc.player.getOffhandItem();
+        if (offhand.getItem() instanceof BlockItem && BlockUtil.isPlaceable(offhand)) {
+            return offhand;
+        }
+        return ItemStack.EMPTY;
+    }
+
+    public int getPlaceableBlockCount() {
         if (mc.player == null) {
             return 0;
         }
@@ -666,6 +934,9 @@ public class GodBridgeAssist extends Module implements RotationProvider {
         }
     }
 
-    private record PlacementTarget(BlockPos position, Direction facing) {
+    private record PlacementTarget(BlockPos interactedBlockPos, BlockPos placedBlockPos, Direction facing, Vec3 targetPoint, double minPlacementY) {
+    }
+
+    private record FaceTarget(Vec3 point, double minPlacementY) {
     }
 }

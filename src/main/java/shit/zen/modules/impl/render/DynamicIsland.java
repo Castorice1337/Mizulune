@@ -14,6 +14,7 @@ import shit.zen.event.EventTarget;
 import shit.zen.event.impl.Render2DEvent;
 import shit.zen.modules.Category;
 import shit.zen.modules.Module;
+import shit.zen.modules.impl.movement.GodBridgeAssist;
 import shit.zen.modules.impl.movement.Scaffold;
 import shit.zen.modules.impl.player.ChestStealer;
 import shit.zen.render.DrawContext;
@@ -42,7 +43,7 @@ public class DynamicIsland extends Module {
     private static final float MIN_WIDTH = 210.0f;
     private static final float PANEL_RADIUS = 8.0f;
     private static final float STACK_GAP = 6.0f;
-    private static final float SCAFFOLD_HEIGHT = 48.0f;
+    private static final float BRIDGE_COUNTER_HEIGHT = 48.0f;
 
     public final ModeValue ModeValue = new ModeValue("Mode", "Old", "Liquid Glass").withDefault("Liquid Glass");
 
@@ -91,6 +92,18 @@ public class DynamicIsland extends Module {
                 && INSTANCE.isLiquidGlassMode()
                 && Scaffold.INSTANCE != null
                 && Scaffold.INSTANCE.isCounterOnIslandActive();
+    }
+
+    public static boolean shouldRenderBridgeAssistCounter() {
+        return INSTANCE != null
+                && INSTANCE.isEnabled()
+                && INSTANCE.isLiquidGlassMode()
+                && GodBridgeAssist.INSTANCE != null
+                && GodBridgeAssist.INSTANCE.isCounterOnIslandActive();
+    }
+
+    public static boolean shouldRenderGodBridgeCounter() {
+        return shouldRenderBridgeAssistCounter();
     }
 
     @EventTarget
@@ -154,12 +167,13 @@ public class DynamicIsland extends Module {
     }
 
     private ContentSnapshot resolveContent() {
-        boolean scaffoldCounter = this.shouldShowScaffoldCounter();
+        BridgeCounterSource bridgeCounter = this.getBridgeCounterSource();
+        boolean hasBridgeCounter = bridgeCounter != null;
         ChestMenu chestMenu = this.getActiveChestMenu();
         long now = System.currentTimeMillis();
         List<Notification.IslandNotification> notifications = Notification.visibleNotifications(now);
 
-        if (!scaffoldCounter && chestMenu == null && notifications.isEmpty()) {
+        if (!hasBridgeCounter && chestMenu == null && notifications.isEmpty()) {
             return ContentSnapshot.defaults(this.measureDefaultWidth(), DEFAULT_HEIGHT);
         }
 
@@ -170,9 +184,9 @@ public class DynamicIsland extends Module {
         float chestHeight = 0.0f;
         float notificationHeight = 0.0f;
 
-        if (scaffoldCounter) {
-            width = Math.max(width, this.measureScaffoldWidth());
-            height += SCAFFOLD_HEIGHT;
+        if (hasBridgeCounter) {
+            width = Math.max(width, this.measureBridgeCounterWidth(bridgeCounter));
+            height += BRIDGE_COUNTER_HEIGHT;
             sections++;
         }
 
@@ -202,7 +216,8 @@ public class DynamicIsland extends Module {
         }
 
         height += Math.max(0, sections - 1) * STACK_GAP;
-        return ContentSnapshot.payloads(width + 24.0f, height, scaffoldCounter, chestMenu, chestRows, chestHeight,
+        return ContentSnapshot.payloads(width + 24.0f, height, hasBridgeCounter,
+                bridgeCounter == null ? "none" : bridgeCounter.key(), chestMenu, chestRows, chestHeight,
                 notifications, notificationHeight);
     }
 
@@ -213,18 +228,26 @@ public class DynamicIsland extends Module {
         return Math.max(MIN_WIDTH, 28.0f + logoSize + 8.0f + nameWidth + 18.0f + infoWidth + 24.0f);
     }
 
-    private float measureScaffoldWidth() {
-        int blocks = Scaffold.INSTANCE != null ? Scaffold.INSTANCE.getPlaceableBlockCount() : 0;
-        String title = "Scaffold Toggle";
-        String info = blocks + " blocks available  \u00b7  " + this.getScaffoldSpeedText();
+    private float measureBridgeCounterWidth(BridgeCounterSource source) {
+        String info = source.blocks() + " blocks available  \u00b7  " + this.getScaffoldSpeedText();
         float textWidth = Math.max(
-                GlHelper.getStringWidth(title, this.scaffoldTitleFont),
+                GlHelper.getStringWidth(source.title(), this.scaffoldTitleFont),
                 GlHelper.getStringWidth(info, this.scaffoldInfoFont));
         return Math.max(230.0f, 48.0f + textWidth + 20.0f);
     }
 
-    private boolean shouldShowScaffoldCounter() {
-        return shouldRenderScaffoldCounter();
+    private BridgeCounterSource getBridgeCounterSource() {
+        if (Scaffold.INSTANCE != null && Scaffold.INSTANCE.isCounterOnIslandActive()) {
+            return new BridgeCounterSource("scaffold", "Scaffold Toggle",
+                    Scaffold.INSTANCE.getPlaceableBlockCount(),
+                    Scaffold.INSTANCE.getCounterBlockItem());
+        }
+        if (GodBridgeAssist.INSTANCE != null && GodBridgeAssist.INSTANCE.isCounterOnIslandActive()) {
+            return new BridgeCounterSource("bridgeassist", "BridgeAssist Toggled",
+                    GodBridgeAssist.INSTANCE.getPlaceableBlockCount(),
+                    GodBridgeAssist.INSTANCE.getCounterBlockItem());
+        }
+        return null;
     }
 
     private ChestMenu getActiveChestMenu() {
@@ -321,9 +344,9 @@ public class DynamicIsland extends Module {
                                   long now, float alpha) {
         float cursorY = y;
         boolean needsDivider = false;
-        if (content.scaffoldCounter) {
-            this.drawScaffoldContent(drawContext, x, cursorY, width, SCAFFOLD_HEIGHT, alpha);
-            cursorY += SCAFFOLD_HEIGHT;
+        if (content.bridgeCounter) {
+            this.drawBridgeCounterContent(drawContext, x, cursorY, width, BRIDGE_COUNTER_HEIGHT, alpha);
+            cursorY += BRIDGE_COUNTER_HEIGHT;
             needsDivider = true;
         }
         if (content.chestMenu != null) {
@@ -352,12 +375,13 @@ public class DynamicIsland extends Module {
         }
     }
 
-    private void drawScaffoldContent(DrawContext drawContext, float x, float y, float width, float height, float alpha) {
-        if (Scaffold.INSTANCE == null) {
+    private void drawBridgeCounterContent(DrawContext drawContext, float x, float y, float width, float height, float alpha) {
+        BridgeCounterSource source = this.getBridgeCounterSource();
+        if (source == null) {
             return;
         }
-        int blocks = Scaffold.INSTANCE.getPlaceableBlockCount();
-        ItemStack iconStack = Scaffold.INSTANCE.getCounterBlockItem();
+        int blocks = source.blocks();
+        ItemStack iconStack = source.iconStack();
         float iconSize = 22.0f;
         float iconX = x + 14.0f;
         float iconY = y + 8.0f;
@@ -365,7 +389,7 @@ public class DynamicIsland extends Module {
             this.queueItemRender(iconStack, iconX, iconY, iconSize, alpha, false);
         }
         float textX = iconStack.isEmpty() ? x + 16.0f : x + 46.0f;
-        GlHelper.drawText("Scaffold Toggle", textX, y + 6.0f, this.scaffoldTitleFont, this.withAlpha(0xFFFFFFFF, alpha));
+        GlHelper.drawText(source.title(), textX, y + 6.0f, this.scaffoldTitleFont, this.withAlpha(0xFFFFFFFF, alpha));
         String info = blocks + " blocks available  \u00b7  " + this.getScaffoldSpeedText();
         GlHelper.drawText(info, textX, y + 23.0f, this.scaffoldInfoFont, this.withAlpha(0xEAF4FFFF, alpha));
 
@@ -618,26 +642,29 @@ public class DynamicIsland extends Module {
         PAYLOADS
     }
 
+    private record BridgeCounterSource(String key, String title, int blocks, ItemStack iconStack) {
+    }
+
     private static final class ContentSnapshot {
         private final ContentType type;
         private final String key;
         private final float width;
         private final float height;
-        private final boolean scaffoldCounter;
+        private final boolean bridgeCounter;
         private final ChestMenu chestMenu;
         private final int chestRows;
         private final float chestHeight;
         private final List<Notification.IslandNotification> notifications;
         private final float notificationHeight;
 
-        private ContentSnapshot(ContentType type, String key, float width, float height, boolean scaffoldCounter,
+        private ContentSnapshot(ContentType type, String key, float width, float height, boolean bridgeCounter,
                                 ChestMenu chestMenu, int chestRows, float chestHeight,
                                 List<Notification.IslandNotification> notifications, float notificationHeight) {
             this.type = type;
             this.key = key;
             this.width = width;
             this.height = height;
-            this.scaffoldCounter = scaffoldCounter;
+            this.bridgeCounter = bridgeCounter;
             this.chestMenu = chestMenu;
             this.chestRows = chestRows;
             this.chestHeight = chestHeight;
@@ -650,17 +677,17 @@ public class DynamicIsland extends Module {
                     null, 0, 0.0f, List.of(), 0.0f);
         }
 
-        private static ContentSnapshot payloads(float width, float height, boolean scaffoldCounter,
+        private static ContentSnapshot payloads(float width, float height, boolean bridgeCounter, String bridgeCounterKey,
                                                 ChestMenu chestMenu, int chestRows, float chestHeight,
                                                 List<Notification.IslandNotification> notifications,
                                                 float notificationHeight) {
             long firstStarted = notifications.isEmpty() ? 0L : notifications.get(0).getStartedAt();
-            String key = "payloads:scaffold=" + scaffoldCounter
+            String key = "payloads:bridge=" + bridgeCounter + ":" + bridgeCounterKey
                     + ":chest=" + (chestMenu == null ? 0 : System.identityHashCode(chestMenu))
                     + ":rows=" + chestRows
                     + ":notifications=" + notifications.size()
                     + ":" + firstStarted;
-            return new ContentSnapshot(ContentType.PAYLOADS, key, width, height, scaffoldCounter,
+            return new ContentSnapshot(ContentType.PAYLOADS, key, width, height, bridgeCounter,
                     chestMenu, chestRows, chestHeight, notifications, notificationHeight);
         }
     }

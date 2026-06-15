@@ -20,7 +20,6 @@ import net.minecraft.client.player.LocalPlayer;
 import net.minecraft.util.Mth;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
-import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.level.ClipContext;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.HitResult;
@@ -28,9 +27,9 @@ import net.minecraft.world.phys.Vec3;
 import shit.zen.ZenClient;
 import shit.zen.event.EventTarget;
 import shit.zen.event.impl.TickEvent;
+import shit.zen.manager.TargetManager;
 import shit.zen.modules.Category;
 import shit.zen.modules.Module;
-import shit.zen.modules.impl.combat.AntiBots;
 import shit.zen.modules.impl.combat.AntiKB;
 import shit.zen.modules.impl.combat.AutoThrow;
 import shit.zen.modules.impl.combat.CrystalAura;
@@ -44,7 +43,6 @@ import shit.zen.modules.impl.player.AutoMLG;
 import shit.zen.modules.impl.player.AutoWebPlace;
 import shit.zen.modules.impl.player.Helper;
 import shit.zen.modules.impl.player.MidPearl;
-import shit.zen.modules.impl.world.Teams;
 import shit.zen.utils.game.RotationUtil;
 import shit.zen.utils.rotation.Rotation;
 import shit.zen.utils.rotation.RotationApplyMode;
@@ -60,7 +58,9 @@ public class AimAssist extends Module implements RotationProvider {
 
     private static final double WALLS_RANGE = 0.0;
     private static final double FRICTION_FULL_ANGLE = 8.0;
-    private static final double FRICTION_MIN_FACTOR = 0.28;
+    private static final double FRICTION_MIN_SPEED_SCALE = 0.75;
+    private static final int PROJECTED_POINT_COUNT = 128;
+    private static final int BOX_SCAN_POINT_COUNT = 256;
     private static final int DRIFT_TICKS_MIN = 8;
     private static final int DRIFT_TICKS_MAX = 16;
 
@@ -76,12 +76,12 @@ public class AimAssist extends Module implements RotationProvider {
     private final NumberValue stickiness = new NumberValue("Stickiness", 65, 0, 100, 1, this::isAdvancedMode);
     private final NumberValue prediction = new NumberValue("Prediction", 1, 0, 3, 1, this::isAdvancedMode);
     private final ModeValue pitchAssist = new ModeValue("Pitch Assist", "Weak", "Normal", "Off").withDefault("Weak");
-    private final BooleanValue aimFriction = new BooleanValue("Aim Friction", true, this::isAdvancedMode);
+    private final BooleanValue aimFriction = new BooleanValue("Aim Friction", false, this::isAdvancedMode);
     private final BooleanValue yawAssist = new BooleanValue("Yaw Assist", true);
     private final BooleanValue mouseDownOnly = new BooleanValue("MouseDownOnly", true);
     private final BooleanValue breakBlock = new BooleanValue("Break Block", true);
-    private final NumberValue randomYawOffset = new NumberValue("Random Yaw Offset", 1.2, 0, 5.0, 0.01);
-    private final NumberValue randomPitchOffset = new NumberValue("Random Pitch Offset", 0.35, 0, 2.0, 0.01);
+    private final NumberValue randomYawOffset = new NumberValue("Random Yaw Offset", 0.0, 0, 5.0, 0.01);
+    private final NumberValue randomPitchOffset = new NumberValue("Random Pitch Offset", 0.0, 0, 2.0, 0.01);
     private final BooleanValue oldAdaptive = new BooleanValue("Old Adaptive", true, this::isOldMode);
     private final NumberValue oldAdaptiveOffset = new NumberValue("Old Adaptive Offset", 3, 0.1, 15.0, 0.01, this::isOldMode);
     private final NumberValue oldSmoothAmount = new NumberValue("Old Smooth Amount", 15, 1.0, 90.0, 0.1, this::isOldMode);
@@ -92,6 +92,7 @@ public class AimAssist extends Module implements RotationProvider {
     private double driftPitch;
     private double targetDriftYaw;
     private double targetDriftPitch;
+    private double currentSpeedScale = 1.0;
     private int nextDriftTick;
 
     public AimAssist() {
@@ -180,12 +181,20 @@ public class AimAssist extends Module implements RotationProvider {
 
     @Override
     public double getMaxYawSpeed() {
-        return this.isAdvancedMode() ? this.maxYawSpeed.getValue().doubleValue() : 180.0;
+        if (!this.isAdvancedMode()) {
+            return 180.0;
+        }
+        return this.maxYawSpeed.getValue().doubleValue() * this.getNonInterpolationStrengthScale();
     }
 
     @Override
     public double getMaxPitchSpeed() {
-        return this.isAdvancedMode() ? this.maxPitchSpeed.getValue().doubleValue() : 180.0;
+        if (!this.isAdvancedMode()) {
+            return 180.0;
+        }
+        return this.maxPitchSpeed.getValue().doubleValue()
+                * this.getNonInterpolationStrengthScale()
+                * this.getPitchSpeedFactor();
     }
 
     @Override
@@ -196,6 +205,26 @@ public class AimAssist extends Module implements RotationProvider {
     @Override
     public double getRotationEpsilon() {
         return 0.08;
+    }
+
+    @Override
+    public double getInterpolationHorizontalSpeedMin() {
+        return 0.80 * this.getInterpolationSpeedScale();
+    }
+
+    @Override
+    public double getInterpolationHorizontalSpeedMax() {
+        return 0.85 * this.getInterpolationSpeedScale();
+    }
+
+    @Override
+    public double getInterpolationVerticalSpeedMin() {
+        return 0.20 * this.getInterpolationSpeedScale() * this.getPitchSpeedFactor();
+    }
+
+    @Override
+    public double getInterpolationVerticalSpeedMax() {
+        return 0.25 * this.getInterpolationSpeedScale() * this.getPitchSpeedFactor();
     }
 
     @Override
@@ -228,38 +257,20 @@ public class AimAssist extends Module implements RotationProvider {
     }
 
     private void updateAdvancedTarget(Rotation currentRotation) {
-        TargetCandidate candidate = this.selectTarget(currentRotation, false);
-        if (candidate == null) {
+        AdvancedAimResult aimResult = this.selectAdvancedAimResult(currentRotation);
+        if (aimResult == null) {
             this.resetTracking();
             return;
         }
 
-        LocalPlayer player = mc.player;
-        Vec3 eyes = player.getEyePosition(1.0f);
-        AABB box = this.getPredictedBox(candidate.entity());
-        Vec3 preferredPoint = this.resolveAimPoint(candidate.entity(), box, eyes, currentRotation);
-        RotationWithPoint bestRotation = this.raytraceBox(eyes, box, preferredPoint, currentRotation);
-        if (bestRotation == null) {
-            this.resetTracking();
-            return;
-        }
-
-        this.currentTarget = candidate.entity();
-        Rotation desired = bestRotation.rotation();
+        this.currentTarget = aimResult.entity();
+        this.currentSpeedScale = this.resolveFrictionSpeedScale(aimResult.eyes(), aimResult.box(), currentRotation, aimResult.rotation());
+        Rotation desired = aimResult.rotation();
         desired.setYaw(desired.getYaw() + (float) this.driftYaw);
         desired.setPitch(Mth.clamp(desired.getPitch() + (float) this.driftPitch, -90.0f, 90.0f));
 
-        double friction = this.resolveFriction(eyes, box, currentRotation, desired);
-        double baseStrength = this.strength.getValue().doubleValue() * friction;
-        float yaw = currentRotation.getYaw();
-        float pitch = currentRotation.getPitch();
-        if (this.yawAssist.getValue()) {
-            yaw += (float) (Mth.wrapDegrees(desired.getYaw() - yaw) * baseStrength);
-        }
-        double pitchFactor = this.getPitchAssistFactor();
-        if (pitchFactor > 0.0) {
-            pitch += (float) ((desired.getPitch() - pitch) * baseStrength * pitchFactor);
-        }
+        float yaw = this.yawAssist.getValue() ? desired.getYaw() : currentRotation.getYaw();
+        float pitch = this.isPitchAssistEnabled() ? desired.getPitch() : currentRotation.getPitch();
         this.currentTargetRotation = new Rotation(yaw, Mth.clamp(pitch, -90.0f, 90.0f));
     }
 
@@ -308,28 +319,82 @@ public class AimAssist extends Module implements RotationProvider {
         this.currentTargetRotation = new Rotation(yaw, Mth.clamp(pitch, -90.0f, 90.0f));
     }
 
-    private TargetCandidate selectTarget(Rotation currentRotation, boolean distanceOnly) {
-        List<TargetCandidate> candidates = new ArrayList<>();
-        Vec3 eyes = mc.player.getEyePosition(1.0f);
-        for (Player player : mc.level.players()) {
-            if (!this.isValidTarget(player)) {
+    private AdvancedAimResult selectAdvancedAimResult(Rotation currentRotation) {
+        List<TargetCandidate> candidates = this.collectTargetCandidates(currentRotation, false);
+        if (candidates.isEmpty()) {
+            return null;
+        }
+
+        TargetCandidate stickyCandidate = this.resolveStickyCandidate(candidates);
+        if (stickyCandidate != null) {
+            AdvancedAimResult result = this.buildAdvancedAimResult(stickyCandidate, currentRotation);
+            if (result != null) {
+                return result;
+            }
+        }
+
+        for (TargetCandidate candidate : candidates) {
+            if (candidate == stickyCandidate) {
                 continue;
             }
-            AABB box = this.getPredictedBox(player);
+            AdvancedAimResult result = this.buildAdvancedAimResult(candidate, currentRotation);
+            if (result != null) {
+                return result;
+            }
+        }
+        return null;
+    }
+
+    private AdvancedAimResult buildAdvancedAimResult(TargetCandidate candidate, Rotation currentRotation) {
+        LocalPlayer player = mc.player;
+        Vec3 eyes = player.getEyePosition(1.0f);
+        PointInsideBox point = this.findAimPoint(eyes, candidate.entity(), currentRotation);
+        RotationWithPoint bestRotation = this.raytraceBox(eyes, point.box(), point.pos());
+        if (bestRotation == null) {
+            return null;
+        }
+        return new AdvancedAimResult(candidate.entity(), bestRotation.rotation(), bestRotation.point(), point.box(), eyes);
+    }
+
+    private TargetCandidate selectTarget(Rotation currentRotation, boolean distanceOnly) {
+        List<TargetCandidate> candidates = this.collectTargetCandidates(currentRotation, distanceOnly);
+        if (candidates.isEmpty()) {
+            return null;
+        }
+        TargetCandidate stickyCandidate = this.resolveStickyCandidate(candidates);
+        return stickyCandidate == null ? candidates.get(0) : stickyCandidate;
+    }
+
+    private List<TargetCandidate> collectTargetCandidates(Rotation currentRotation, boolean distanceOnly) {
+        List<TargetCandidate> candidates = new ArrayList<>();
+        TargetManager targetManager = TargetManager.INSTANCE;
+        if (targetManager == null) {
+            return candidates;
+        }
+        Vec3 eyes = mc.player.getEyePosition(1.0f);
+        for (LivingEntity entity : targetManager.getTargets()) {
+            if (!this.isValidTarget(entity)) {
+                continue;
+            }
+            AABB box = this.getPredictedBox(entity);
             Vec3 center = center(box);
             double distance = this.distanceToBox(eyes, box);
             double angle = this.angleToPoint(currentRotation, eyes, center);
             if (angle > this.fov.getValue().doubleValue()) {
                 continue;
             }
-            candidates.add(new TargetCandidate(player, this.scoreTarget(angle, distance, distanceOnly)));
+            candidates.add(new TargetCandidate(entity, this.scoreTarget(angle, distance, distanceOnly)));
         }
+        candidates.sort(Comparator.comparingDouble(TargetCandidate::score));
+        return candidates;
+    }
+
+    private TargetCandidate resolveStickyCandidate(List<TargetCandidate> candidates) {
         if (candidates.isEmpty()) {
             return null;
         }
-        candidates.sort(Comparator.comparingDouble(TargetCandidate::score));
         TargetCandidate best = candidates.get(0);
-        if (this.currentTarget instanceof Player && this.isValidTarget(this.currentTarget)) {
+        if (this.currentTarget != null && this.isValidTarget(this.currentTarget)) {
             TargetCandidate current = candidates.stream()
                     .filter(candidate -> candidate.entity() == this.currentTarget)
                     .findFirst()
@@ -341,7 +406,7 @@ public class AimAssist extends Module implements RotationProvider {
                 }
             }
         }
-        return best;
+        return null;
     }
 
     private double scoreTarget(double angle, double distance, boolean distanceOnly) {
@@ -357,86 +422,85 @@ public class AimAssist extends Module implements RotationProvider {
     }
 
     public boolean isValidTarget(LivingEntity entity) {
-        if (entity == null || mc.player == null || mc.level == null || entity == mc.player) {
+        if (entity == null || mc.player == null || mc.level == null) {
             return false;
         }
-        if (entity.isRemoved() || entity.isDeadOrDying() || entity.getHealth() <= 0.0f || !entity.isAlive()) {
-            return false;
-        }
-        if (entity instanceof Player player && (player.isSpectator() || player.isSleeping())) {
-            return false;
-        }
-        if (Teams.isSameTeam(entity)) {
-            return false;
-        }
-        AntiBots antiBots = AntiBots.INSTANCE;
-        if (antiBots != null && antiBots.isEnabled() && (AntiBots.isBot(entity) || AntiBots.isBedWarsBot(entity))) {
-            return false;
-        }
-        if (!mc.player.hasLineOfSight(entity)) {
+        TargetManager targetManager = TargetManager.INSTANCE;
+        if (targetManager == null || !targetManager.isValidTarget(entity)) {
             return false;
         }
         Vec3 eyes = mc.player.getEyePosition(1.0f);
         return this.distanceToBox(eyes, entity.getBoundingBox()) <= this.range.getValue().doubleValue();
     }
 
-    private Vec3 resolveAimPoint(LivingEntity entity, AABB box, Vec3 eyes, Rotation currentRotation) {
+    private PointInsideBox findAimPoint(Vec3 eyes, LivingEntity entity, Rotation currentRotation) {
+        AABB box = this.getPredictedBox(entity, true);
         if (this.aimPoint.is("Chest")) {
-            return this.chestPoint(box);
+            return new PointInsideBox(this.chestPoint(box), box);
         }
         if (this.aimPoint.is("Nearest")) {
-            return this.nearestPointToLookRay(eyes, currentRotation, box);
+            return new PointInsideBox(this.nearestPointToLookRay(eyes, currentRotation, box), box);
         }
 
-        Vec3 rayPoint = this.nearestPointToLookRay(eyes, currentRotation, box);
-        Vec3 chest = this.chestPoint(box);
-        double vertical = 0.55;
-        double dy = entity.getDeltaMovement().y;
-        if (dy > 0.08) {
-            vertical = 0.48;
-        } else if (dy < -0.08 || entity.fallDistance > 0.0f) {
-            vertical = 0.62;
-        }
-        Vec3 dynamic = new Vec3(
-                lerp(rayPoint.x, chest.x, 0.45),
-                box.minY + boxHeight(box) * vertical,
-                lerp(rayPoint.z, chest.z, 0.45));
-        return clampPoint(dynamic, box);
+        List<Vec3> projectedPoints = this.projectPointsOnBox(eyes, box, PROJECTED_POINT_COUNT);
+        Vec3 bestHitVector = projectedPoints == null || projectedPoints.isEmpty()
+                ? closestPoint(eyes, box)
+                : projectedPoints.stream()
+                        .min(Comparator.comparingDouble(point -> point.distanceToSqr(eyes)))
+                        .orElse(closestPoint(eyes, box));
+        return new PointInsideBox(bestHitVector, box);
     }
 
-    private RotationWithPoint raytraceBox(Vec3 eyes, AABB box, Vec3 preferredPoint, Rotation currentRotation) {
+    private RotationWithPoint raytraceBox(Vec3 eyes, AABB box, Vec3 preferredPoint) {
         double rangeSq = this.range.getValue().doubleValue() * this.range.getValue().doubleValue();
+        double wallsRangeSq = WALLS_RANGE * WALLS_RANGE;
         Vec3 preferredOnBox = this.firstHitOnBox(eyes, box, preferredPoint).orElse(preferredPoint);
-        if (eyes.distanceToSqr(preferredOnBox) <= rangeSq && this.isVisible(eyes, preferredOnBox)) {
+        double preferredDistanceSq = eyes.distanceToSqr(preferredOnBox);
+        if (preferredDistanceSq < rangeSq
+                && (preferredDistanceSq < wallsRangeSq || this.isVisible(eyes, preferredOnBox))) {
             return new RotationWithPoint(RotationUtil.rotationTo(eyes, preferredPoint), preferredPoint);
         }
 
-        List<Vec3> points = new ArrayList<>();
-        points.add(preferredPoint);
-        points.add(this.nearestPointToLookRay(eyes, currentRotation, box));
-        points.add(this.chestPoint(box));
-        points.add(center(box));
-        points.add(new Vec3(center(box).x, box.minY + boxHeight(box) * 0.40, center(box).z));
-        points.add(new Vec3(center(box).x, box.minY + boxHeight(box) * 0.68, center(box).z));
-
+        Rotation preferredRotation = RotationUtil.rotationTo(eyes, preferredPoint);
         RotationWithPoint best = null;
         double bestScore = Double.MAX_VALUE;
-        for (Vec3 point : points) {
-            Vec3 clamped = clampPoint(point, box);
-            Optional<Vec3> hit = this.firstHitOnBox(eyes, box, clamped);
-            Vec3 spotOnBox = hit.orElse(clamped);
-            double distanceSq = eyes.distanceToSqr(spotOnBox);
-            if (distanceSq > rangeSq || (!this.isVisible(eyes, spotOnBox) && distanceSq > WALLS_RANGE * WALLS_RANGE)) {
+        RotationWithPoint nearest = this.considerSpot(closestPoint(eyes, box), box, eyes, rangeSq, wallsRangeSq);
+        if (nearest != null) {
+            best = nearest;
+            bestScore = this.angleBetween(preferredRotation, nearest.rotation());
+        }
+        for (Vec3 spot : this.scanBoxPoints(eyes, box)) {
+            RotationWithPoint candidate = this.considerSpot(spot, box, eyes, rangeSq, wallsRangeSq);
+            if (candidate == null) {
                 continue;
             }
-            Rotation rotation = RotationUtil.rotationTo(eyes, clamped);
-            double score = this.angleBetween(currentRotation, rotation) + clamped.distanceToSqr(preferredPoint) * 4.0;
+            double score = this.angleBetween(preferredRotation, candidate.rotation());
             if (score < bestScore) {
                 bestScore = score;
-                best = new RotationWithPoint(rotation, clamped);
+                best = candidate;
             }
         }
         return best;
+    }
+
+    private RotationWithPoint considerSpot(
+            Vec3 preferredSpot,
+            AABB box,
+            Vec3 eyes,
+            double rangeSq,
+            double wallsRangeSq) {
+        Optional<Vec3> hit = this.firstHitOnBox(eyes, box, preferredSpot);
+        if (hit.isEmpty()) {
+            return null;
+        }
+        Vec3 spotOnBox = hit.get();
+        double distanceSq = eyes.distanceToSqr(spotOnBox);
+        boolean visible = this.isVisible(eyes, spotOnBox);
+        if ((!visible || distanceSq >= rangeSq) && distanceSq >= wallsRangeSq) {
+            return null;
+        }
+        Vec3 clamped = clampPoint(preferredSpot, box);
+        return new RotationWithPoint(RotationUtil.rotationTo(eyes, clamped), clamped);
     }
 
     private Optional<Vec3> firstHitOnBox(Vec3 eyes, AABB box, Vec3 point) {
@@ -457,23 +521,31 @@ public class AimAssist extends Module implements RotationProvider {
         return result == null || result.getType() == HitResult.Type.MISS;
     }
 
-    private double resolveFriction(Vec3 eyes, AABB box, Rotation currentRotation, Rotation desired) {
+    private double resolveFrictionSpeedScale(Vec3 eyes, AABB box, Rotation currentRotation, Rotation desired) {
         if (!this.aimFriction.getValue()) {
             return 1.0;
         }
         Vec3 direction = RotationUtil.directionFromRotation(currentRotation);
         Vec3 end = eyes.add(direction.scale(this.range.getValue().doubleValue()));
         if (box.inflate(0.08).clip(eyes, end).isPresent()) {
-            return FRICTION_MIN_FACTOR;
+            return FRICTION_MIN_SPEED_SCALE;
         }
         double angle = this.angleBetween(currentRotation, desired);
-        return Mth.clamp(angle / FRICTION_FULL_ANGLE, FRICTION_MIN_FACTOR, 1.0);
+        return Mth.clamp(angle / FRICTION_FULL_ANGLE, FRICTION_MIN_SPEED_SCALE, 1.0);
     }
 
     private AABB getPredictedBox(LivingEntity entity) {
+        return this.getPredictedBox(entity, false);
+    }
+
+    private AABB getPredictedBox(LivingEntity entity, boolean inflatePickRadius) {
         int ticks = Mth.clamp(this.prediction.getValue().intValue(), 0, 3);
         Vec3 motion = entity.getDeltaMovement().scale(ticks);
-        return entity.getBoundingBox().move(motion);
+        AABB box = entity.getBoundingBox().move(motion);
+        if (inflatePickRadius) {
+            box = box.inflate(Math.max(0.0f, entity.getPickRadius()));
+        }
+        return box;
     }
 
     private Vec3 chestPoint(AABB box) {
@@ -496,6 +568,32 @@ public class AimAssist extends Module implements RotationProvider {
             return 1.0;
         }
         return 0.45;
+    }
+
+    private boolean isPitchAssistEnabled() {
+        return !this.pitchAssist.is("Off");
+    }
+
+    private double getPitchSpeedFactor() {
+        if (this.pitchAssist.is("Off")) {
+            return 0.0;
+        }
+        if (this.pitchAssist.is("Normal")) {
+            return 1.4;
+        }
+        return 1.0;
+    }
+
+    private double getInterpolationSpeedScale() {
+        if (!this.isAdvancedMode()) {
+            return 1.0;
+        }
+        return Mth.clamp(this.currentSpeedScale, FRICTION_MIN_SPEED_SCALE, 1.25);
+    }
+
+    private double getNonInterpolationStrengthScale() {
+        return Mth.clamp(this.strength.getValue().doubleValue(), 0.05, 1.0)
+                * Mth.clamp(this.currentSpeedScale, FRICTION_MIN_SPEED_SCALE, 1.25);
     }
 
     private void updateDrift() {
@@ -563,12 +661,14 @@ public class AimAssist extends Module implements RotationProvider {
         this.driftPitch = 0.0;
         this.targetDriftYaw = 0.0;
         this.targetDriftPitch = 0.0;
+        this.currentSpeedScale = 1.0;
         this.nextDriftTick = 0;
     }
 
     private void resetTracking() {
         this.currentTarget = null;
         this.currentTargetRotation = null;
+        this.currentSpeedScale = 1.0;
     }
 
     private boolean isAdvancedMode() {
@@ -615,8 +715,137 @@ public class AimAssist extends Module implements RotationProvider {
         return closestPoint(point, box);
     }
 
+    private List<Vec3> scanBoxPoints(Vec3 eyes, AABB box) {
+        List<Vec3> projected = this.projectPointsOnBox(eyes, box, BOX_SCAN_POINT_COUNT);
+        if (projected != null && !projected.isEmpty()) {
+            return projected;
+        }
+
+        List<Vec3> points = new ArrayList<>();
+        for (double x = 0.05; x <= 0.95; x += 0.1) {
+            for (double y = 0.05; y <= 0.95; y += 0.1) {
+                for (double z = 0.05; z <= 0.95; z += 0.1) {
+                    points.add(new Vec3(
+                            box.minX + (box.maxX - box.minX) * x,
+                            box.minY + (box.maxY - box.minY) * y,
+                            box.minZ + (box.maxZ - box.minZ) * z));
+                }
+            }
+        }
+        return points;
+    }
+
+    private List<Vec3> projectPointsOnBox(Vec3 virtualEye, AABB targetBox, int maxPoints) {
+        if (targetBox.contains(virtualEye)) {
+            return null;
+        }
+
+        Vec3 center = center(targetBox);
+        Vec3 normal = center.subtract(virtualEye);
+        if (normal.lengthSqr() <= 1.0E-8) {
+            return null;
+        }
+        normal = normal.normalize();
+
+        Vec3 targetFrameOrigin = this.closestProjectedCornerOnViewLine(virtualEye, targetBox, normal);
+        if (targetFrameOrigin == null) {
+            return null;
+        }
+        targetFrameOrigin = lerp(targetFrameOrigin, virtualEye, 0.1);
+
+        Vec3 up = Math.abs(normal.y) > 0.95 ? new Vec3(0.0, 0.0, 1.0) : new Vec3(0.0, 1.0, 0.0);
+        Vec3 axisZ = normal.cross(up).normalize();
+        Vec3 axisY = axisZ.cross(normal).normalize();
+
+        double minY = 0.0;
+        double maxY = 0.0;
+        double minZ = 0.0;
+        double maxZ = 0.0;
+        boolean hasProjectedCorner = false;
+        for (Vec3 corner : edgePoints(targetBox)) {
+            Vec3 projected = intersectRayPlane(virtualEye, corner, targetFrameOrigin, normal);
+            if (projected == null) {
+                continue;
+            }
+            Vec3 relative = projected.subtract(targetFrameOrigin);
+            double y = relative.dot(axisY);
+            double z = relative.dot(axisZ);
+            minY = Math.min(minY, y);
+            maxY = Math.max(maxY, y);
+            minZ = Math.min(minZ, z);
+            maxZ = Math.max(maxZ, z);
+            hasProjectedCorner = true;
+        }
+        if (!hasProjectedCorner) {
+            return null;
+        }
+
+        int sidePoints = Math.max(2, (int) Math.ceil(Math.sqrt(Math.max(1, maxPoints))));
+        List<Vec3> points = new ArrayList<>(sidePoints * sidePoints);
+        for (int yIndex = 0; yIndex < sidePoints; yIndex++) {
+            double fy = sidePoints == 1 ? 0.5 : (double) yIndex / (double) (sidePoints - 1);
+            for (int zIndex = 0; zIndex < sidePoints; zIndex++) {
+                double fz = sidePoints == 1 ? 0.5 : (double) zIndex / (double) (sidePoints - 1);
+                Vec3 pointOnPlane = targetFrameOrigin
+                        .add(axisY.scale(lerp(minY, maxY, fy)))
+                        .add(axisZ.scale(lerp(minZ, maxZ, fz)));
+                Vec3 extended = lerp(pointOnPlane, virtualEye, -100.0);
+                targetBox.clip(virtualEye, extended).ifPresent(points::add);
+                if (points.size() >= maxPoints) {
+                    return points;
+                }
+            }
+        }
+        return points;
+    }
+
+    private Vec3 closestProjectedCornerOnViewLine(Vec3 virtualEye, AABB box, Vec3 lineDirection) {
+        Vec3 best = null;
+        double bestDistanceSq = Double.MAX_VALUE;
+        for (Vec3 corner : edgePoints(box)) {
+            double projection = corner.subtract(virtualEye).dot(lineDirection);
+            Vec3 pointOnLine = virtualEye.add(lineDirection.scale(projection));
+            double distanceSq = pointOnLine.distanceToSqr(virtualEye);
+            if (distanceSq < bestDistanceSq) {
+                bestDistanceSq = distanceSq;
+                best = pointOnLine;
+            }
+        }
+        return best;
+    }
+
+    private static Vec3 intersectRayPlane(Vec3 from, Vec3 to, Vec3 planePoint, Vec3 planeNormal) {
+        Vec3 ray = to.subtract(from);
+        double denominator = ray.dot(planeNormal);
+        if (Math.abs(denominator) <= 1.0E-8) {
+            return null;
+        }
+        double distance = planePoint.subtract(from).dot(planeNormal) / denominator;
+        return from.add(ray.scale(distance));
+    }
+
+    private static Vec3[] edgePoints(AABB box) {
+        return new Vec3[]{
+                new Vec3(box.minX, box.minY, box.minZ),
+                new Vec3(box.minX, box.minY, box.maxZ),
+                new Vec3(box.minX, box.maxY, box.minZ),
+                new Vec3(box.minX, box.maxY, box.maxZ),
+                new Vec3(box.maxX, box.minY, box.minZ),
+                new Vec3(box.maxX, box.minY, box.maxZ),
+                new Vec3(box.maxX, box.maxY, box.minZ),
+                new Vec3(box.maxX, box.maxY, box.maxZ)
+        };
+    }
+
     private static double lerp(double from, double to, double progress) {
         return from + (to - from) * progress;
+    }
+
+    private static Vec3 lerp(Vec3 from, Vec3 to, double progress) {
+        return new Vec3(
+                lerp(from.x, to.x, progress),
+                lerp(from.y, to.y, progress),
+                lerp(from.z, to.z, progress));
     }
 
     private static double randomSymmetric(double radius) {
@@ -630,6 +859,12 @@ public class AimAssist extends Module implements RotationProvider {
     private record TargetCandidate(LivingEntity entity, double score) {
     }
 
+    private record PointInsideBox(Vec3 pos, AABB box) {
+    }
+
     private record RotationWithPoint(Rotation rotation, Vec3 point) {
+    }
+
+    private record AdvancedAimResult(LivingEntity entity, Rotation rotation, Vec3 point, AABB box, Vec3 eyes) {
     }
 }

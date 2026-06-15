@@ -32,9 +32,9 @@ import net.minecraft.world.phys.shapes.VoxelShape;
 import shit.zen.ZenClient;
 import shit.zen.event.impl.RenderEvent;
 import shit.zen.event.impl.TickEvent;
+import shit.zen.manager.TargetManager;
 import shit.zen.modules.Category;
 import shit.zen.modules.Module;
-import shit.zen.modules.impl.combat.KillAura;
 import shit.zen.value.impl.BooleanValue;
 import shit.zen.value.impl.NumberValue;
 import shit.zen.utils.animation.TickTimer;
@@ -280,7 +280,7 @@ public class AutoWebPlace extends Module {
         List<Entity> candidates = StreamSupport.<Entity>stream(mc.level.entitiesForRendering().spliterator(), false)
                 .filter(e -> e instanceof Player && e != mc.player)
                 .filter(e -> e.distanceTo(mc.player) <= range)
-                .filter(e -> KillAura.INSTANCE != null && KillAura.INSTANCE.isValidTarget(e))
+                .filter(e -> TargetManager.INSTANCE != null && TargetManager.INSTANCE.isValidTarget(e))
                 .sorted(Comparator.comparingDouble(e -> e.distanceTo(mc.player)))
                 .toList();
         int cobwebSlot = this.findCobwebSlot();

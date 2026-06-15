@@ -96,7 +96,7 @@ extends ClientBase {
     }
 
     public static boolean isPlaceable(ItemStack itemStack) {
-        if (itemStack != null && itemStack.getItem() instanceof BlockItem && itemStack.getCount() > 1) {
+        if (itemStack != null && !itemStack.isEmpty() && itemStack.getItem() instanceof BlockItem && itemStack.getCount() > 0) {
             if (!ItemUtil.isUsable(itemStack)) {
                 return false;
             }

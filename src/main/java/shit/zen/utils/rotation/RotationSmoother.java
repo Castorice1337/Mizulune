@@ -162,10 +162,7 @@ public class RotationSmoother extends ClientBase {
             double verticalSpeed = this.randomRange(interpolationVerticalSpeedMin, interpolationVerticalSpeedMax);
             double yawSpeed = Math.abs(yawDiff) * interpolationFactor(Math.abs(yawDiff), horizontalSpeed, directionChange, interpolationMidpoint);
             double pitchSpeed = Math.abs(pitchDiff) * interpolationFactor(Math.abs(pitchDiff), verticalSpeed, directionChange, interpolationMidpoint);
-            return new double[]{
-                    Math.min(Math.max(0.0, maxYawSpeed), yawSpeed),
-                    Math.min(Math.max(0.0, maxPitchSpeed), pitchSpeed)
-            };
+            return new double[]{yawSpeed, pitchSpeed};
         }
 
         double durationScale = Math.max(0.1, 6.0 / Math.max(1, durationTicks));
