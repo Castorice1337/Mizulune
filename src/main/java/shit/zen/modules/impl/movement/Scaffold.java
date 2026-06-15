@@ -95,6 +95,9 @@ public class Scaffold extends Module {
 
     @Override
     public void onEnable() {
+        if (GodBridgeAssist.INSTANCE != null && GodBridgeAssist.INSTANCE.isEnabled()) {
+            GodBridgeAssist.INSTANCE.setEnabled(false);
+        }
         if (mc.player != null) {
             this.oldSlot = mc.player.getInventory().selected;
             this.rots.setYawPitch(mc.player.getYRot() - 180.0f, mc.player.getXRot());

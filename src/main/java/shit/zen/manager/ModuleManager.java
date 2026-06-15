@@ -21,6 +21,7 @@ import shit.zen.modules.impl.combat.Backtrack;
 import shit.zen.modules.impl.combat.Critical;
 import shit.zen.modules.impl.combat.CrystalAura;
 import shit.zen.modules.impl.combat.KillAura;
+import shit.zen.modules.impl.combat.TargetSettings;
 import shit.zen.modules.impl.exploit.Disabler;
 import shit.zen.modules.impl.exploit.FastPlace;
 import shit.zen.modules.impl.misc.AimAssist;
@@ -97,6 +98,7 @@ public class ModuleManager extends ClientBase {
         this.register(new Backtrack());
         this.register(new Critical());
         this.register(new CrystalAura());
+        this.register(new TargetSettings());
         this.register(new KillAura());
 
         this.register(new Disabler());

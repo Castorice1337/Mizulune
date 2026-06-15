@@ -14,16 +14,7 @@ import net.minecraft.world.InteractionHand;
 import net.minecraftforge.client.ForgeHooksClient;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
-import net.minecraft.world.entity.Mob;
-import net.minecraft.world.entity.ambient.Bat;
-import net.minecraft.world.entity.animal.AbstractGolem;
-import net.minecraft.world.entity.animal.Animal;
-import net.minecraft.world.entity.animal.Squid;
 import net.minecraft.world.entity.boss.enderdragon.EndCrystal;
-import net.minecraft.world.entity.decoration.ArmorStand;
-import net.minecraft.world.entity.monster.Slime;
-import net.minecraft.world.entity.npc.Villager;
-import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.EntityHitResult;
 import net.minecraft.world.phys.HitResult;
@@ -44,7 +35,7 @@ import shit.zen.modules.impl.player.AutoWebPlace;
 import shit.zen.modules.impl.player.Helper;
 import shit.zen.modules.impl.player.MidPearl;
 import shit.zen.modules.impl.player.Stuck;
-import shit.zen.modules.impl.world.Teams;
+import shit.zen.manager.TargetManager;
 import shit.zen.value.impl.BooleanValue;
 import shit.zen.value.impl.ModeValue;
 import shit.zen.value.impl.NumberValue;
@@ -64,12 +55,6 @@ public class KillAura extends Module {
     public static Entity aimingTarget;
     public static List<Entity> targetList = new ArrayList<>();
 
-    // Fields kept in sync with the obfuscated jar: 12 BooleanValue / 7
-    // NumberValue / 3 ModeValue, in declaration order.
-    public final BooleanValue attackPlayer    = new BooleanValue("Attack Player", true);
-    public final BooleanValue attackInvisible = new BooleanValue("Attack Invisible", false);
-    public final BooleanValue attackAnimals   = new BooleanValue("Attack Animals", false);
-    public final BooleanValue attackMobs      = new BooleanValue("Attack Mobs", true);
     public final BooleanValue multiAttack     = new BooleanValue("Multi Attack", true);
     public final BooleanValue infSwitch       = new BooleanValue("Infinity Switch", false);
     public final BooleanValue preferBaby      = new BooleanValue("Prefer Baby", false);
@@ -366,43 +351,12 @@ public class KillAura extends Module {
     }
 
     public boolean isValidTarget(Entity entity) {
-        if (!ZenClient.isReady()) return false;
-        if (entity == mc.player) return false;
-        if (entity instanceof LivingEntity livingEntity) {
-            AntiBots antiBots = AntiBots.INSTANCE;
-            if (antiBots != null && antiBots.isEnabled() && (AntiBots.isBot(entity) || AntiBots.isBedWarsBot(entity))) {
-                return false;
-            }
-            if (livingEntity.isDeadOrDying() || livingEntity.getHealth() <= 0.0f) return false;
-            if (entity instanceof ArmorStand) return false;
-            if (entity.isInvisible() && !(Boolean) this.attackInvisible.getValue()) return false;
-            if (entity instanceof Player player) {
-                if (this.test.getValue() && player.getY() >= mc.player.getY() + 0.05f) {
-                    return true;
-                }
-                // ZenClient.isOwner() was stripped during deobfuscation; the
-                // original jar bailed here when the entity name matched the
-                // client owner. Re-enable once that helper is restored.
-            }
-            if (Teams.isSameTeam(entity)) return false;
-            if (entity instanceof Player && !(Boolean) this.attackPlayer.getValue()) return false;
-            if (entity instanceof Player && (entity.getBbWidth() < 0.5 || livingEntity.isSleeping())) return false;
-            if ((entity instanceof Mob || entity instanceof Slime || entity instanceof Bat || entity instanceof AbstractGolem)
-                    && !(Boolean) this.attackMobs.getValue()) {
-                return false;
-            }
-            if ((entity instanceof Animal || entity instanceof Squid) && !(Boolean) this.attackAnimals.getValue()) {
-                return false;
-            }
-            if (entity instanceof Villager && !(Boolean) this.attackAnimals.getValue()) return false;
-            return !(entity instanceof Player) || !entity.isSpectator();
-        }
-        return false;
+        return TargetManager.INSTANCE != null && TargetManager.INSTANCE.isValidTarget(entity);
     }
 
     public boolean isValidAttack(Entity entity) {
         if (mc.player == null) return false;
-        if (!this.isValidTarget(entity)) return false;
+        if (TargetManager.INSTANCE == null || !TargetManager.INSTANCE.isValidTarget(entity)) return false;
         if (entity instanceof LivingEntity le && le.hurtTime > this.hurtTime.getValue().intValue()) {
             return false;
         }
@@ -461,7 +415,10 @@ public class KillAura extends Module {
         if (mc.player == null || mc.level == null) {
             return new ArrayList<>();
         }
-        Stream<Entity> stream = StreamSupport.stream(mc.level.entitiesForRendering().spliterator(), true)
+        Stream<Entity> stream = TargetManager.INSTANCE != null
+                ? TargetManager.INSTANCE.getTargets().stream().map(Entity.class::cast)
+                : StreamSupport.stream(mc.level.entitiesForRendering().spliterator(), true);
+        stream = stream
                 .filter(this::isValidAttack);
         List<Entity> possibleTargets = stream.collect(Collectors.toList());
         if (this.priorityMode.is("Distance")) {
@@ -503,7 +460,11 @@ public class KillAura extends Module {
     }
 
     private static double getAngleDiffToTarget(Entity entity) {
-        return RotationUtil.angleDiff(RotationHandler.targetRotation.getYaw(), RotationUtil.entityRotation(entity).getYaw());
+        Rotation base = RotationHandler.targetRotation != null
+                ? RotationHandler.targetRotation
+                : new Rotation(mc.player.getYRot(), mc.player.getXRot());
+        Rotation entityRotation = RotationUtil.entityRotation(entity);
+        return entityRotation == null ? Double.MAX_VALUE : RotationUtil.angleDiff(base.getYaw(), entityRotation.getYaw());
     }
 
     private static double getDistanceToPlayer(Entity entity) {

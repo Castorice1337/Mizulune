@@ -17,6 +17,7 @@ import net.minecraft.world.phys.Vec3;
 import net.minecraft.world.scores.Team;
 import shit.zen.event.impl.SprintEvent;
 import shit.zen.event.impl.TickEvent;
+import shit.zen.manager.TargetManager;
 import shit.zen.modules.Category;
 import shit.zen.modules.Module;
 import shit.zen.modules.impl.movement.Scaffold;
@@ -168,7 +169,10 @@ extends Module {
         if (mc.player == null || mc.level == null) {
             return Optional.empty();
         }
-        return mc.level.players().stream().filter(player -> player != mc.player).filter(player -> KillAura.INSTANCE.isValidTarget(player)).filter(player -> {
+        return mc.level.players().stream()
+                .filter(player -> player != mc.player)
+                .filter(player -> TargetManager.INSTANCE != null && TargetManager.INSTANCE.isValidTarget(player))
+                .filter(player -> {
             double dist = this.getDistanceTo(player);
             return dist >= this.minDistance.getValue().doubleValue() && dist <= this.maxDistance.getValue().doubleValue();
         }).filter(this::hasLineOfSight).filter(player -> !this.isInvisibleAlly(player)).min(Comparator.comparingDouble(player -> mc.player.distanceTo(player)));

@@ -91,10 +91,10 @@ public final class EdgeSafetyUtil extends ClientBase {
             }
         }
 
-        double eastDistance = eastSupport == Double.NEGATIVE_INFINITY ? 0.0 : eastSupport - box.minX;
-        double westDistance = westSupport == Double.POSITIVE_INFINITY ? 0.0 : box.maxX - westSupport;
-        double southDistance = southSupport == Double.NEGATIVE_INFINITY ? 0.0 : southSupport - box.minZ;
-        double northDistance = northSupport == Double.POSITIVE_INFINITY ? 0.0 : box.maxZ - northSupport;
+        double eastDistance = eastSupport == Double.NEGATIVE_INFINITY ? 0.0 : eastSupport - box.maxX;
+        double westDistance = westSupport == Double.POSITIVE_INFINITY ? 0.0 : box.minX - westSupport;
+        double southDistance = southSupport == Double.NEGATIVE_INFINITY ? 0.0 : southSupport - box.maxZ;
+        double northDistance = northSupport == Double.POSITIVE_INFINITY ? 0.0 : box.minZ - northSupport;
         return new SupportDistances(
                 Math.max(0.0, eastDistance),
                 Math.max(0.0, westDistance),
