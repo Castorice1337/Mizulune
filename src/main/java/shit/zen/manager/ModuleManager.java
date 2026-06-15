@@ -75,6 +75,7 @@ import shit.zen.modules.impl.render.XRay;
 import shit.zen.modules.impl.world.AntiStaff;
 import shit.zen.modules.impl.world.AutoPlay;
 import shit.zen.modules.impl.world.AutoTools;
+import shit.zen.modules.impl.world.BlockIn;
 import shit.zen.modules.impl.world.Debugger;
 import shit.zen.modules.impl.world.Teams;
 import shit.zen.modules.impl.world.WebUI;
@@ -159,6 +160,7 @@ public class ModuleManager extends ClientBase {
         this.register(new AntiStaff());
         this.register(new AutoPlay());
         this.register(new AutoTools());
+        this.register(new BlockIn());
         this.register(new Debugger());
         this.register(new Teams());
         this.register(new WebUI());
