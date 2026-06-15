@@ -35,9 +35,13 @@ import shit.zen.event.impl.TickEvent;
 import shit.zen.manager.TargetManager;
 import shit.zen.modules.Category;
 import shit.zen.modules.Module;
+import shit.zen.modules.impl.world.BlockIn;
 import shit.zen.value.impl.BooleanValue;
 import shit.zen.value.impl.NumberValue;
 import shit.zen.utils.animation.TickTimer;
+import shit.zen.utils.game.BlockPlacementOptions;
+import shit.zen.utils.game.BlockPlacementTarget;
+import shit.zen.utils.game.BlockPlacementUtil;
 import shit.zen.utils.game.PlayerUtil;
 import shit.zen.utils.game.RotationUtil;
 import shit.zen.utils.misc.ChatUtil;
@@ -87,6 +91,9 @@ public class AutoWebPlace extends Module {
 
     @Override
     protected void onEnable() {
+        if (BlockIn.INSTANCE != null && BlockIn.INSTANCE.isEnabled()) {
+            BlockIn.INSTANCE.setEnabled(false);
+        }
         this.reset();
         super.onEnable();
     }
@@ -1015,9 +1022,10 @@ public class AutoWebPlace extends Module {
                     + " support=" + this.formatBlockPos(this.currentPlacement.support));
             this.useBucket(rotation);
         } else {
-            BlockHitResult hit = new BlockHitResult(this.currentPlacement.aim, this.currentPlacement.face, this.currentPlacement.support, false);
-            mc.gameMode.useItemOn(mc.player, InteractionHand.MAIN_HAND, hit);
-            mc.player.swing(InteractionHand.MAIN_HAND);
+            Rotation rotation = RotationUtil.exactRotation(mc.player.getEyePosition(), this.currentPlacement.aim);
+            targetRotation = rotation;
+            BlockPlacementUtil.place(this.currentPlacement.toPlacementTarget(), InteractionHand.MAIN_HAND,
+                    rotation, mc.player.getMainHandItem(), this.getPlacementOptions());
         }
         mc.player.getInventory().selected = previousSlot;
         PlayerUtil.sendCarriedItem();
@@ -1038,6 +1046,14 @@ public class AutoWebPlace extends Module {
         mc.player.setYRot(yaw);
         mc.player.setXRot(pitch);
         return result.consumesAction();
+    }
+
+    private BlockPlacementOptions getPlacementOptions() {
+        return BlockPlacementOptions.defaults()
+                .withRange(this.rangeSetting.getValue().doubleValue())
+                .withWallRange(this.rangeSetting.getValue().doubleValue())
+                .withConstructFailResult(true)
+                .withConsiderFacingAwayFaces(true);
     }
 
     private void doGroundWebBreak() {
@@ -1419,12 +1435,26 @@ public class AutoWebPlace extends Module {
         final Direction face;
         final Vec3 aim;
         final BlockPos place;
+        final BlockPlacementTarget placementTarget;
 
         PlacementInfo(BlockPos support, Direction face, Vec3 aim, BlockPos place) {
+            this(support, face, aim, place, null);
+        }
+
+        PlacementInfo(BlockPos support, Direction face, Vec3 aim, BlockPos place, BlockPlacementTarget placementTarget) {
             this.support = support;
             this.face = face;
             this.aim = aim;
             this.place = place;
+            this.placementTarget = placementTarget;
+        }
+
+        BlockPlacementTarget toPlacementTarget() {
+            if (this.placementTarget != null) {
+                return this.placementTarget;
+            }
+            return new BlockPlacementTarget(this.support, this.place, this.face, this.aim,
+                    this.aim.y, BlockPlacementUtil.getRotationToPoint(this.aim));
         }
     }
 
