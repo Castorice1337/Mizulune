@@ -107,6 +107,7 @@ public class GodBridgeAssist extends Module implements RotationProvider {
     private boolean stopInputThisTick;
     private boolean backwardsThisTick;
     private int lastPlaceTick = -1;
+    private int targetPreparedTick = -1;
     private int savedAutoBlockSlot = -1;
     private int lockedBlockSlot = -1;
     private boolean edgeDistanceArmed;
@@ -164,6 +165,7 @@ public class GodBridgeAssist extends Module implements RotationProvider {
         this.stopInputThisTick = false;
         this.backwardsThisTick = false;
         this.lastPlaceTick = -1;
+        this.targetPreparedTick = -1;
         this.savedAutoBlockSlot = -1;
         this.lockedBlockSlot = -1;
         this.resetBridgeEdgeState();
@@ -192,6 +194,7 @@ public class GodBridgeAssist extends Module implements RotationProvider {
         if (mc.player == null || mc.level == null || mc.options == null) {
             this.currentTargetRotation = null;
             this.currentTarget = null;
+            this.targetPreparedTick = -1;
             this.resetBridgeEdgeState();
             return;
         }
@@ -200,7 +203,11 @@ public class GodBridgeAssist extends Module implements RotationProvider {
         }
 
         this.updateAutoBlockSlot();
-        this.currentTarget = this.findPlacementTarget();
+        BlockPlacementTarget nextTarget = this.findPlacementTarget();
+        if (this.isDifferentPlacementTarget(nextTarget, this.currentTarget)) {
+            this.targetPreparedTick = mc.player.tickCount;
+        }
+        this.currentTarget = nextTarget;
         this.currentTargetRotation = this.angleSolver.solve(
                 this.toSolverTarget(this.currentTarget),
                 this.getPhysicalForward(),
@@ -305,6 +312,16 @@ public class GodBridgeAssist extends Module implements RotationProvider {
     @Override
     public boolean shouldFixMovement() {
         return this.getApplyMode() == RotationApplyMode.SILENT || this.movementFix.getValue();
+    }
+
+    @Override
+    public boolean shouldAffectRayTrace() {
+        return false;
+    }
+
+    @Override
+    public boolean shouldAffectUseItemRayTrace() {
+        return false;
     }
 
     @Override
@@ -454,6 +471,9 @@ public class GodBridgeAssist extends Module implements RotationProvider {
         if (placeRotation == null || mc.gameMode == null || mc.player.tickCount == this.lastPlaceTick) {
             return;
         }
+        if (this.getApplyMode() != RotationApplyMode.OFF && mc.player.tickCount <= this.targetPreparedTick) {
+            return;
+        }
         InteractionHand hand = this.getPlaceHand();
         if (hand == null) {
             return;
@@ -533,7 +553,7 @@ public class GodBridgeAssist extends Module implements RotationProvider {
     }
 
     private BlockHitResult getPlacementHit(Rotation rotation, BlockPlacementTarget target) {
-        return BlockPlacementUtil.rayTraceTarget(rotation, target, this.getPlacementOptions());
+        return BlockPlacementUtil.rayTraceTarget(rotation, target, this.getPlacementOptions(), false);
     }
 
     private BlockHitResult getPlacementHit(Rotation rotation) {
@@ -552,6 +572,18 @@ public class GodBridgeAssist extends Module implements RotationProvider {
     private boolean doesHitMatchTarget(BlockHitResult blockHit, BlockPlacementTarget target) {
         return BlockPlacementUtil.doesHitMatchTarget(blockHit, target, this.getPlacementOptions())
                 && BlockPlacementUtil.canReplace(target.placedBlockPos(), this.getPlacementStack());
+    }
+
+    private boolean isDifferentPlacementTarget(BlockPlacementTarget first, BlockPlacementTarget second) {
+        if (first == second) {
+            return false;
+        }
+        if (first == null || second == null) {
+            return true;
+        }
+        return !first.interactedBlockPos().equals(second.interactedBlockPos())
+                || !first.placedBlockPos().equals(second.placedBlockPos())
+                || first.facing() != second.facing();
     }
 
     private double getPlacementTargetScore(BlockPlacementTarget target, BlockPos basePlacePos, BlockHitResult requiredHit) {
@@ -585,11 +617,7 @@ public class GodBridgeAssist extends Module implements RotationProvider {
     }
 
     private double rotationDistance(Rotation first, Rotation second) {
-        if (first == null || second == null) {
-            return 0.0;
-        }
-        return Math.abs(Mth.wrapDegrees(first.getYaw() - second.getYaw()))
-                + Math.abs(first.getPitch() - second.getPitch());
+        return BlockPlacementUtil.rotationDistance(first, second);
     }
 
     private Vec3 getHitVec(BlockPlacementTarget target) {
@@ -600,7 +628,7 @@ public class GodBridgeAssist extends Module implements RotationProvider {
         return BlockPlacementOptions.defaults()
                 .withRange(4.5)
                 .withWallRange(4.5)
-                .withConstructFailResult(false)
+                .withConstructFailResult(true)
                 .withConsiderFacingAwayFaces(false);
     }
 

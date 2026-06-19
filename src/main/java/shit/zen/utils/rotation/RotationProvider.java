@@ -75,6 +75,14 @@ public interface RotationProvider {
         return this.getApplyMode() == RotationApplyMode.SILENT;
     }
 
+    default boolean shouldAffectRayTrace() {
+        return true;
+    }
+
+    default boolean shouldAffectUseItemRayTrace() {
+        return this.shouldAffectRayTrace();
+    }
+
     default int getRotationPriority() {
         return 0;
     }

@@ -3,12 +3,14 @@ package shit.zen.utils.game;
 import java.util.Collection;
 import java.util.Iterator;
 import java.util.LinkedHashSet;
+import java.util.Locale;
 import java.util.function.BooleanSupplier;
 import java.util.function.IntSupplier;
 import java.util.function.Supplier;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.InteractionHand;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.phys.BlockHitResult;
 import shit.zen.ClientBase;
 import shit.zen.modules.Module;
 import shit.zen.utils.rotation.Rotation;
@@ -31,6 +33,8 @@ public class QueuedBlockPlacer extends ClientBase implements RotationProvider {
     private Rotation currentRotation;
     private int ticksToWait;
     private int lastPlaceTick = -1;
+    private int targetPreparedTick = -1;
+    private String lastDebugStatus = "idle";
 
     public QueuedBlockPlacer(
             Module owner,
@@ -70,22 +74,43 @@ public class QueuedBlockPlacer extends ClientBase implements RotationProvider {
     }
 
     public void prepare(BlockPlacementOptions options) {
-        this.currentTarget = null;
-        this.currentRotation = null;
         if (!this.isOwnerEnabled() || mc.player == null || mc.level == null || this.queue.isEmpty()) {
+            this.updateDebugStatus("prepare:no-context owner=" + this.isOwnerEnabled()
+                    + " player=" + (mc.player != null)
+                    + " level=" + (mc.level != null)
+                    + " queue=" + this.queue.size());
+            this.currentTarget = null;
+            this.currentRotation = null;
+            this.targetPreparedTick = -1;
             return;
         }
 
+        if (this.currentTarget != null && this.queue.contains(this.currentTarget.placedBlockPos())) {
+            SlotSelection currentSlot = this.slotFinder.find(this.currentTarget.placedBlockPos());
+            if (currentSlot != null && BlockPlacementUtil.isValidPlacementTarget(
+                    this.currentTarget, currentSlot.itemStack(), options)) {
+                this.currentRotation = this.currentTarget.rotation();
+                this.updateDebugStatus("prepare:locked " + this.formatTarget(this.currentTarget));
+                return;
+            }
+        }
+        this.currentTarget = null;
+        this.currentRotation = null;
+        this.targetPreparedTick = -1;
+
         SlotSelection defaultSlot = this.slotFinder.find(null);
         if (defaultSlot == null) {
+            this.updateDebugStatus("prepare:no-slot queue=" + this.queue.size());
             return;
         }
         ItemStack defaultStack = defaultSlot.itemStack();
+        int removed = 0;
         Iterator<BlockPos> iterator = this.queue.iterator();
         while (iterator.hasNext()) {
             BlockPos pos = iterator.next();
             if (!BlockPlacementUtil.canReplace(pos, defaultStack)) {
                 iterator.remove();
+                removed++;
                 continue;
             }
 
@@ -97,22 +122,40 @@ public class QueuedBlockPlacer extends ClientBase implements RotationProvider {
             if (target != null) {
                 this.currentTarget = target;
                 this.currentRotation = target.rotation();
+                this.targetPreparedTick = mc.player.tickCount;
+                this.updateDebugStatus("prepare:target " + this.formatTarget(target));
                 return;
             }
         }
+        this.updateDebugStatus("prepare:no-target queue=" + this.queue.size() + " removed=" + removed);
     }
 
     public boolean place(BlockPlacementOptions options, int cooldownTicks) {
-        if (!this.isOwnerEnabled() || this.currentTarget == null || mc.player == null || mc.player.tickCount == this.lastPlaceTick) {
+        if (!this.isOwnerEnabled()) {
+            this.updateDebugStatus("place:no-owner");
+            return false;
+        }
+        if (this.currentTarget == null) {
+            this.updateDebugStatus("place:no-target queue=" + this.queue.size());
+            return false;
+        }
+        if (mc.player == null) {
+            this.updateDebugStatus("place:no-player");
+            return false;
+        }
+        if (mc.player.tickCount == this.lastPlaceTick) {
+            this.updateDebugStatus("place:same-tick lastPlaceTick=" + this.lastPlaceTick);
             return false;
         }
         if (this.ticksToWait > 0) {
             this.ticksToWait--;
+            this.updateDebugStatus("place:cooldown wait=" + this.ticksToWait);
             return false;
         }
 
         SlotSelection slot = this.slotFinder.find(this.currentTarget.placedBlockPos());
         if (slot == null) {
+            this.updateDebugStatus("place:no-slot " + this.formatTarget(this.currentTarget));
             return false;
         }
 
@@ -123,6 +166,13 @@ public class QueuedBlockPlacer extends ClientBase implements RotationProvider {
             placeRotation = this.currentRotation;
         }
         if (placeRotation == null) {
+            this.updateDebugStatus("place:no-rotation " + this.formatTarget(this.currentTarget));
+            return false;
+        }
+        if (this.getApplyMode() != RotationApplyMode.OFF && mc.player.tickCount <= this.targetPreparedTick) {
+            this.updateDebugStatus("place:wait-target-tick current=" + mc.player.tickCount
+                    + " prepared=" + this.targetPreparedTick
+                    + " " + this.formatTarget(this.currentTarget));
             return false;
         }
 
@@ -137,12 +187,22 @@ public class QueuedBlockPlacer extends ClientBase implements RotationProvider {
             }
         }
 
-        boolean placed = BlockPlacementUtil.place(this.currentTarget, slot.hand(), placeRotation, slot.itemStack(), options);
-        this.lastPlaceTick = mc.player.tickCount;
+        BlockPlacementTarget placedTarget = this.currentTarget;
+        BlockPlacementUtil.PlacementResult placement = BlockPlacementUtil.placeDetailed(
+                placedTarget, slot.hand(), placeRotation, slot.itemStack(), options);
+        boolean placed = placement.placed();
+        this.updateDebugStatus((placed ? "place:success " : "place:fail reason=" + placement.reason() + " ")
+                + this.formatTarget(placedTarget)
+                + " hand=" + slot.hand()
+                + " slot=" + slot.hotbarSlot()
+                + " rot=" + this.formatRotation(placeRotation)
+                + " " + this.formatHit(placement.hit()));
         if (placed) {
-            this.queue.remove(this.currentTarget.placedBlockPos());
+            this.lastPlaceTick = mc.player.tickCount;
+            this.queue.remove(placedTarget.placedBlockPos());
             this.currentTarget = null;
             this.currentRotation = null;
+            this.targetPreparedTick = -1;
             this.ticksToWait = Math.max(0, cooldownTicks);
         }
 
@@ -159,6 +219,8 @@ public class QueuedBlockPlacer extends ClientBase implements RotationProvider {
         this.currentRotation = null;
         this.ticksToWait = 0;
         this.lastPlaceTick = -1;
+        this.targetPreparedTick = -1;
+        this.lastDebugStatus = "idle";
     }
 
     public boolean isDone() {
@@ -171,6 +233,14 @@ public class QueuedBlockPlacer extends ClientBase implements RotationProvider {
 
     public BlockPlacementTarget getCurrentTarget() {
         return this.currentTarget;
+    }
+
+    public String getDebugSummary() {
+        return this.lastDebugStatus
+                + " queue=" + this.queue.size()
+                + " wait=" + this.ticksToWait
+                + " preparedTick=" + this.targetPreparedTick
+                + " lastPlaceTick=" + this.lastPlaceTick;
     }
 
     @Override
@@ -208,12 +278,57 @@ public class QueuedBlockPlacer extends ClientBase implements RotationProvider {
     }
 
     @Override
+    public boolean shouldAffectRayTrace() {
+        return false;
+    }
+
+    @Override
+    public boolean shouldAffectUseItemRayTrace() {
+        return false;
+    }
+
+    @Override
     public int getRotationPriority() {
         return this.prioritySupplier == null ? 0 : this.prioritySupplier.getAsInt();
     }
 
     private boolean isOwnerEnabled() {
         return this.owner != null && this.owner.isEnabled();
+    }
+
+    private void updateDebugStatus(String status) {
+        this.lastDebugStatus = status == null ? "unknown" : status;
+    }
+
+    private String formatTarget(BlockPlacementTarget target) {
+        if (target == null) {
+            return "target=null";
+        }
+        return "target=" + this.formatBlockPos(target.placedBlockPos())
+                + " support=" + this.formatBlockPos(target.interactedBlockPos())
+                + " face=" + target.facing()
+                + " targetRot=" + this.formatRotation(target.rotation());
+    }
+
+    private String formatHit(BlockHitResult hit) {
+        if (hit == null) {
+            return "hit=null";
+        }
+        return "hit=" + this.formatBlockPos(hit.getBlockPos()) + "/" + hit.getDirection();
+    }
+
+    private String formatBlockPos(BlockPos pos) {
+        if (pos == null) {
+            return "null";
+        }
+        return pos.getX() + "," + pos.getY() + "," + pos.getZ();
+    }
+
+    private String formatRotation(Rotation rotation) {
+        if (rotation == null) {
+            return "null";
+        }
+        return String.format(Locale.US, "%.1f/%.1f", rotation.getYaw(), rotation.getPitch());
     }
 
     @FunctionalInterface
