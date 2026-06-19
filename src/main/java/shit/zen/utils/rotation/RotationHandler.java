@@ -365,7 +365,10 @@ extends ClientBase {
 
     @EventTarget
     public void onRayTrace(RayTraceEvent rayTraceEvent) {
-        if (targetRotation != null && rayTraceEvent.entity == mc.player && isRotating) {
+        if (targetRotation != null
+                && rayTraceEvent.entity == mc.player
+                && isRotating
+                && (activeProvider == null || activeProvider.shouldAffectRayTrace())) {
             rayTraceEvent.setYaw(targetRotation.getYaw());
             rayTraceEvent.setPitch(targetRotation.getPitch());
         }
@@ -373,7 +376,9 @@ extends ClientBase {
 
     @EventTarget
     public void onUseItemRayTrace(UseItemRayTraceEvent useItemRayTraceEvent) {
-        if (targetRotation != null && isRotating) {
+        if (targetRotation != null
+                && isRotating
+                && (activeProvider == null || activeProvider.shouldAffectUseItemRayTrace())) {
             useItemRayTraceEvent.setYaw(targetRotation.getYaw());
             useItemRayTraceEvent.setPitch(targetRotation.getPitch());
         }

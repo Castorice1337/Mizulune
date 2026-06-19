@@ -15,6 +15,6 @@ public record BlockPlacementTarget(
         Rotation rotation) {
 
     public BlockHitResult toHitResult() {
-        return new BlockHitResult(this.targetPoint, this.facing, this.interactedBlockPos, false);
+        return new BlockHitResult(Vec3.atCenterOf(this.interactedBlockPos), this.facing, this.interactedBlockPos, false);
     }
 }

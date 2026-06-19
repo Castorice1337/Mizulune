@@ -18,7 +18,7 @@ import shit.zen.utils.rotation.Rotation;
 import shit.zen.utils.rotation.RotationHandler;
 
 public final class BlockPlacementUtil extends ClientBase {
-    private static final double HIT_EPSILON = 1.0E-4;
+    private static final double CONSTRUCT_FALLBACK_MAX_ANGLE = 3.0;
 
     public static BlockPlacementTarget findBestPlacementTarget(
             BlockPos placedBlock,
@@ -137,15 +137,29 @@ public final class BlockPlacementUtil extends ClientBase {
             Rotation rotation,
             BlockPlacementTarget target,
             BlockPlacementOptions options) {
+        return rayTraceTarget(rotation, target, options, true);
+    }
+
+    public static BlockHitResult rayTraceTarget(
+            Rotation rotation,
+            BlockPlacementTarget target,
+            BlockPlacementOptions options,
+            boolean allowConstructFailResult) {
         if (rotation == null || target == null || mc.player == null || mc.level == null) {
             return null;
         }
 
         HitResult result = rayTrace(rotation, options.maxRange());
-        if (result instanceof BlockHitResult hit && doesHitMatchTarget(hit, target, options)) {
-            return hit;
+        if (result instanceof BlockHitResult hit
+                && hit.getType() == HitResult.Type.BLOCK
+                && hit.getBlockPos().equals(target.interactedBlockPos())) {
+            // LB keeps the traced hit location but forces the planned placement face.
+            return new BlockHitResult(hit.getLocation(), target.facing(), target.interactedBlockPos(), hit.isInside());
         }
-        return options.constructFailResult() ? target.toHitResult() : null;
+        if (allowConstructFailResult && options.constructFailResult()) {
+            return getConstructedFallbackHit(rotation, target);
+        }
+        return null;
     }
 
     public static HitResult rayTrace(Rotation rotation, double range) {
@@ -168,10 +182,7 @@ public final class BlockPlacementUtil extends ClientBase {
         if (!hit.getBlockPos().equals(target.interactedBlockPos())) {
             return false;
         }
-        if (options.requireDirectionMatch() && hit.getDirection() != target.facing()) {
-            return false;
-        }
-        return hit.getLocation().y + HIT_EPSILON >= target.minPlacementY();
+        return !options.requireDirectionMatch() || hit.getDirection() == target.facing();
     }
 
     public static boolean place(
@@ -180,23 +191,32 @@ public final class BlockPlacementUtil extends ClientBase {
             Rotation rotation,
             ItemStack stack,
             BlockPlacementOptions options) {
+        return placeDetailed(target, hand, rotation, stack, options).placed();
+    }
+
+    public static PlacementResult placeDetailed(
+            BlockPlacementTarget target,
+            InteractionHand hand,
+            Rotation rotation,
+            ItemStack stack,
+            BlockPlacementOptions options) {
         if (target == null || hand == null || mc.player == null || mc.level == null || mc.gameMode == null) {
-            return false;
+            return PlacementResult.fail("missing-context", null, null);
         }
         if (!isValidPlacementTarget(target, stack, options)) {
-            return false;
+            return PlacementResult.fail("invalid-target", null, null);
         }
         BlockHitResult hit = rayTraceTarget(rotation, target, options);
         if (hit == null) {
-            return false;
+            return PlacementResult.fail("no-hit", null, null);
         }
 
         InteractionResult result = mc.gameMode.useItemOn(mc.player, hand, hit);
         if (result.consumesAction()) {
             mc.player.swing(hand);
-            return true;
+            return new PlacementResult(true, "useItemOn:" + result, hit, result);
         }
-        return result == InteractionResult.SUCCESS;
+        return new PlacementResult(result == InteractionResult.SUCCESS, "useItemOn:" + result, hit, result);
     }
 
     public static Rotation getRotationToPoint(Vec3 point) {
@@ -211,6 +231,26 @@ public final class BlockPlacementUtil extends ClientBase {
         float yaw = (float) Math.toDegrees(Math.atan2(dz, dx)) - 90.0f;
         float pitch = (float) -Math.toDegrees(Math.atan2(dy, horizontal));
         return new Rotation(Mth.wrapDegrees(yaw), Mth.clamp(pitch, -90.0f, 90.0f));
+    }
+
+    public static double rotationDistance(Rotation first, Rotation second) {
+        if (first == null || second == null) {
+            return Double.POSITIVE_INFINITY;
+        }
+        return Math.abs(Mth.wrapDegrees(first.getYaw() - second.getYaw()))
+                + Math.abs(first.getPitch() - second.getPitch());
+    }
+
+    private static BlockHitResult getConstructedFallbackHit(Rotation rotation, BlockPlacementTarget target) {
+        Rotation centerRotation = getRotationToPoint(Vec3.atCenterOf(target.interactedBlockPos()));
+        if (rotationDistance(rotation, centerRotation) <= CONSTRUCT_FALLBACK_MAX_ANGLE) {
+            return target.toHitResult();
+        }
+        Rotation plannedPointRotation = getRotationToPoint(target.targetPoint());
+        if (rotationDistance(rotation, plannedPointRotation) <= CONSTRUCT_FALLBACK_MAX_ANGLE) {
+            return new BlockHitResult(target.targetPoint(), target.facing(), target.interactedBlockPos(), false);
+        }
+        return null;
     }
 
     private static double scoreTarget(BlockPlacementTarget target, BlockHitResult requiredHit) {
@@ -300,6 +340,16 @@ public final class BlockPlacementUtil extends ClientBase {
     }
 
     private record FaceTarget(Vec3 point, double minPlacementY) {
+    }
+
+    public record PlacementResult(
+            boolean placed,
+            String reason,
+            BlockHitResult hit,
+            InteractionResult interactionResult) {
+        private static PlacementResult fail(String reason, BlockHitResult hit, InteractionResult interactionResult) {
+            return new PlacementResult(false, reason, hit, interactionResult);
+        }
     }
 
     private BlockPlacementUtil() {
