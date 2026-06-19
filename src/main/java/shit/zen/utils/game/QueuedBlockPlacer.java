@@ -217,6 +217,13 @@ public class QueuedBlockPlacer extends ClientBase implements RotationProvider {
         this.updateDebugStatus("place:defer reason=" + reason + " " + this.formatTarget(this.currentTarget));
     }
 
+    public void clearCurrentTarget(String reason) {
+        this.updateDebugStatus("prepare:refresh reason=" + reason + " " + this.formatTarget(this.currentTarget));
+        this.currentTarget = null;
+        this.currentRotation = null;
+        this.targetPreparedTick = -1;
+    }
+
     public void clear() {
         this.queue.clear();
         this.currentTarget = null;
