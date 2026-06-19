@@ -13,6 +13,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.concurrent.ThreadLocalRandom;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.core.BlockPos;
@@ -44,7 +45,9 @@ import shit.zen.value.impl.NumberValue;
 
 public class BlockIn extends Module {
     public static BlockIn INSTANCE;
-    private static final double JUMP_SUPPORT_MIN_Y_OFFSET = 0.08;
+    private static final double JUMP_SUPPORT_MIN_PEAK_Y_OFFSET = 0.85;
+    private static final double JUMP_SUPPORT_MAX_UPWARD_SPEED = 0.12;
+    private static final double JUMP_SUPPORT_MAX_DOWNWARD_SPEED = -0.08;
 
     public final BooleanValue autoDisable = new BooleanValue("Auto Disable", true);
     public final ModeValue placeOrder = new ModeValue("Place Order", "Normal", "Random", "BottomTop", "TopBottom")
@@ -81,6 +84,7 @@ public class BlockIn extends Module {
     private BlockPos roofSupportPos;
     private int jumpTicksRemaining;
     private int jumpAirTicks;
+    private int jumpWindowTicks;
     private boolean moduleJumpDown;
     private boolean waitingLanding;
     private String roofDebugReason = "idle";
@@ -182,7 +186,8 @@ public class BlockIn extends Module {
         List<BlockPos> positions = this.generatePositions();
         this.updateJumpControl();
         this.placer.updatePositions(positions);
-        this.placer.prepare(this.getPlacementOptions());
+        this.refreshJumpSupportTargetBeforePrepare();
+        this.placer.prepare(this.getPreparePlacementOptions());
         this.debugLog("prepare");
     }
 
@@ -254,7 +259,13 @@ public class BlockIn extends Module {
     }
 
     private BlockPlacementOptions getRoofSupportPlacementOptions() {
-        return this.getPlacementOptions().withConstructFailResult(false);
+        return this.getPlacementOptions()
+                .withConstructFailResult(false)
+                .withConsiderFacingAwayFaces(false);
+    }
+
+    private BlockPlacementOptions getPreparePlacementOptions() {
+        return this.roofSupportPos == null ? this.getPlacementOptions() : this.getRoofSupportPlacementOptions();
     }
 
     private BlockPlacementOptions getCurrentPlacementOptions() {
@@ -360,6 +371,10 @@ public class BlockIn extends Module {
         }
         if (this.hasPlacementTarget(this.roofPos, stack, options)) {
             this.clearRoofSupportPlan("roof-direct");
+            return null;
+        }
+        if (!this.isBaseStructureComplete(playerHeight, stack)) {
+            this.clearRoofSupportPlan("base-pending");
             return null;
         }
         if (this.roofSupportPos != null && !BlockPlacementUtil.canReplace(this.roofSupportPos, stack)) {
@@ -532,6 +547,7 @@ public class BlockIn extends Module {
         if (this.roofPhase != RoofPhase.JUMP_PILLAR_SUPPORT) {
             this.releaseJumpControl();
             this.jumpAirTicks = 0;
+            this.jumpWindowTicks = 0;
             return;
         }
         if (this.roofSupportPos != null && !BlockPlacementUtil.canReplace(this.roofSupportPos, ItemStack.EMPTY)) {
@@ -554,6 +570,11 @@ public class BlockIn extends Module {
         } else {
             this.jumpAirTicks = 0;
         }
+        if (this.isJumpSupportPlacementWindow()) {
+            this.jumpWindowTicks++;
+        } else {
+            this.jumpWindowTicks = 0;
+        }
     }
 
     private boolean shouldDeferJumpSupportPlacement() {
@@ -564,14 +585,36 @@ public class BlockIn extends Module {
                 || !this.roofSupportPos.equals(this.placer.getCurrentTarget().placedBlockPos())) {
             return false;
         }
-        return this.jumpAirTicks <= 0 || !this.isJumpSupportAirborne();
+        return !this.isJumpSupportPlacementWindow();
     }
 
     private boolean isJumpSupportAirborne() {
         return mc.player != null
                 && this.startPos != null
                 && !mc.player.onGround()
-                && mc.player.getY() > this.startPos.getY() + JUMP_SUPPORT_MIN_Y_OFFSET;
+                && mc.player.getY() > this.startPos.getY() + JUMP_SUPPORT_MIN_PEAK_Y_OFFSET;
+    }
+
+    private boolean isJumpSupportPlacementWindow() {
+        if (!this.isJumpSupportAirborne()) {
+            return false;
+        }
+        double velocityY = mc.player.getDeltaMovement().y;
+        return velocityY <= JUMP_SUPPORT_MAX_UPWARD_SPEED
+                && velocityY >= JUMP_SUPPORT_MAX_DOWNWARD_SPEED;
+    }
+
+    private void refreshJumpSupportTargetBeforePrepare() {
+        if (this.roofPhase != RoofPhase.JUMP_PILLAR_SUPPORT || this.roofSupportPos == null) {
+            return;
+        }
+        BlockPlacementTarget target = this.placer.getCurrentTarget();
+        if (target == null || !this.roofSupportPos.equals(target.placedBlockPos())) {
+            return;
+        }
+        if (!this.isJumpSupportPlacementWindow()) {
+            this.placer.clearCurrentTarget("jump-refresh-before-peak");
+        }
     }
 
     private void handlePostPlaceRoofState() {
@@ -593,6 +636,7 @@ public class BlockIn extends Module {
         this.roofPhase = RoofPhase.WAIT_LANDING;
         this.waitingLanding = true;
         this.jumpAirTicks = 0;
+        this.jumpWindowTicks = 0;
         this.roofDebugReason = reason;
     }
 
@@ -607,6 +651,7 @@ public class BlockIn extends Module {
         this.waitingLanding = false;
         if (mode != RoofSupportMode.JUMP_PILLAR) {
             this.jumpAirTicks = 0;
+            this.jumpWindowTicks = 0;
         }
         this.roofDebugReason = reason;
     }
@@ -619,6 +664,7 @@ public class BlockIn extends Module {
         this.roofDebugReason = reason;
         this.jumpTicksRemaining = 0;
         this.jumpAirTicks = 0;
+        this.jumpWindowTicks = 0;
         this.releaseJumpControl();
     }
 
@@ -629,6 +675,7 @@ public class BlockIn extends Module {
         this.roofSupportPos = null;
         this.jumpTicksRemaining = 0;
         this.jumpAirTicks = 0;
+        this.jumpWindowTicks = 0;
         this.moduleJumpDown = false;
         this.waitingLanding = false;
         this.roofDebugReason = "idle";
@@ -678,7 +725,26 @@ public class BlockIn extends Module {
         return true;
     }
 
+    private boolean isBaseStructureComplete(int playerHeight, ItemStack stack) {
+        if (mc.player == null || mc.level == null || this.startPos == null) {
+            return false;
+        }
+        for (BlockPos pos : this.generateBasePositionsWithoutRoof(playerHeight)) {
+            if (BlockPlacementUtil.canReplace(pos, stack)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     private List<BlockPos> generateBasePositions(int playerHeight) {
+        LinkedHashSet<BlockPos> result = new LinkedHashSet<>();
+        result.addAll(this.generateBasePositionsWithoutRoof(playerHeight));
+        result.add(this.startPos.above(playerHeight));
+        return new ArrayList<>(result);
+    }
+
+    private List<BlockPos> generateBasePositionsWithoutRoof(int playerHeight) {
         LinkedHashSet<BlockPos> result = new LinkedHashSet<>();
         result.add(this.startPos.below());
         for (Direction direction : this.getOrderedHorizontalDirections()) {
@@ -687,7 +753,6 @@ public class BlockIn extends Module {
                 result.add(value.above(i));
             }
         }
-        result.add(this.startPos.above(playerHeight));
         return new ArrayList<>(result);
     }
 
@@ -705,6 +770,9 @@ public class BlockIn extends Module {
                 + " supportPos=" + this.formatBlockPos(this.roofSupportPos)
                 + " jumpTicks=" + this.jumpTicksRemaining
                 + " jumpAirTicks=" + this.jumpAirTicks
+                + " jumpWindowTicks=" + this.jumpWindowTicks
+                + " jumpY=" + this.formatDouble(this.getJumpYOffset())
+                + " jumpVy=" + this.formatDouble(this.getJumpVelocityY())
                 + " waitingLanding=" + this.waitingLanding
                 + " roofReason=" + this.roofDebugReason
                 + " " + this.placer.getDebugSummary();
@@ -724,6 +792,21 @@ public class BlockIn extends Module {
             return "null";
         }
         return pos.getX() + "," + pos.getY() + "," + pos.getZ();
+    }
+
+    private double getJumpYOffset() {
+        if (mc.player == null || this.startPos == null) {
+            return 0.0;
+        }
+        return mc.player.getY() - this.startPos.getY();
+    }
+
+    private double getJumpVelocityY() {
+        return mc.player == null ? 0.0 : mc.player.getDeltaMovement().y;
+    }
+
+    private String formatDouble(double value) {
+        return String.format(Locale.US, "%.3f", value);
     }
 
     private enum RoofPhase {
