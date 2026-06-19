@@ -75,6 +75,18 @@ public interface RotationProvider {
         return this.getApplyMode() == RotationApplyMode.SILENT;
     }
 
+    default int getTicksUntilReset() {
+        return 3;
+    }
+
+    default double getResetThreshold() {
+        return 1.0;
+    }
+
+    default boolean shouldResetRotation() {
+        return this.getApplyMode() == RotationApplyMode.SILENT;
+    }
+
     default boolean shouldAffectRayTrace() {
         return true;
     }

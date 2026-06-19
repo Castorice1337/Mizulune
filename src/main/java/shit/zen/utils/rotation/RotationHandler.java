@@ -52,6 +52,9 @@ extends ClientBase {
     private static RotationApplyMode activeApplyMode;
     private static Rotation previousVisualRotation;
     private static Rotation currentVisualRotation;
+    private static RotationResetSnapshot resetSnapshot;
+    private static boolean resettingRotation;
+    private static int resetTicksRemaining;
 
     public static void setTargetRotation(Rotation rotation) {
         RotationHandler.setTargetRotation(rotation, true);
@@ -85,7 +88,7 @@ extends ClientBase {
     public static void unregisterProvider(RotationProvider provider) {
         ROTATION_PROVIDERS.remove(provider);
         if (activeProvider == provider) {
-            RotationHandler.clearRotationState();
+            RotationHandler.beginResetOrClear();
         }
     }
 
@@ -176,7 +179,7 @@ extends ClientBase {
     }
 
     private static Rotation smoothProviderRotation(RotationProvider provider) {
-        return PROVIDER_SMOOTHER.update(
+        return RotationHandler.smoothRotation(
                 provider.getRotation(),
                 provider.getSmoothMode(),
                 provider.getSmoothDurationTicks(),
@@ -195,9 +198,156 @@ extends ClientBase {
                 provider.shouldHumanizeRotation());
     }
 
+    private static Rotation smoothRotation(
+            Rotation target,
+            SmoothMode smoothMode,
+            int smoothDurationTicks,
+            double smoothSteepness,
+            double maxYawSpeed,
+            double maxPitchSpeed,
+            double minStep,
+            double rotationEpsilon,
+            double interpolationHorizontalSpeedMin,
+            double interpolationHorizontalSpeedMax,
+            double interpolationVerticalSpeedMin,
+            double interpolationVerticalSpeedMax,
+            double interpolationDirectionChangeFactorMin,
+            double interpolationDirectionChangeFactorMax,
+            double interpolationMidpoint,
+            boolean humanizeRotation) {
+        return PROVIDER_SMOOTHER.update(
+                target,
+                smoothMode,
+                smoothDurationTicks,
+                smoothSteepness,
+                maxYawSpeed,
+                maxPitchSpeed,
+                minStep,
+                rotationEpsilon,
+                interpolationHorizontalSpeedMin,
+                interpolationHorizontalSpeedMax,
+                interpolationVerticalSpeedMin,
+                interpolationVerticalSpeedMax,
+                interpolationDirectionChangeFactorMin,
+                interpolationDirectionChangeFactorMax,
+                interpolationMidpoint,
+                humanizeRotation);
+    }
+
+    private static void captureResetSnapshot(RotationProvider provider) {
+        RotationApplyMode applyMode = provider.getApplyMode();
+        if (applyMode == null) {
+            applyMode = RotationApplyMode.SILENT;
+        }
+        resetSnapshot = new RotationResetSnapshot(
+                applyMode,
+                provider.shouldFixMovement(),
+                provider.getSmoothMode(),
+                provider.getSmoothDurationTicks(),
+                provider.getSmoothSteepness(),
+                provider.getMaxYawSpeed(),
+                provider.getMaxPitchSpeed(),
+                provider.getMinStep(),
+                provider.getRotationEpsilon(),
+                provider.getInterpolationHorizontalSpeedMin(),
+                provider.getInterpolationHorizontalSpeedMax(),
+                provider.getInterpolationVerticalSpeedMin(),
+                provider.getInterpolationVerticalSpeedMax(),
+                provider.getInterpolationDirectionChangeFactorMin(),
+                provider.getInterpolationDirectionChangeFactorMax(),
+                provider.getInterpolationMidpoint(),
+                provider.shouldHumanizeRotation(),
+                Math.max(0, provider.getTicksUntilReset()),
+                Math.max(0.0, provider.getResetThreshold()),
+                provider.shouldResetRotation(),
+                provider.shouldAffectRayTrace(),
+                provider.shouldAffectUseItemRayTrace());
+        resetTicksRemaining = resetSnapshot.ticksUntilReset();
+        resettingRotation = false;
+    }
+
+    private static void beginResetOrClear() {
+        if (RotationHandler.canBeginReset()) {
+            activeProvider = null;
+            resettingRotation = true;
+            resetTicksRemaining = resetSnapshot.ticksUntilReset();
+            if (resetSnapshot.applyMode() != RotationApplyMode.CHANGE_LOOK) {
+                RotationHandler.clearVisualRotation();
+            }
+            isRotating = true;
+            return;
+        }
+        RotationHandler.clearRotationState();
+    }
+
+    private static boolean canBeginReset() {
+        return resetSnapshot != null
+                && resetSnapshot.resetRotation()
+                && resetSnapshot.ticksUntilReset() > 0
+                && targetRotation != null
+                && activeApplyMode != RotationApplyMode.OFF
+                && mc.player != null;
+    }
+
+    private static boolean updateResetRotation() {
+        if (!resettingRotation || resetSnapshot == null) {
+            return false;
+        }
+        if (mc.player == null || resetTicksRemaining <= 0) {
+            RotationHandler.clearRotationState();
+            return true;
+        }
+
+        Rotation resetTarget = new Rotation(mc.player.getYRot(), mc.player.getXRot());
+        Rotation smoothed = RotationHandler.smoothRotation(
+                resetTarget,
+                resetSnapshot.smoothMode(),
+                resetSnapshot.smoothDurationTicks(),
+                resetSnapshot.smoothSteepness(),
+                resetSnapshot.maxYawSpeed(),
+                resetSnapshot.maxPitchSpeed(),
+                resetSnapshot.minStep(),
+                resetSnapshot.rotationEpsilon(),
+                resetSnapshot.interpolationHorizontalSpeedMin(),
+                resetSnapshot.interpolationHorizontalSpeedMax(),
+                resetSnapshot.interpolationVerticalSpeedMin(),
+                resetSnapshot.interpolationVerticalSpeedMax(),
+                resetSnapshot.interpolationDirectionChangeFactorMin(),
+                resetSnapshot.interpolationDirectionChangeFactorMax(),
+                resetSnapshot.interpolationMidpoint(),
+                resetSnapshot.humanizeRotation());
+        if (smoothed == null) {
+            RotationHandler.clearRotationState();
+            return true;
+        }
+
+        RotationHandler.setTargetRotation(smoothed, resetSnapshot.movementFixing(), resetSnapshot.applyMode());
+        resetTicksRemaining--;
+        if (RotationHandler.rotationDistance(smoothed, resetTarget) <= resetSnapshot.resetThreshold()) {
+            RotationHandler.clearRotationState();
+        }
+        return true;
+    }
+
+    private static double rotationDistance(Rotation first, Rotation second) {
+        if (first == null || second == null) {
+            return Double.MAX_VALUE;
+        }
+        float yawDiff = Mth.wrapDegrees(first.getYaw() - second.getYaw());
+        float pitchDiff = first.getPitch() - second.getPitch();
+        return Math.sqrt(yawDiff * yawDiff + pitchDiff * pitchDiff);
+    }
+
+    private static void clearResetState() {
+        resetSnapshot = null;
+        resettingRotation = false;
+        resetTicksRemaining = 0;
+    }
+
     private static void clearActiveProvider() {
         activeProvider = null;
         PROVIDER_SMOOTHER.reset();
+        RotationHandler.clearResetState();
     }
 
     private static void clearRotationState() {
@@ -263,6 +413,7 @@ extends ClientBase {
             isRotating = true;
             if (provider != null) {
                 activeProvider = provider;
+                RotationHandler.captureResetSnapshot(provider);
                 Rotation smoothed = RotationHandler.smoothProviderRotation(provider);
                 if (smoothed != null) {
                     RotationHandler.setTargetRotation(smoothed, provider.shouldFixMovement(), provider.getApplyMode());
@@ -306,6 +457,8 @@ extends ClientBase {
             } else if (antiKB != null && antiKB.isEnabled() && AntiKB.rotation != null) {
                 RotationHandler.clearActiveProvider();
                 RotationHandler.setTargetRotation(AntiKB.rotation);
+            } else if (RotationHandler.updateResetRotation()) {
+                return;
             } else {
                 RotationHandler.clearRotationState();
             }
@@ -368,7 +521,7 @@ extends ClientBase {
         if (targetRotation != null
                 && rayTraceEvent.entity == mc.player
                 && isRotating
-                && (activeProvider == null || activeProvider.shouldAffectRayTrace())) {
+                && RotationHandler.shouldAffectRayTrace()) {
             rayTraceEvent.setYaw(targetRotation.getYaw());
             rayTraceEvent.setPitch(targetRotation.getPitch());
         }
@@ -378,10 +531,24 @@ extends ClientBase {
     public void onUseItemRayTrace(UseItemRayTraceEvent useItemRayTraceEvent) {
         if (targetRotation != null
                 && isRotating
-                && (activeProvider == null || activeProvider.shouldAffectUseItemRayTrace())) {
+                && RotationHandler.shouldAffectUseItemRayTrace()) {
             useItemRayTraceEvent.setYaw(targetRotation.getYaw());
             useItemRayTraceEvent.setPitch(targetRotation.getPitch());
         }
+    }
+
+    private static boolean shouldAffectRayTrace() {
+        if (resettingRotation && resetSnapshot != null) {
+            return resetSnapshot.affectRayTrace();
+        }
+        return activeProvider == null || activeProvider.shouldAffectRayTrace();
+    }
+
+    private static boolean shouldAffectUseItemRayTrace() {
+        if (resettingRotation && resetSnapshot != null) {
+            return resetSnapshot.affectUseItemRayTrace();
+        }
+        return activeProvider == null || activeProvider.shouldAffectUseItemRayTrace();
     }
 
     @EventTarget
@@ -411,5 +578,33 @@ extends ClientBase {
         activeApplyMode = RotationApplyMode.OFF;
         previousVisualRotation = null;
         currentVisualRotation = null;
+        resetSnapshot = null;
+        resettingRotation = false;
+        resetTicksRemaining = 0;
+    }
+
+    private record RotationResetSnapshot(
+            RotationApplyMode applyMode,
+            boolean movementFixing,
+            SmoothMode smoothMode,
+            int smoothDurationTicks,
+            double smoothSteepness,
+            double maxYawSpeed,
+            double maxPitchSpeed,
+            double minStep,
+            double rotationEpsilon,
+            double interpolationHorizontalSpeedMin,
+            double interpolationHorizontalSpeedMax,
+            double interpolationVerticalSpeedMin,
+            double interpolationVerticalSpeedMax,
+            double interpolationDirectionChangeFactorMin,
+            double interpolationDirectionChangeFactorMax,
+            double interpolationMidpoint,
+            boolean humanizeRotation,
+            int ticksUntilReset,
+            double resetThreshold,
+            boolean resetRotation,
+            boolean affectRayTrace,
+            boolean affectUseItemRayTrace) {
     }
 }

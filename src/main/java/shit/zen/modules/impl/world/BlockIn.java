@@ -64,6 +64,8 @@ public class BlockIn extends Module {
             .withDefault("Silent");
     public final ModeValue smoothMode = new ModeValue("Smooth Mode", "SNAP", "LINEAR", "SIGMOID").withDefault("SNAP");
     public final BooleanValue movementFix = new BooleanValue("Movement Fix", false, () -> !this.rotationMode.is("Off"));
+    public final NumberValue resetTicks = new NumberValue("Reset Ticks", 3, 0, 10, 1, this::isSilentRotation);
+    public final NumberValue resetThreshold = new NumberValue("Reset Threshold", 1.0, 0.1, 10.0, 0.1, this::isSilentRotation);
     public final BooleanValue roofSupport = new BooleanValue("Roof Support", true);
     public final BooleanValue diagonalRoofSupport = new BooleanValue("Diagonal Roof Support", true,
             this.roofSupport::getValue);
@@ -101,6 +103,8 @@ public class BlockIn extends Module {
                 this::getApplyMode,
                 this::getSmoothMode,
                 this.movementFix::getValue,
+                () -> Math.max(0, this.resetTicks.getValue().intValue()),
+                () -> this.resetThreshold.getValue().doubleValue(),
                 () -> 45);
     }
 
@@ -124,6 +128,8 @@ public class BlockIn extends Module {
         rotation.add(this.rotationMode);
         rotation.add(this.smoothMode);
         rotation.add(this.movementFix);
+        rotation.add(this.resetTicks);
+        rotation.add(this.resetThreshold);
 
         ValueGroup roof = root.group("roof_support", "Roof Support");
         roof.add(this.roofSupport);
@@ -297,6 +303,10 @@ public class BlockIn extends Module {
         return SmoothMode.SNAP;
     }
 
+    private boolean isSilentRotation() {
+        return this.rotationMode.is("Silent");
+    }
+
     private QueuedBlockPlacer.SlotSelection findSlot(BlockPos pos) {
         if (mc.player == null) {
             return null;
@@ -369,7 +379,7 @@ public class BlockIn extends Module {
             this.clearRoofSupportPlan("roof-complete");
             return null;
         }
-        if (this.hasPlacementTarget(this.roofPos, stack, options)) {
+        if (this.hasReachablePlacementTarget(this.roofPos, stack, supportOptions)) {
             this.clearRoofSupportPlan("roof-direct");
             return null;
         }
@@ -424,7 +434,7 @@ public class BlockIn extends Module {
         if (this.roofSupportMode == RoofSupportMode.JUMP_PILLAR) {
             return this.isPillarRaiseCandidate(this.roofSupportPos, stack);
         }
-        return this.hasPlacementTarget(this.roofSupportPos, stack, options);
+        return this.hasReachablePlacementTarget(this.roofSupportPos, stack, options);
     }
 
     private BlockPos findDiagonalRoofSupport(int playerHeight, ItemStack stack, BlockPlacementOptions options) {
@@ -481,11 +491,11 @@ public class BlockIn extends Module {
                 && BlockPlacementUtil.isValidSupport(pos.below());
     }
 
-    private boolean hasPlacementTarget(BlockPos pos, ItemStack stack, BlockPlacementOptions options) {
+    private boolean hasReachablePlacementTarget(BlockPos pos, ItemStack stack, BlockPlacementOptions options) {
         return pos != null
                 && stack != null
                 && !stack.isEmpty()
-                && BlockPlacementUtil.findBestPlacementTarget(pos, stack, options) != null;
+                && BlockPlacementUtil.findBestReachablePlacementTarget(pos, stack, options) != null;
     }
 
     private boolean hasSafeGroundPillarTarget(BlockPos pos, ItemStack stack, BlockPlacementOptions options) {
@@ -496,7 +506,7 @@ public class BlockIn extends Module {
         if (pos == null || stack == null || stack.isEmpty()) {
             return false;
         }
-        BlockPlacementTarget target = BlockPlacementUtil.findBestPlacementTarget(pos, stack, options);
+        BlockPlacementTarget target = BlockPlacementUtil.findBestReachablePlacementTarget(pos, stack, options);
         return target != null && target.facing() != Direction.UP;
     }
 
