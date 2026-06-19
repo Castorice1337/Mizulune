@@ -84,6 +84,8 @@ public class GodBridgeAssist extends Module implements RotationProvider {
     public final NumberValue epsilon = new NumberValue("Epsilon", 0.25, 0.01, 3.0, 0.01, () -> !this.smoothMode.is("SNAP"));
     public final BooleanValue humanizeRotation = new BooleanValue("Humanize Rotation", false, () -> !this.smoothMode.is("SNAP"));
     public final BooleanValue movementFix = new BooleanValue("Movement Fix", false, () -> !this.rotationMode.is("Off"));
+    public final NumberValue resetTicks = new NumberValue("Reset Ticks", 3, 0, 10, 1, this::isSilentRotation);
+    public final NumberValue resetThreshold = new NumberValue("Reset Threshold", 1.0, 0.1, 10.0, 0.1, this::isSilentRotation);
     public final ModeValue placeMode = new ModeValue("Place Mode", "ManualPlaceOnly", "AutoPlace").withDefault("ManualPlaceOnly");
     public final BooleanValue autoBlock = new BooleanValue("Auto Block", false);
     public final BooleanValue counterOnIsland = new BooleanValue("Counter On Island", false);
@@ -134,6 +136,8 @@ public class GodBridgeAssist extends Module implements RotationProvider {
         rotation.add(this.epsilon);
         rotation.add(this.humanizeRotation);
         rotation.add(this.movementFix);
+        rotation.add(this.resetTicks);
+        rotation.add(this.resetThreshold);
 
         ValueGroup placement = root.group("placement", "Placement");
         placement.add(this.placeMode);
@@ -315,6 +319,16 @@ public class GodBridgeAssist extends Module implements RotationProvider {
     }
 
     @Override
+    public int getTicksUntilReset() {
+        return Math.max(0, this.resetTicks.getValue().intValue());
+    }
+
+    @Override
+    public double getResetThreshold() {
+        return this.resetThreshold.getValue().doubleValue();
+    }
+
+    @Override
     public boolean shouldAffectRayTrace() {
         return false;
     }
@@ -335,6 +349,10 @@ public class GodBridgeAssist extends Module implements RotationProvider {
 
     private boolean isSafeWalkDistanceLedge() {
         return this.ledgeAssist.getValue() && this.ledgeDetection.is("SafeWalkDistance");
+    }
+
+    private boolean isSilentRotation() {
+        return this.rotationMode.is("Silent");
     }
 
     private boolean shouldApplyLedgeAssist() {

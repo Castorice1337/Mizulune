@@ -56,6 +56,31 @@ public final class BlockPlacementUtil extends ClientBase {
         return bestTarget;
     }
 
+    public static BlockPlacementTarget findBestReachablePlacementTarget(
+            BlockPos placedBlock,
+            ItemStack stack,
+            BlockPlacementOptions options) {
+        if (mc.player == null || mc.level == null || placedBlock == null) {
+            return null;
+        }
+
+        BlockPlacementTarget bestTarget = null;
+        double bestScore = Double.POSITIVE_INFINITY;
+        for (Direction facing : Direction.values()) {
+            BlockPlacementTarget target = createPlacementTarget(placedBlock, facing, stack, options);
+            if (target == null || !isRayTraceReachable(target, options)) {
+                continue;
+            }
+
+            double score = scoreTarget(target, null);
+            if (score < bestScore) {
+                bestScore = score;
+                bestTarget = target;
+            }
+        }
+        return bestTarget;
+    }
+
     public static BlockPlacementTarget createPlacementTarget(
             BlockPos placedBlock,
             Direction facing,
@@ -101,6 +126,14 @@ public final class BlockPlacementUtil extends ClientBase {
             return false;
         }
         return mc.player.getEyePosition().distanceToSqr(target.targetPoint()) <= options.maxRange() * options.maxRange();
+    }
+
+    public static boolean isRayTraceReachable(
+            BlockPlacementTarget target,
+            BlockPlacementOptions options) {
+        return target != null
+                && target.rotation() != null
+                && rayTraceTarget(target.rotation(), target, options, false) != null;
     }
 
     public static boolean canReplace(BlockPos pos, ItemStack stack) {

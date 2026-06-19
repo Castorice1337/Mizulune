@@ -5,6 +5,7 @@ import java.util.Iterator;
 import java.util.LinkedHashSet;
 import java.util.Locale;
 import java.util.function.BooleanSupplier;
+import java.util.function.DoubleSupplier;
 import java.util.function.IntSupplier;
 import java.util.function.Supplier;
 import net.minecraft.core.BlockPos;
@@ -26,6 +27,8 @@ public class QueuedBlockPlacer extends ClientBase implements RotationProvider {
     private final Supplier<RotationApplyMode> applyModeSupplier;
     private final Supplier<SmoothMode> smoothModeSupplier;
     private final BooleanSupplier movementFixSupplier;
+    private final IntSupplier resetTicksSupplier;
+    private final DoubleSupplier resetThresholdSupplier;
     private final IntSupplier prioritySupplier;
     private final LinkedHashSet<BlockPos> queue = new LinkedHashSet<>();
 
@@ -43,6 +46,8 @@ public class QueuedBlockPlacer extends ClientBase implements RotationProvider {
             Supplier<RotationApplyMode> applyModeSupplier,
             Supplier<SmoothMode> smoothModeSupplier,
             BooleanSupplier movementFixSupplier,
+            IntSupplier resetTicksSupplier,
+            DoubleSupplier resetThresholdSupplier,
             IntSupplier prioritySupplier) {
         this.owner = owner;
         this.name = name;
@@ -50,6 +55,8 @@ public class QueuedBlockPlacer extends ClientBase implements RotationProvider {
         this.applyModeSupplier = applyModeSupplier;
         this.smoothModeSupplier = smoothModeSupplier;
         this.movementFixSupplier = movementFixSupplier;
+        this.resetTicksSupplier = resetTicksSupplier;
+        this.resetThresholdSupplier = resetThresholdSupplier;
         this.prioritySupplier = prioritySupplier;
     }
 
@@ -88,7 +95,8 @@ public class QueuedBlockPlacer extends ClientBase implements RotationProvider {
         if (this.currentTarget != null && this.queue.contains(this.currentTarget.placedBlockPos())) {
             SlotSelection currentSlot = this.slotFinder.find(this.currentTarget.placedBlockPos());
             if (currentSlot != null && BlockPlacementUtil.isValidPlacementTarget(
-                    this.currentTarget, currentSlot.itemStack(), options)) {
+                    this.currentTarget, currentSlot.itemStack(), options)
+                    && this.canUseTarget(this.currentTarget, options)) {
                 this.currentRotation = this.currentTarget.rotation();
                 this.updateDebugStatus("prepare:locked " + this.formatTarget(this.currentTarget));
                 return;
@@ -118,7 +126,7 @@ public class QueuedBlockPlacer extends ClientBase implements RotationProvider {
             if (slot == null) {
                 continue;
             }
-            BlockPlacementTarget target = BlockPlacementUtil.findBestPlacementTarget(pos, slot.itemStack(), options);
+            BlockPlacementTarget target = this.findBestTarget(pos, slot.itemStack(), options);
             if (target != null) {
                 this.currentTarget = target;
                 this.currentRotation = target.rotation();
@@ -289,6 +297,16 @@ public class QueuedBlockPlacer extends ClientBase implements RotationProvider {
     }
 
     @Override
+    public int getTicksUntilReset() {
+        return this.resetTicksSupplier == null ? RotationProvider.super.getTicksUntilReset() : Math.max(0, this.resetTicksSupplier.getAsInt());
+    }
+
+    @Override
+    public double getResetThreshold() {
+        return this.resetThresholdSupplier == null ? RotationProvider.super.getResetThreshold() : Math.max(0.0, this.resetThresholdSupplier.getAsDouble());
+    }
+
+    @Override
     public boolean shouldAffectRayTrace() {
         return false;
     }
@@ -305,6 +323,22 @@ public class QueuedBlockPlacer extends ClientBase implements RotationProvider {
 
     private boolean isOwnerEnabled() {
         return this.owner != null && this.owner.isEnabled();
+    }
+
+    private BlockPlacementTarget findBestTarget(BlockPos pos, ItemStack stack, BlockPlacementOptions options) {
+        if (this.requiresStrictReachability(options)) {
+            return BlockPlacementUtil.findBestReachablePlacementTarget(pos, stack, options);
+        }
+        return BlockPlacementUtil.findBestPlacementTarget(pos, stack, options);
+    }
+
+    private boolean canUseTarget(BlockPlacementTarget target, BlockPlacementOptions options) {
+        return !this.requiresStrictReachability(options)
+                || BlockPlacementUtil.isRayTraceReachable(target, options);
+    }
+
+    private boolean requiresStrictReachability(BlockPlacementOptions options) {
+        return options != null && !options.constructFailResult();
     }
 
     private void updateDebugStatus(String status) {
