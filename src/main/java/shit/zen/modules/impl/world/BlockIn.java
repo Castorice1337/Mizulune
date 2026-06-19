@@ -30,6 +30,7 @@ import shit.zen.modules.impl.movement.GodBridgeAssist;
 import shit.zen.modules.impl.movement.Scaffold;
 import shit.zen.modules.impl.player.AutoWebPlace;
 import shit.zen.utils.game.BlockPlacementOptions;
+import shit.zen.utils.game.BlockPlacementTarget;
 import shit.zen.utils.game.BlockPlacementUtil;
 import shit.zen.utils.game.BlockUtil;
 import shit.zen.utils.game.QueuedBlockPlacer;
@@ -43,6 +44,7 @@ import shit.zen.value.impl.NumberValue;
 
 public class BlockIn extends Module {
     public static BlockIn INSTANCE;
+    private static final double JUMP_SUPPORT_MIN_Y_OFFSET = 0.08;
 
     public final BooleanValue autoDisable = new BooleanValue("Auto Disable", true);
     public final ModeValue placeOrder = new ModeValue("Place Order", "Normal", "Random", "BottomTop", "TopBottom")
@@ -78,6 +80,7 @@ public class BlockIn extends Module {
     private BlockPos roofPos;
     private BlockPos roofSupportPos;
     private int jumpTicksRemaining;
+    private int jumpAirTicks;
     private boolean moduleJumpDown;
     private boolean waitingLanding;
     private String roofDebugReason = "idle";
@@ -188,7 +191,14 @@ public class BlockIn extends Module {
         if (mc.player == null || mc.level == null || this.startPos == null) {
             return;
         }
-        boolean placed = this.placer.place(this.getPlacementOptions(), this.cooldown.getValue().intValue());
+        if (this.shouldDeferJumpSupportPlacement()) {
+            this.placer.deferCurrentTarget("jump-wait-airborne");
+            this.roofDebugReason = "jump-wait-airborne";
+            this.debugLog("place deferred");
+            return;
+        }
+
+        boolean placed = this.placer.place(this.getCurrentPlacementOptions(), this.cooldown.getValue().intValue());
         this.handlePostPlaceRoofState();
         this.debugLog("place placed=" + placed);
         if (this.autoDisable.getValue() && this.placer.isDone() && this.isBlockInComplete()) {
@@ -241,6 +251,19 @@ public class BlockIn extends Module {
                 .withWallRange(this.wallRange.getValue().doubleValue())
                 .withConstructFailResult(this.constructFailResult.getValue())
                 .withConsiderFacingAwayFaces(this.considerBackFaces.getValue());
+    }
+
+    private BlockPlacementOptions getRoofSupportPlacementOptions() {
+        return this.getPlacementOptions().withConstructFailResult(false);
+    }
+
+    private BlockPlacementOptions getCurrentPlacementOptions() {
+        BlockPlacementTarget target = this.placer.getCurrentTarget();
+        if (target != null && this.roofSupportPos != null
+                && this.roofSupportPos.equals(target.placedBlockPos())) {
+            return this.getRoofSupportPlacementOptions();
+        }
+        return this.getPlacementOptions();
     }
 
     private RotationApplyMode getApplyMode() {
@@ -330,6 +353,7 @@ public class BlockIn extends Module {
         }
         ItemStack stack = slot.itemStack();
         BlockPlacementOptions options = this.getPlacementOptions();
+        BlockPlacementOptions supportOptions = this.getRoofSupportPlacementOptions();
         if (!BlockPlacementUtil.canReplace(this.roofPos, stack)) {
             this.clearRoofSupportPlan("roof-complete");
             return null;
@@ -342,27 +366,18 @@ public class BlockIn extends Module {
             this.clearRoofSupportPlan("support-placed");
             return null;
         }
-        if (this.roofSupportPos != null && this.canKeepRoofSupportPlan(stack, options)) {
+        if (this.roofSupportPos != null && this.canKeepRoofSupportPlan(stack, supportOptions)) {
             this.roofDebugReason = "keep-support";
             return this.roofSupportPos;
         }
 
         BlockPos diagonalSupport = this.diagonalRoofSupport.getValue()
-                ? this.findDiagonalRoofSupport(playerHeight, stack, options)
+                ? this.findDiagonalRoofSupport(playerHeight, stack, supportOptions)
                 : null;
         if (diagonalSupport != null) {
             this.setRoofSupportPlan(RoofPhase.DIAGONAL_SUPPORT, RoofSupportMode.DIAGONAL,
                     diagonalSupport, "diagonal");
             return diagonalSupport;
-        }
-
-        BlockPos pillarSupport = this.pillarRoofSupport.getValue()
-                ? this.findPillarRoofSupport(playerHeight, stack, options)
-                : null;
-        if (pillarSupport != null) {
-            this.setRoofSupportPlan(RoofPhase.PILLAR_SUPPORT, RoofSupportMode.PILLAR,
-                    pillarSupport, "pillar");
-            return pillarSupport;
         }
 
         BlockPos jumpSupport = this.pillarRoofSupport.getValue() && this.useJump.getValue()
@@ -372,6 +387,15 @@ public class BlockIn extends Module {
             this.setRoofSupportPlan(RoofPhase.JUMP_PILLAR_SUPPORT, RoofSupportMode.JUMP_PILLAR,
                     jumpSupport, "jump-pillar");
             return jumpSupport;
+        }
+
+        BlockPos pillarSupport = this.pillarRoofSupport.getValue()
+                ? this.findPillarRoofSupport(playerHeight, stack, supportOptions)
+                : null;
+        if (pillarSupport != null) {
+            this.setRoofSupportPlan(RoofPhase.PILLAR_SUPPORT, RoofSupportMode.PILLAR,
+                    pillarSupport, "pillar");
+            return pillarSupport;
         }
 
         this.clearRoofSupportPlan("no-support");
@@ -413,7 +437,7 @@ public class BlockIn extends Module {
         for (Direction direction : this.getOrderedHorizontalDirections()) {
             BlockPos support = this.startPos.relative(direction).above(playerHeight);
             if (this.isPillarRaiseCandidate(support, stack)
-                    && this.hasPlacementTarget(support, stack, options)) {
+                    && this.hasSafeGroundPillarTarget(support, stack, options)) {
                 return support;
             }
         }
@@ -433,7 +457,7 @@ public class BlockIn extends Module {
     private boolean isPlaceableSupportCandidate(BlockPos pos, ItemStack stack, BlockPlacementOptions options) {
         return pos != null
                 && BlockPlacementUtil.canReplace(pos, stack)
-                && this.hasPlacementTarget(pos, stack, options);
+                && this.hasSafeNonJumpSupportTarget(pos, stack, options);
     }
 
     private boolean isPillarRaiseCandidate(BlockPos pos, ItemStack stack) {
@@ -447,6 +471,18 @@ public class BlockIn extends Module {
                 && stack != null
                 && !stack.isEmpty()
                 && BlockPlacementUtil.findBestPlacementTarget(pos, stack, options) != null;
+    }
+
+    private boolean hasSafeGroundPillarTarget(BlockPos pos, ItemStack stack, BlockPlacementOptions options) {
+        return this.hasSafeNonJumpSupportTarget(pos, stack, options);
+    }
+
+    private boolean hasSafeNonJumpSupportTarget(BlockPos pos, ItemStack stack, BlockPlacementOptions options) {
+        if (pos == null || stack == null || stack.isEmpty()) {
+            return false;
+        }
+        BlockPlacementTarget target = BlockPlacementUtil.findBestPlacementTarget(pos, stack, options);
+        return target != null && target.facing() != Direction.UP;
     }
 
     private List<BlockPos> insertRoofSupportBeforeRoof(List<BlockPos> positions, BlockPos supportPos) {
@@ -495,6 +531,7 @@ public class BlockIn extends Module {
         }
         if (this.roofPhase != RoofPhase.JUMP_PILLAR_SUPPORT) {
             this.releaseJumpControl();
+            this.jumpAirTicks = 0;
             return;
         }
         if (this.roofSupportPos != null && !BlockPlacementUtil.canReplace(this.roofSupportPos, ItemStack.EMPTY)) {
@@ -512,6 +549,29 @@ public class BlockIn extends Module {
                 this.releaseJumpControl();
             }
         }
+        if (this.isJumpSupportAirborne()) {
+            this.jumpAirTicks++;
+        } else {
+            this.jumpAirTicks = 0;
+        }
+    }
+
+    private boolean shouldDeferJumpSupportPlacement() {
+        if (this.roofPhase != RoofPhase.JUMP_PILLAR_SUPPORT || this.roofSupportPos == null) {
+            return false;
+        }
+        if (this.placer.getCurrentTarget() == null
+                || !this.roofSupportPos.equals(this.placer.getCurrentTarget().placedBlockPos())) {
+            return false;
+        }
+        return this.jumpAirTicks <= 0 || !this.isJumpSupportAirborne();
+    }
+
+    private boolean isJumpSupportAirborne() {
+        return mc.player != null
+                && this.startPos != null
+                && !mc.player.onGround()
+                && mc.player.getY() > this.startPos.getY() + JUMP_SUPPORT_MIN_Y_OFFSET;
     }
 
     private void handlePostPlaceRoofState() {
@@ -532,6 +592,7 @@ public class BlockIn extends Module {
         this.releaseJumpControl();
         this.roofPhase = RoofPhase.WAIT_LANDING;
         this.waitingLanding = true;
+        this.jumpAirTicks = 0;
         this.roofDebugReason = reason;
     }
 
@@ -544,6 +605,9 @@ public class BlockIn extends Module {
         this.roofSupportMode = mode;
         this.roofSupportPos = supportPos == null ? null : supportPos.immutable();
         this.waitingLanding = false;
+        if (mode != RoofSupportMode.JUMP_PILLAR) {
+            this.jumpAirTicks = 0;
+        }
         this.roofDebugReason = reason;
     }
 
@@ -554,6 +618,7 @@ public class BlockIn extends Module {
         this.waitingLanding = false;
         this.roofDebugReason = reason;
         this.jumpTicksRemaining = 0;
+        this.jumpAirTicks = 0;
         this.releaseJumpControl();
     }
 
@@ -563,6 +628,7 @@ public class BlockIn extends Module {
         this.roofPos = null;
         this.roofSupportPos = null;
         this.jumpTicksRemaining = 0;
+        this.jumpAirTicks = 0;
         this.moduleJumpDown = false;
         this.waitingLanding = false;
         this.roofDebugReason = "idle";
@@ -638,6 +704,7 @@ public class BlockIn extends Module {
                 + " roofPos=" + this.formatBlockPos(this.roofPos)
                 + " supportPos=" + this.formatBlockPos(this.roofSupportPos)
                 + " jumpTicks=" + this.jumpTicksRemaining
+                + " jumpAirTicks=" + this.jumpAirTicks
                 + " waitingLanding=" + this.waitingLanding
                 + " roofReason=" + this.roofDebugReason
                 + " " + this.placer.getDebugSummary();
