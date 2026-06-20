@@ -11,7 +11,9 @@ The project is currently built around three cooperating layers:
 
 - a Forge-side Java client module;
 - a Java Agent / ASM patch layer for runtime client-side rendering hooks;
-- a Windows native Qt6 loader and JNI bootstrap path for local development and packaged runtime experiments.
+- a Windows native loader with a local **HTML / CSS / JavaScript WebUI** rendered through Microsoft Edge WebView2.
+
+The native loader still uses a small Qt Widgets shell for the frameless host window and native event loop, but the launcher interface itself lives in `native/loader/webui` and communicates with C++ through WebView2 web messages.
 
 The intended direction of this fork is HUD rendering, UI infrastructure, input visualization, client-side quality-of-life features, and rendering backend work. It is **not** intended to provide unfair gameplay automation, server-side rule bypasses, or hostile behavior against other players.
 
@@ -21,17 +23,39 @@ The intended direction of this fork is HUD rendering, UI infrastructure, input v
 
 ```text
                             ┌────────────────────────┐
-                            │   MizuluneLoader.exe   │  (Qt6 UI / process selector)
+                            │   MizuluneLoader.exe   │  (native WebUI host / process selector)
                             └───────────┬────────────┘
                                         │
                                         ▼
+                    ┌───────────────────────────────────────┐
+                    │ HTML / CSS / JS WebUI                  │
+                    │ native/loader/webui via WebView2       │
+                    └───────────────────┬───────────────────┘
+                                        │ WebView2 messages
+                                        ▼
+  ┌──────────────────────────────────────────────────────────────────────────┐
+  │ Native Loader Backend                                                    │
+  │                                                                          │
+  │   ┌──────────────────────┐              ┌───────────────────────────┐    │
+  │   │ Minecraft Process    │◄─────────────┤ Process scanner / updater │    │
+  │   │ selector             │              │ profile store / injector  │    │
+  │   └──────────────────────┘              └─────────────┬─────────────┘    │
+  │                                                       │                  │
+  │                                                       ▼                  │
+  │                                         ┌───────────────────────────┐    │
+  │                                         │      Mizulune DLL         │    │
+  │                                         │   JNI / JVMTI bootstrap   │    │
+  │                                         └─────────────┬─────────────┘    │
+  └───────────────────────────────────────────────────────┼──────────────────┘
+                                                          │
+                                                          ▼
   ┌──────────────────────────────────────────────────────────────────────────┐
   │ Target Process: Minecraft.exe (JVM)                                      │
   │                                                                          │
-  │   ┌──────────────────────┐              ┌───────────────────────────┐    │
-  │   │    Mizulune DLL      ├─────────────►│    GameLoaderBridge       │    │
-  │   │  (JNI / JVMTI path)  │              │ (Injected class bridge)   │    │
-  │   └──────────────────────┘              └─────────────┬─────────────┘    │
+  │                                         ┌───────────────────────────┐    │
+  │                                         │    GameLoaderBridge       │    │
+  │                                         │ (Injected class bridge)   │    │
+  │                                         └─────────────┬─────────────┘    │
   │                                                       │                  │
   │                                                       ▼                  │
   │                                         ┌───────────────────────────┐    │
@@ -70,12 +94,18 @@ Use the dedicated Gradle task:
 ### Windows Native Loader
 
 - Source root: [`native/`](./native)
-- Toolchain: C++17, CMake, MSVC, vcpkg, Qt6 Widgets / WebUI assets
+- WebUI root: [`native/loader/webui`](./native/loader/webui)
+- Native shell: Qt Widgets frameless host window + Microsoft Edge WebView2 controller
+- UI stack: local `index.html`, `styles.css`, `app.js`, and packaged WebUI resources
+- Toolchain: C++17, CMake, MSVC, vcpkg, Qt6 Widgets, WebView2 SDK
+- Runtime requirement: Microsoft Edge WebView2 Runtime
 - Runtime profile directory: `%USERPROFILE%\.mizulune\`
 - Profile config: `loader-profile.properties`
 - Local update/cache directory: `updates\`
 
-The native path stages the Java jar, builds the DLL/loader projects with CMake, and packages the GUI loader into `build/dist`.
+The loader opens the WebUI, exchanges events through WebView2 JSON messages, scans running Minecraft JVM windows, manages profile/update state, and starts the local injection path when the user selects a target instance.
+
+The native build stages the Java jar, embeds the DLL into the loader executable, packages WebUI assets, and writes the distributable loader into `build/dist`.
 
 ---
 
@@ -99,6 +129,8 @@ This is an engineering isolation mechanism, not a security guarantee. Because re
 - **Java**: JDK 17
 - **Minecraft / Forge**: Minecraft `1.20.1`, Forge `47.4.20`
 - **Native toolchain**: CMake, MSVC from Visual Studio 2022 or newer, and `vcpkg`
+- **Native dependencies**: Qt6 Widgets and Microsoft Edge WebView2 SDK through vcpkg
+- **Runtime dependency**: Microsoft Edge WebView2 Runtime installed on Windows
 - **vcpkg discovery**: `VCPKG_ROOT`, `C:/vcpkg`, `D:/vcpkg`, or `%USERPROFILE%/vcpkg`
 
 ### 1. Build the Java Mod Jar
@@ -115,13 +147,13 @@ This is an engineering isolation mechanism, not a security guarantee. Because re
 
 Always use `runClient0` for the agent-backed development client. The stock Forge run task does not provide the same startup path.
 
-### 3. Build the Native Loader
+### 3. Build the Native WebUI Loader
 
 ```powershell
 .\gradlew.bat dll
 ```
 
-This task stages the obfuscated Java jar, runs CMake, resolves native dependencies through vcpkg, compiles the DLL/loader projects, and packages the loader into:
+This task stages the obfuscated Java jar, runs CMake, resolves native dependencies through vcpkg, compiles the DLL/loader projects, embeds the DLL, packages the WebUI assets, and writes the loader into:
 
 ```text
 build/dist/MizuluneLoader.exe
@@ -131,6 +163,7 @@ build/dist/MizuluneLoader.exe
 
 ## ⚠️ Developer Notes
 
+- The launcher UI is WebUI-first. Edit `native/loader/webui/index.html`, `styles.css`, and `app.js` for interface work; edit the C++ loader only for native windowing, WebView2 bridge, process scanning, update, profile, or injection behavior.
 - Some internal names are still inherited from OpenZen. In particular, do not rename `shit.zen`, `asm.patchify`, `ZenClient`, `DllBootstrap`, `GameLoaderBridge`, or `PatchAgent` unless the build-time remapper, Java Agent manifest, and native bindings are updated together.
 - `native/dll/src/generated_names.h` is generated during Gradle/native build tasks. Do not edit it by hand.
 - Skiko Windows x64 runtime files are extracted for development runs and passed through `skiko.library.path`.
