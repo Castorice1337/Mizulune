@@ -6,6 +6,7 @@ import java.security.SecureRandom;
 import java.util.Random;
 import lombok.Generated;
 import shit.zen.ClientBase;
+import shit.zen.utils.render.Argb;
 
 public final class MathUtil
 extends ClientBase {
@@ -80,20 +81,7 @@ extends ClientBase {
     }
 
     public static int lerpColor(int colorA, int colorB, float progress) {
-        progress = Math.max(0.0f, Math.min(1.0f, progress));
-        int alphaA = colorA >> 24 & 0xFF;
-        int redA = colorA >> 16 & 0xFF;
-        int greenA = colorA >> 8 & 0xFF;
-        int blueA = colorA & 0xFF;
-        int alphaB = colorB >> 24 & 0xFF;
-        int redB = colorB >> 16 & 0xFF;
-        int greenB = colorB >> 8 & 0xFF;
-        int blueB = colorB & 0xFF;
-        int alpha = (int)((float)alphaA * (1.0f - progress) + (float)alphaB * progress);
-        int red = (int)((float)redA * (1.0f - progress) + (float)redB * progress);
-        int green = (int)((float)greenA * (1.0f - progress) + (float)greenB * progress);
-        int blue = (int)((float)blueA * (1.0f - progress) + (float)blueB * progress);
-        return alpha << 24 | red << 16 | green << 8 | blue;
+        return Argb.interpolate(colorA, colorB, progress);
     }
 
     @Generated

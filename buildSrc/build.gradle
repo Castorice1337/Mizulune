@@ -1,0 +1,20 @@
+plugins {
+    id 'groovy-gradle-plugin'
+}
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    implementation 'org.ow2.asm:asm-commons:9.6'
+}
+
+gradlePlugin {
+    plugins {
+        mizuluneObfuscation {
+            id = 'mizulune-obfuscation'
+            implementationClass = 'shit.zen.build.MizuluneObfuscationPlugin'
+        }
+    }
+}

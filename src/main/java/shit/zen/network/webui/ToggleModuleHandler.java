@@ -7,6 +7,8 @@ import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.Map;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import shit.zen.ZenClient;
 import shit.zen.exception.ModuleNotFoundException;
 import shit.zen.modules.Module;
@@ -14,6 +16,7 @@ import shit.zen.modules.impl.world.WebUI;
 import shit.zen.utils.render.TextureUtil;
 
 public class ToggleModuleHandler extends AbstractHttpHandler {
+    private static final Logger LOGGER = LogManager.getLogger(ToggleModuleHandler.class);
 
     @Override
     public int handleRequest(InputStream in, OutputStream out, HttpExchange exchange) throws Throwable {
@@ -38,10 +41,10 @@ public class ToggleModuleHandler extends AbstractHttpHandler {
                     success = true;
                 }
             } catch (Throwable throwable) {
-                throwable.printStackTrace();
+                LOGGER.warn("Failed to toggle module from WebUI", throwable);
                 state = false;
                 success = false;
-                reason = throwable.toString();
+                reason = "internal error";
             }
         } else {
             state = false;

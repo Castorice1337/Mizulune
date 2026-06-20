@@ -5,7 +5,7 @@ import lombok.Setter;
 import shit.zen.utils.animation.SmoothAnimationTimer;
 import shit.zen.utils.math.Easing;
 import shit.zen.utils.math.Easings;
-import shit.zen.utils.render.ColorUtil;
+import shit.zen.utils.render.Argb;
 
 public class AnimatedColor {
     @Getter @Setter
@@ -28,15 +28,15 @@ public class AnimatedColor {
     }
 
     public void animateTo(int targetColor, float speed, Easing easing) {
-        this.rTimer.animate(ColorUtil.getRed(targetColor), 0.2 / (double)speed, easing);
-        this.gTimer.animate(ColorUtil.getGreen(targetColor), 0.2 / (double)speed, easing);
-        this.bTimer.animate(ColorUtil.getBlue(targetColor), 0.2 / (double)speed, easing);
-        this.aTimer.animate(ColorUtil.getAlpha(targetColor), 0.2 / (double)speed, easing);
+        this.rTimer.animate(Argb.red(targetColor), 0.2 / (double)speed, easing);
+        this.gTimer.animate(Argb.green(targetColor), 0.2 / (double)speed, easing);
+        this.bTimer.animate(Argb.blue(targetColor), 0.2 / (double)speed, easing);
+        this.aTimer.animate(Argb.alpha(targetColor), 0.2 / (double)speed, easing);
         this.rTimer.tick();
         this.gTimer.tick();
         this.bTimer.tick();
         this.aTimer.tick();
-        this.color = ColorUtil.fromARGB(this.rTimer.getValueI(), this.gTimer.getValueI(), this.bTimer.getValueI(), this.aTimer.getValueI());
+        this.color = Argb.fromRgbaComponents(this.rTimer.getValueI(), this.gTimer.getValueI(), this.bTimer.getValueI(), this.aTimer.getValueI());
     }
 
     }

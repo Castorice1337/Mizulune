@@ -1,8 +1,6 @@
 package shit.zen.render;
 
 import java.awt.Color;
-import java.util.HashMap;
-import java.util.Map;
 import net.minecraft.ChatFormatting;
 import net.minecraft.client.player.AbstractClientPlayer;
 import net.minecraft.client.renderer.texture.AbstractTexture;
@@ -10,11 +8,10 @@ import net.minecraft.resources.ResourceLocation;
 import org.joml.Matrix4f;
 import org.lwjgl.opengl.GL11;
 import shit.zen.ClientBase;
-import shit.zen.utils.render.ColorUtil;
+import shit.zen.utils.render.Argb;
 
+@Deprecated(forRemoval = false)
 public final class GlHelper {
-    private static final Map<FontRenderer, Map<String, Float>> stringWidthCache = new HashMap<>();
-
     public static DrawContext getCanvas() {
         DrawContext drawContext = Renderer.getCanvas();
         if (drawContext == null) {
@@ -86,7 +83,7 @@ public final class GlHelper {
             }
         }
         if (player.hurtTime > 0) {
-            int hurtColor = ColorUtil.withAlphaColor(new Color(255, 0, 0, player.hurtTime * 18), alpha).getRGB();
+            int hurtColor = Argb.scaleAlpha(new Color(255, 0, 0, player.hurtTime * 18).getRGB(), alpha);
             Paint paint = new Paint().setColor(hurtColor);
             drawContext.drawRoundedRect(RoundedRectangle.ofXYWHR(x, y, width, height, radius), paint);
         }
@@ -107,7 +104,7 @@ public final class GlHelper {
             String part = parts[i];
             if (i > 0 && !part.isEmpty() && (chatFormatting = ChatFormatting.getByCode(code = part.charAt(0))) != null) {
                 if (!keepColor && chatFormatting.getColor() != null) {
-                    color = ColorUtil.withAlpha(chatFormatting.getColor(), (float)(color >> 24 & 0xFF) / 255.0f);
+                    color = Argb.withAlpha(chatFormatting.getColor(), (float)(color >> 24 & 0xFF) / 255.0f);
                 }
                 part = part.substring(1);
             }
@@ -119,7 +116,9 @@ public final class GlHelper {
 
     public static float drawTextWithShadow(String text, float x, float y, FontRenderer fontRenderer, Paint paint) {
         int color = paint.getColor();
-        GlHelper.drawTextFormatted(text, x + 0.5f, y + 0.5f, fontRenderer, paint.setColor(ColorUtil.fromARGB(0, 0, 0, (int)((float)ColorUtil.getAlpha(paint.getColor()) * 0.65f * 255.0f))), true);
+        int shadowAlpha = Math.round((float)Argb.alpha(color) * 0.65f);
+        GlHelper.drawTextFormatted(text, x + 0.5f, y + 0.5f, fontRenderer,
+                paint.setColor(Argb.fromArgbComponents(shadowAlpha, 0, 0, 0)), true);
         paint.setColor(color);
         return GlHelper.drawTextFormatted(text, x, y, fontRenderer, paint, false);
     }
@@ -159,14 +158,7 @@ public final class GlHelper {
     }
 
     public static float getStringWidth(String text, FontRenderer fontRenderer) {
-        if (text == null || text.isEmpty()) {
-            return 0.0f;
-        }
-        DrawContext drawContext = Renderer.getCanvas();
-        if (drawContext != null && drawContext.getBackend() != null && drawContext.getBackend().handles2D()) {
-            return drawContext.getBackend().measureTextWidth(text, fontRenderer);
-        }
-        return stringWidthCache.computeIfAbsent(fontRenderer, key -> new HashMap<>()).computeIfAbsent(text, key -> key != null ? fontRenderer.getWidth(key.replaceAll("§.", "")) : 0.0f);
+        return TextMetricsCache.getStringWidth(text, fontRenderer);
     }
 
     public static void drawRoundedRect(float x, float y, float width, float height, float radius, Paint paint) {
@@ -210,9 +202,5 @@ public final class GlHelper {
         paint.setStrokeWidth(strokeWidth);
         paint.setStrokeCap(Paint.StrokeCap.STROKE);
         GlHelper.getCanvas().drawLine(x1, y1, x2, y2, paint);
-    }
-
-    static {
-        new HashMap<>();
     }
 }

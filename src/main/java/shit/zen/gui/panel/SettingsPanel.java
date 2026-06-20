@@ -18,6 +18,7 @@ import shit.zen.render.RoundedRectangle;
 import shit.zen.render.StencilHelper;
 import shit.zen.render.TextGlow;
 import shit.zen.utils.math.LerpUtil;
+import shit.zen.utils.render.Argb;
 import shit.zen.utils.render.RenderUtil;
 import shit.zen.value.Value;
 import shit.zen.value.ValueGroup;
@@ -259,7 +260,7 @@ extends ClientBase {
         int unit = (int)(12.0f * scale);
         int toggleWidth = unit * 2;
         int toggleHeight = unit;
-        int trackColor = this.lerpColor(TOGGLE_OFF_COLOR, TOGGLE_ON_COLOR, enabledFactor);
+        int trackColor = Argb.interpolate(TOGGLE_OFF_COLOR, TOGGLE_ON_COLOR, enabledFactor);
         if (hoverFactor > 0.0f) {
             float brightness = 1.0f + 0.3f * hoverFactor;
             trackColor = this.brightenColor(trackColor, brightness);
@@ -491,23 +492,6 @@ extends ClientBase {
 
     public void setCurrentModule(Module module) {
         this.currentModule = module;
-    }
-
-    private int lerpColor(int fromColor, int toColor, float t) {
-        float inv = 1.0f - t;
-        int aFrom = fromColor >> 24 & 0xFF;
-        int rFrom = fromColor >> 16 & 0xFF;
-        int gFrom = fromColor >> 8 & 0xFF;
-        int bFrom = fromColor & 0xFF;
-        int aTo = toColor >> 24 & 0xFF;
-        int rTo = toColor >> 16 & 0xFF;
-        int gTo = toColor >> 8 & 0xFF;
-        int bTo = toColor & 0xFF;
-        int a = (int)((float)aFrom * inv + (float)aTo * t);
-        int r = (int)((float)rFrom * inv + (float)rTo * t);
-        int g = (int)((float)gFrom * inv + (float)gTo * t);
-        int b = (int)((float)bFrom * inv + (float)bTo * t);
-        return a << 24 | r << 16 | g << 8 | b;
     }
 
     private void rescaleScroll(float scale) {

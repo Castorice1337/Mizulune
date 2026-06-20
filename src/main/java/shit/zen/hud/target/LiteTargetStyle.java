@@ -17,6 +17,7 @@ import shit.zen.render.Renderer;
 import shit.zen.render.RoundedRectangle;
 import shit.zen.utils.animation.SmoothAnimationTimer;
 import shit.zen.utils.math.Easings;
+import shit.zen.utils.render.Argb;
 import shit.zen.utils.render.RenderUtil;
 
 public class LiteTargetStyle extends TargetStyle {
@@ -155,15 +156,15 @@ public class LiteTargetStyle extends TargetStyle {
 
     private void drawBackground(DrawContext drawContext, RoundedRectangle bounds, float alpha, boolean liquidGlass) {
         drawContext.drawBlurredRoundedRect(bounds, 0.0f, 1.0f, liquidGlass ? 18.0f : 7.0f, liquidGlass ? 1.0f : 0.4f,
-                this.withAlpha(liquidGlass ? 0x30000000 : 0x42000000, alpha));
+                Argb.scaleAlpha(liquidGlass ? 0x30000000 : 0x42000000, alpha));
         try (Paint paint = new Paint()) {
             if (liquidGlass) {
                 drawContext.drawLiquidGlassPanel(bounds, this.glassStyle(alpha));
             } else {
-                paint.setColor(this.withAlpha(0x8A24262B, alpha));
+                paint.setColor(Argb.scaleAlpha(0x8A24262B, alpha));
                 drawContext.drawRoundedRect(bounds, paint);
             }
-            paint.setColor(this.withAlpha(liquidGlass ? 0x55FFFFFF : 0x66000000, alpha));
+            paint.setColor(Argb.scaleAlpha(liquidGlass ? 0x55FFFFFF : 0x66000000, alpha));
             paint.setStrokeCap(Paint.StrokeCap.STROKE);
             paint.setStrokeWidth(0.8f);
             drawContext.save();
@@ -185,7 +186,7 @@ public class LiteTargetStyle extends TargetStyle {
                 .blurRadius(LiquidGlassSettings.getBlurRadius())
                 .blurDownscale(LiquidGlassSettings.getBlurDownscale())
                 .opacity(LiquidGlassSettings.getOpacity() * Mth.clamp(alpha, 0.0f, 1.0f))
-                .tint(this.withAlpha(0x66D9F2FF, alpha), 0.22f)
+                .tint(Argb.scaleAlpha(0x66D9F2FF, alpha), 0.22f)
                 .chromaStrength(0.012f)
                 .darkness(Math.max(0.06f, LiquidGlassSettings.getDarkness()) * Mth.clamp(alpha, 0.0f, 1.0f))
                 .build();
@@ -204,14 +205,14 @@ public class LiteTargetStyle extends TargetStyle {
             GlHelper.drawPlayerHead(player, headX, headY, headSize, headSize, alpha);
         } else {
             try (Paint paint = new Paint()) {
-                paint.setColor(this.withAlpha(0xFF101114, alpha));
+                paint.setColor(Argb.scaleAlpha(0xFF101114, alpha));
                 drawContext.drawRectXYWH(headX, headY, headSize, headSize, paint);
             }
         }
         float flash = this.hurtFlashAnim.getValueF();
         if (flash > 0.01f) {
             try (Paint paint = new Paint()) {
-                paint.setColor(this.withAlpha(0xFFFF3030, alpha * flash * 0.62f));
+                paint.setColor(Argb.scaleAlpha(0xFFFF3030, alpha * flash * 0.62f));
                 drawContext.drawRectXYWH(headX, headY, headSize, headSize, paint);
             }
         }
@@ -220,8 +221,8 @@ public class LiteTargetStyle extends TargetStyle {
         float textWidth = width - (PADDING + AVATAR_SIZE + CONTENT_GAP) - PADDING;
         String name = this.displayName(target);
         String hpText = this.healthText(target);
-        GlHelper.drawTextWithShadow(name, textX, y + 6.0f, this.nameFont, this.withAlpha(0xFFFFFFFF, alpha));
-        GlHelper.drawTextWithShadow(hpText, textX, y + 24.0f, this.hpFont, this.withAlpha(0xE8F0F0F0, alpha));
+        GlHelper.drawTextWithShadow(name, textX, y + 6.0f, this.nameFont, Argb.scaleAlpha(0xFFFFFFFF, alpha));
+        GlHelper.drawTextWithShadow(hpText, textX, y + 24.0f, this.hpFont, Argb.scaleAlpha(0xE8F0F0F0, alpha));
 
         float barX = x + PADDING;
         float barY = y + HEIGHT - BAR_BOTTOM_GAP - BAR_HEIGHT;
@@ -229,10 +230,10 @@ public class LiteTargetStyle extends TargetStyle {
         float contentFactor = this.contentAnim.getValueF();
         try (Paint paint = new Paint()) {
             float lagWidth = Mth.clamp(healthLagAnim.getValueF(), 0.0f, 1.0f) * barWidth * contentFactor;
-            paint.setColor(this.withAlpha(0x52FFFFFF, alpha));
+            paint.setColor(Argb.scaleAlpha(0x52FFFFFF, alpha));
             drawContext.drawRectXYWH(barX, barY, lagWidth, BAR_HEIGHT, paint);
             float fillWidth = Mth.clamp(healthAnim.getValueF(), 0.0f, 1.0f) * barWidth * contentFactor;
-            paint.setColor(this.withAlpha(0xFFFFFFFF, alpha));
+            paint.setColor(Argb.scaleAlpha(0xFFFFFFFF, alpha));
             drawContext.drawRectXYWH(barX, barY, fillWidth, BAR_HEIGHT, paint);
         }
     }
@@ -253,10 +254,4 @@ public class LiteTargetStyle extends TargetStyle {
         return String.format(Locale.US, "%.1f", value);
     }
 
-    private int withAlpha(int color, float alpha) {
-        float clamped = Mth.clamp(alpha, 0.0f, 1.0f);
-        int baseAlpha = color >>> 24;
-        int nextAlpha = Math.round(baseAlpha * clamped);
-        return nextAlpha << 24 | color & 0x00FFFFFF;
-    }
 }

@@ -172,7 +172,7 @@ class GlyphPage {
                 RenderSystem.recordRenderCall(() -> ClientBase.mc.getTextureManager().register(resourceLocation, dynamicTexture));
             }
         } catch (Throwable throwable) {
-            throwable.printStackTrace();
+            ClientBase.logger.error("Failed to upload glyph atlas {}", resourceLocation, throwable);
         }
     }
 }

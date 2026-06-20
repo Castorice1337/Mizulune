@@ -18,8 +18,9 @@ import shit.zen.utils.math.Easings;
 
 public class NewClickGui
 extends Screen {
-    private static final List<CategoryPanel> categoryPanels;
-    public static CategoryPanel focusedPanel;
+    public static final NewClickGui INSTANCE = new NewClickGui();
+    private final List<CategoryPanel> categoryPanels = new ArrayList<>();
+    private CategoryPanel focusedPanel;
     @Getter
     private boolean closing = false;
     @Getter
@@ -27,19 +28,19 @@ extends Screen {
 
     public NewClickGui() {
         super(Component.literal("ClickGui"));
-        // System.out.println("12");
+        for (Category category : Category.values()) {
+            this.categoryPanels.add(new CategoryPanel(category));
+        }
     }
 
     protected void init() {
-        // System.out.println("13");
-        focusedPanel = categoryPanels.get(0);
+        this.focusedPanel = this.categoryPanels.isEmpty() ? null : this.categoryPanels.get(0);
         float panelX = (float)this.width / 2.0f - 380.0f;
-        for (CategoryPanel categoryPanel : categoryPanels) {
+        for (CategoryPanel categoryPanel : this.categoryPanels) {
             categoryPanel.setX(panelX);
             categoryPanel.setY(36.0f);
             panelX += 128.0f;
         }
-        // System.out.println("14");
     }
 
     public void render(@NonNull GuiGraphics guiGraphics, int mouseX, int mouseY, float partialTicks) {
@@ -48,13 +49,13 @@ extends Screen {
         float closeProgress = this.closeAnim.getValueF();
         if (Mth.equal(closeProgress, 0.0f) && this.closing) {
             this.closing = false;
-            ConfigManager.saveAllIfReady();
+            ConfigManager.requestSaveIfReady();
             super.onClose();
-            categoryPanels.forEach(CategoryPanel::reset);
+            this.categoryPanels.forEach(CategoryPanel::reset);
             return;
         }
         Renderer.render(guiGraphics, drawContext -> {
-            for (CategoryPanel categoryPanel : categoryPanels) {
+            for (CategoryPanel categoryPanel : this.categoryPanels) {
                 categoryPanel.render(this, guiGraphics, guiGraphics.pose(), mouseX, mouseY, closeProgress, partialTicks);
             }
         });
@@ -65,9 +66,9 @@ extends Screen {
     }
 
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
-        for (CategoryPanel categoryPanel : categoryPanels) {
+        for (CategoryPanel categoryPanel : this.categoryPanels) {
             if (!categoryPanel.mouseClicked(mouseX, mouseY, button)) continue;
-            focusedPanel = categoryPanel;
+            this.focusedPanel = categoryPanel;
             return true;
         }
         ValueTreeElementRenderer.getInstance().blurText();
@@ -89,7 +90,7 @@ extends Screen {
     }
 
     public boolean mouseReleased(double mouseX, double mouseY, int button) {
-        for (CategoryPanel categoryPanel : categoryPanels) {
+        for (CategoryPanel categoryPanel : this.categoryPanels) {
             categoryPanel.mouseReleased(mouseX, mouseY, button);
         }
         return false;
@@ -100,17 +101,18 @@ extends Screen {
     }
 
     public boolean mouseScrolled(double mouseX, double mouseY, double scrollDelta) {
-        for (CategoryPanel categoryPanel : categoryPanels) {
+        for (CategoryPanel categoryPanel : this.categoryPanels) {
             if (!categoryPanel.mouseScrolled(mouseX, mouseY, scrollDelta)) continue;
             return true;
         }
         return false;
     }
 
-    static {
-        categoryPanels = new ArrayList<>();
-        for (Category category : Category.values()) {
-            categoryPanels.add(new CategoryPanel(category));
-        }
+    public CategoryPanel getFocusedPanel() {
+        return this.focusedPanel;
+    }
+
+    public void setFocusedPanel(CategoryPanel focusedPanel) {
+        this.focusedPanel = focusedPanel;
     }
 }

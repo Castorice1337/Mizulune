@@ -19,7 +19,6 @@ import shit.zen.render.backend.SkikoBackend;
 public class Renderer
 extends ClientBase {
     private static float guiScale = 1.0f;
-    private static boolean verified = false;
     private static DrawContext currentCanvas;
     private static BackendType configuredBackend = BackendType.SKIKO;
     private static RenderBackend backend = Renderer.createBackend(configuredBackend);
@@ -67,7 +66,7 @@ extends ClientBase {
     }
 
     public static void setBackend(BackendType type) {
-        BackendType nextBackend = BackendType.SKIKO;
+        BackendType nextBackend = type == null ? BackendType.SKIKO : type;
         if (configuredBackend == nextBackend && backend != null) {
             return;
         }
@@ -79,10 +78,6 @@ extends ClientBase {
         return guiScale;
     }
 
-    public static void verify() {
-        verified = true;
-    }
-
     public static void updateGuiScale() {
         Renderer.setGuiScale((float)mc.getWindow().getGuiScale());
     }
@@ -90,7 +85,6 @@ extends ClientBase {
     public static void setGuiScale(float scale) {
         RenderSystem.assertOnRenderThread();
         guiScale = scale;
-        Renderer.verify();
     }
 
     public static void resetPixelStore() {
@@ -152,12 +146,6 @@ extends ClientBase {
     }
 
     private static void renderInternal(GuiGraphics guiGraphics, PoseStack poseStack, Consumer<DrawContext> consumer) {
-        if (!verified) {
-            Renderer.verify();
-            if (!verified) {
-                return;
-            }
-        }
         if (backend == null) {
             logger.error("Skiko render backend is unavailable; skipping 2D render pass");
             return;
