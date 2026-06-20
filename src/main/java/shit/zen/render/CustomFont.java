@@ -20,8 +20,12 @@ import java.util.List;
 import java.util.Random;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 import java.util.stream.IntStream;
 import lombok.Setter;
@@ -62,7 +66,14 @@ implements Closeable {
     }
 
     private static final Char2IntArrayMap MC_COLOR_CODES = new CustomFont.MinecraftColorMap();
-    private static final ExecutorService EXECUTOR = Executors.newCachedThreadPool();
+    private static final ExecutorService EXECUTOR = new ThreadPoolExecutor(
+            1,
+            2,
+            30L,
+            TimeUnit.SECONDS,
+            new LinkedBlockingQueue<>(64),
+            new FontThreadFactory(),
+            new ThreadPoolExecutor.DiscardOldestPolicy());
     private final Object2ObjectMap<ResourceLocation, ObjectList<CustomFont.GlyphEntry>> glyphPageMap = new Object2ObjectOpenHashMap();
     private final float fontSize;
     private final ObjectList<GlyphPage> glyphPages = new ObjectArrayList();
@@ -82,6 +93,17 @@ implements Closeable {
     @Setter
     private float letterSpacing = 0.0f;
     private FontMetricsImpl fontMetrics;
+
+    private static final class FontThreadFactory implements ThreadFactory {
+        private final AtomicInteger counter = new AtomicInteger();
+
+        @Override
+        public Thread newThread(Runnable runnable) {
+            Thread thread = new Thread(runnable, "Mizulune-Font-" + this.counter.getAndIncrement());
+            thread.setDaemon(true);
+            return thread;
+        }
+    }
 
     public CustomFont(Font font, float fontSize, int pageSize, int charsPerPage, @Nullable String preloadChars) {
         this(font, fontSize, pageSize, charsPerPage, preloadChars, null);

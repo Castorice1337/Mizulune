@@ -16,6 +16,7 @@ import shit.zen.gui.panel.ModuleListPanel;
 import shit.zen.gui.panel.ProfileWidget;
 import shit.zen.gui.panel.ScaleSwitchOverlay;
 import shit.zen.gui.panel.SettingsPanel;
+import shit.zen.manager.ConfigManager;
 import shit.zen.modules.Category;
 import shit.zen.modules.Module;
 import shit.zen.render.FontPresets;
@@ -113,7 +114,7 @@ extends Screen {
             if (this.openProgress <= 0.0f) {
                 this.currentScaleSwitchState = PanelClickGui.OpenState.CLOSED;
                 if (ZenClient.isReady()) {
-                    ZenClient.instance.getConfigManager().saveAll();
+                    ConfigManager.requestSaveIfReady();
                 }
                 this.minecraft.setScreen(null);
             }

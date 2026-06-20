@@ -17,7 +17,7 @@ import net.minecraft.client.renderer.ShaderInstance;
 import net.minecraft.client.renderer.texture.DynamicTexture;
 import org.joml.Matrix4f;
 import shit.zen.ClientBase;
-import shit.zen.utils.render.ColorUtil;
+import shit.zen.utils.render.Argb;
 
 public final class RenderHelper {
     public static void blitRenderTarget(RenderTarget renderTarget, PoseStack poseStack, int width, int height) {
@@ -92,11 +92,11 @@ public final class RenderHelper {
     }
 
     public static void setShaderColorWithAlpha(int color, int alpha) {
-        RenderSystem.setShaderColor((float)ColorUtil.getRed(color) / 255.0f, (float)ColorUtil.getGreen(color) / 255.0f, (float)ColorUtil.getBlue(color) / 255.0f, (float)alpha / 255.0f);
+        RenderSystem.setShaderColor((float)Argb.red(color) / 255.0f, (float)Argb.green(color) / 255.0f, (float)Argb.blue(color) / 255.0f, (float)alpha / 255.0f);
     }
 
     public static void setShaderColor(int color) {
-        RenderSystem.setShaderColor((float)ColorUtil.getRed(color) / 255.0f, (float)ColorUtil.getGreen(color) / 255.0f, (float)ColorUtil.getBlue(color) / 255.0f, (float)ColorUtil.getAlpha(color) / 255.0f);
+        RenderSystem.setShaderColor((float)Argb.red(color) / 255.0f, (float)Argb.green(color) / 255.0f, (float)Argb.blue(color) / 255.0f, (float)Argb.alpha(color) / 255.0f);
     }
 
     public static void withBlend(Runnable runnable) {
@@ -108,7 +108,7 @@ public final class RenderHelper {
     }
 
     public static void setShaderColorComponents(int color) {
-        RenderHelper.setShaderColorRGBA(ColorUtil.getRed(color), ColorUtil.getGreen(color), ColorUtil.getBlue(color), ColorUtil.getAlpha(color));
+        RenderHelper.setShaderColorRGBA(Argb.red(color), Argb.green(color), Argb.blue(color), Argb.alpha(color));
     }
 
     public static DynamicTexture uploadTexture(NativeImage nativeImage, BufferedImage bufferedImage) {

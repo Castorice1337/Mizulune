@@ -47,7 +47,7 @@ extends ClientBase {
             method.setAccessible(true);
             method.invoke(mc.gameMode);
         } catch (Exception exception) {
-            exception.printStackTrace();
+            logger.warn("Failed to sync carried item", exception);
             ChatUtil.print("Failed to set item!");
         }
     }

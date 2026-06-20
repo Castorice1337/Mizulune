@@ -16,7 +16,7 @@ import shit.zen.render.FontPresets;
 import shit.zen.render.FontRenderer;
 import shit.zen.render.GlHelper;
 import shit.zen.render.Paint;
-import shit.zen.utils.render.ColorUtil;
+import shit.zen.utils.render.Argb;
 
 public class TabListHud
 extends ClientBase
@@ -148,7 +148,7 @@ implements IHudElement {
                         displayName = displayName.substring(0, displayName.length() - 1);
                     }
                 }
-                drawContext.drawString(displayName, entryX + 8.0f + 4.0f + 0.5f, rowWidth + nameFont.getMetrics().ascent() / 2.0f + 11.0f + 0.5f, nameFont, paint.setColor(ColorUtil.fromARGB(0, 0, 0, (int)(alpha * 0.65f * 255.0f))));
+                drawContext.drawString(displayName, entryX + 8.0f + 4.0f + 0.5f, rowWidth + nameFont.getMetrics().ascent() / 2.0f + 11.0f + 0.5f, nameFont, paint.setColor(Argb.fromRgbaComponents(0, 0, 0, (int)(alpha * 0.65f * 255.0f))));
                 drawContext.drawString(displayName, entryX + 8.0f + 4.0f, rowWidth + nameFont.getMetrics().ascent() / 2.0f + 11.0f, nameFont, paint.setColor(-1));
                 paint.setColor(this.colorWithAlpha(Color.GRAY.getRGB(), alpha));
                 float pingX = columnCount > 1 ? entryX + 140.0f - pingWidth : entryX + maxRowWidth - pingWidth;

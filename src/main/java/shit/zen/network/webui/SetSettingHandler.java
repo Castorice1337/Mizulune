@@ -7,6 +7,8 @@ import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.Map;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import shit.zen.ZenClient;
 import shit.zen.exception.ModuleNotFoundException;
 import shit.zen.manager.ConfigManager;
@@ -17,6 +19,7 @@ import shit.zen.value.Value;
 import shit.zen.value.ValueJsonCodec;
 
 public class SetSettingHandler extends AbstractHttpHandler {
+    private static final Logger LOGGER = LogManager.getLogger(SetSettingHandler.class);
 
     @Override
     @SuppressWarnings({ "unchecked", "rawtypes" })
@@ -43,13 +46,13 @@ public class SetSettingHandler extends AbstractHttpHandler {
                         reason = value == null ? "setting not found" : "invalid value";
                     }
                     if (success) {
-                        ConfigManager.saveAllIfReady();
+                        ConfigManager.requestSaveIfReady();
                     }
                 }
             } catch (Throwable throwable) {
-                throwable.printStackTrace();
+                LOGGER.warn("Failed to set WebUI setting", throwable);
                 success = false;
-                reason = throwable.toString();
+                reason = "internal error";
             }
         } else {
             result = false;

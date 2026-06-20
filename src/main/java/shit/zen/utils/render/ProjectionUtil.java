@@ -62,7 +62,7 @@ extends ClientBase {
             method.setAccessible(true);
             fov = (Double)method.invoke(mc.gameRenderer, new Object[]{mc.getEntityRenderDispatcher().camera, partialTicks, true});
         } catch (Exception exception) {
-            exception.printStackTrace();
+            logger.debug("Failed to resolve current FOV, using fallback", exception);
         }
         return ProjectionUtil.projectInternal(relativePos, fov);
     }

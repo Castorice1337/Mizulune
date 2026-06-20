@@ -14,12 +14,12 @@ import shit.zen.network.webui.SetSettingHandler;
 import shit.zen.network.webui.SettingsHandler;
 import shit.zen.network.webui.StaticFileHandler;
 import shit.zen.network.webui.ToggleModuleHandler;
-import shit.zen.value.impl.BooleanValue;
-import shit.zen.value.impl.NumberValue;
+import shit.zen.network.webui.WebUiAccess;
 import shit.zen.utils.misc.ChatUtil;
 
 public class WebUI extends Module {
     private HttpServer httpServer;
+    private String token;
 
     public WebUI() {
         super("WebUI", Category.WORLD);
@@ -30,18 +30,18 @@ public class WebUI extends Module {
     public void onEnable() {
         try {
             this.httpServer = this.createHttpServer();
-            ChatUtil.print("WebUI started at http://127.0.0.1:8089");
+            String url = "http://127.0.0.1:8089/?token=" + this.token;
+            ChatUtil.print("WebUI started at " + url);
             try {
                 System.setProperty("java.awt.headless", "false");
                 if (Desktop.isDesktopSupported() && Desktop.getDesktop().isSupported(Desktop.Action.BROWSE)) {
-                    Desktop.getDesktop().browse(new URI("http://127.0.0.1:8089"));
+                    Desktop.getDesktop().browse(new URI(url));
                 }
             } catch (URISyntaxException | IOException ex) {
                 ChatUtil.print("Failed to open browser: " + ex.getMessage());
             }
         } catch (IOException ioException) {
             ChatUtil.print("Failed to start http server because " + ioException.getMessage());
-            ioException.printStackTrace();
             this.setEnabled(false);
         }
     }
@@ -51,12 +51,15 @@ public class WebUI extends Module {
         if (this.httpServer != null) {
             this.httpServer.stop(0);
             this.httpServer = null;
+            WebUiAccess.clearToken();
+            this.token = null;
             ChatUtil.print("WebUI stopped");
         }
     }
 
     private HttpServer createHttpServer() throws IOException {
-        HttpServer server = HttpServer.create(new InetSocketAddress(8089), 0);
+        this.token = WebUiAccess.issueToken();
+        HttpServer server = HttpServer.create(new InetSocketAddress("127.0.0.1", 8089), 0);
         server.createContext("/api/modulesList", new ModulesHandler());
         server.createContext("/api/categoriesList", new CategoriesHandler());
         server.createContext("/api/setStatus", new ToggleModuleHandler());

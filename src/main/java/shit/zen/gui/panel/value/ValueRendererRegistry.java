@@ -178,7 +178,7 @@ public final class ValueRendererRegistry {
             int toggleY = y + Math.round(7.0f * scale);
             if (button == 0 && inBounds(mouseX, mouseY, toggleX, toggleY, Math.round(20.0f * scale), Math.round(10.0f * scale))) {
                 toggleGroup.setEnabled(!toggleGroup.isEnabled());
-                ConfigManager.saveAllIfReady();
+                ConfigManager.requestSaveIfReady();
                 this.addToast(group.getDisplayName() + (toggleGroup.isEnabled() ? " On" : " Off"));
                 return true;
             }
@@ -188,7 +188,7 @@ public final class ValueRendererRegistry {
             int pillY = y + Math.round(5.0f * scale);
             if (button == 0 && inBounds(mouseX, mouseY, pillX, pillY, Math.round(90.0f * scale), Math.round(14.0f * scale))) {
                 this.cycleEnum(modeGroup.getActiveValue(), 1);
-                ConfigManager.saveAllIfReady();
+                ConfigManager.requestSaveIfReady();
                 return true;
             }
         }
@@ -212,17 +212,17 @@ public final class ValueRendererRegistry {
         switch (value.getType()) {
             case BOOLEAN -> {
                 value.setRawValue(!Boolean.TRUE.equals(value.getValue()));
-                ConfigManager.saveAllIfReady();
+                ConfigManager.requestSaveIfReady();
                 return true;
             }
             case INTEGER, DECIMAL, KEY_BIND -> {
                 this.bumpNumber((Value<Number>)value, button == 0 ? 1.0 : -1.0);
-                ConfigManager.saveAllIfReady();
+                ConfigManager.requestSaveIfReady();
                 return true;
             }
             case ENUM -> {
                 this.cycleEnum((Value<String>)value, button == 0 ? 1 : -1);
-                ConfigManager.saveAllIfReady();
+                ConfigManager.requestSaveIfReady();
                 return true;
             }
             case MULTI_ENUM -> {
@@ -238,7 +238,7 @@ public final class ValueRendererRegistry {
             }
             case INT_RANGE, DECIMAL_RANGE -> {
                 this.bumpRange((Value<NumericRange>)value, mouseX > x + width / 2, button == 0 ? 1.0 : -1.0);
-                ConfigManager.saveAllIfReady();
+                ConfigManager.requestSaveIfReady();
                 return true;
             }
             default -> {
@@ -293,7 +293,7 @@ public final class ValueRendererRegistry {
                     next.add(option);
                 }
                 value.setValue(next);
-                ConfigManager.saveAllIfReady();
+                ConfigManager.requestSaveIfReady();
                 return true;
             }
             y += rowHeight;

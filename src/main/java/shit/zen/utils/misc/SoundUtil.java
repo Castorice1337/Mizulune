@@ -13,10 +13,14 @@ import javax.sound.sampled.FloatControl;
 import javax.sound.sampled.LineUnavailableException;
 import javax.sound.sampled.UnsupportedAudioFileException;
 import javax.swing.JOptionPane;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import shit.zen.manager.ConfigManager;
 import shit.zen.utils.math.MathUtil;
 
 public final class SoundUtil {
+    private static final Logger LOGGER = LogManager.getLogger("Mizulune");
+
     public static void playSound(String title, String message) {
         JOptionPane.showMessageDialog(null, message, title, 0);
     }
@@ -37,7 +41,7 @@ public final class SoundUtil {
                 floatControl.setValue(gain);
                 clip.start();
             } catch (IOException | LineUnavailableException | UnsupportedAudioFileException ex) {
-                ex.printStackTrace();
+                LOGGER.warn("Failed to play sound {}", fileName, ex);
             }
         }, "Netty Client IO #" + MathUtil.randomInt(0, 100)).start();
     }

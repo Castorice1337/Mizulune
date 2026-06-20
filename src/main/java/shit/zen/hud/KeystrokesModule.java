@@ -14,6 +14,7 @@ import shit.zen.render.Paint;
 import shit.zen.render.RoundedRectangle;
 import shit.zen.utils.animation.SmoothAnimationTimer;
 import shit.zen.utils.math.Easings;
+import shit.zen.utils.render.Argb;
 import shit.zen.value.MizuColor;
 import shit.zen.value.Value;
 import shit.zen.value.ValueGroup;
@@ -208,7 +209,7 @@ public class KeystrokesModule extends HudElement {
         drawButtonBase(ctx, x, y, width, height, r, press, index);
 
         int mainColor = resolveTextColor(index, press);
-        int cpsColor = lerp(color(accentColor, DEFAULT_ACCENT).withAlpha(170).toArgb(),
+        int cpsColor = Argb.interpolate(color(accentColor, DEFAULT_ACCENT).withAlpha(170).toArgb(),
                 color(accentColor, DEFAULT_ACCENT).withAlpha(255).toArgb(), press);
 
         if (this.showCPS.getValue()) {
@@ -236,24 +237,21 @@ public class KeystrokesModule extends HudElement {
         MizuColor outlineCol = color(outlineColor, DEFAULT_OUTLINE);
         MizuColor accent = color(accentColor, DEFAULT_ACCENT);
 
-        int topColor = lerp(top.toArgb(), pressed.withAlpha(Math.max(top.alpha(), pressed.alpha())).toArgb(), press);
-        int bottomColor = lerp(bottom.toArgb(), pressed.withAlpha(Math.max(bottom.alpha(), pressed.alpha())).toArgb(), press);
-        int edgeColor = lerp(outlineCol.toArgb(), accent.toArgb(), press);
+        int topColor = Argb.interpolate(top.toArgb(), pressed.withAlpha(Math.max(top.alpha(), pressed.alpha())).toArgb(), press);
+        int bottomColor = Argb.interpolate(bottom.toArgb(), pressed.withAlpha(Math.max(bottom.alpha(), pressed.alpha())).toArgb(), press);
+        int edgeColor = Argb.interpolate(outlineCol.toArgb(), accent.toArgb(), press);
 
         RoundedRectangle rect = RoundedRectangle.ofXYWHR(x, y, width, height, r);
 
         if (this.glow.getValue()) {
             float glowAlpha = 0.35f + press * 0.65f;
-            int glowColor = multiplyAlpha(edgeColor, glowAlpha);
+            int glowColor = Argb.scaleAlpha(edgeColor, glowAlpha);
             ctx.drawBlurredRoundedRect(rect, 0.0f, 0.0f,
                     this.glowStrength.getValue().floatValue(), 1.25f, glowColor);
         }
 
         if (this.blur.getValue()) {
-            ctx.drawBlur(x, y, width, height, 7.0f, () -> {
-                fillPaint.setGradCoords(new Paint.GradientCoords(x, y, x, y + height, topColor, bottomColor));
-                ctx.drawRoundedRect(rect, fillPaint);
-            });
+            ctx.drawBackdropBlurredRoundedRect(rect, 10.0f, 0.65f, 0x00000000);
         }
 
         if (this.background.getValue()) {
@@ -269,7 +267,7 @@ public class KeystrokesModule extends HudElement {
         if (this.outline.getValue()) {
             outlinePaint.setGradCoords(null);
             outlinePaint.setStrokeWidth(1.25f + press * 0.65f);
-            outlinePaint.setColor(multiplyAlpha(edgeColor, 0.72f + press * 0.28f));
+            outlinePaint.setColor(Argb.scaleAlpha(edgeColor, 0.72f + press * 0.28f));
             ctx.drawRoundedRect(rect, outlinePaint);
         }
     }
@@ -277,8 +275,8 @@ public class KeystrokesModule extends HudElement {
     private void drawInnerHighlight(DrawContext ctx, float x, float y, float width, float height, float radius, int edgeColor, float press) {
         float inset = 2.0f;
         float lineHeight = 1.0f;
-        int topLine = multiplyAlpha(edgeColor, 0.34f + press * 0.26f);
-        int bottomLine = multiplyAlpha(edgeColor, 0.16f + press * 0.16f);
+        int topLine = Argb.scaleAlpha(edgeColor, 0.34f + press * 0.26f);
+        int bottomLine = Argb.scaleAlpha(edgeColor, 0.16f + press * 0.16f);
 
         detailPaint.setGradCoords(null);
         detailPaint.setColor(topLine);
@@ -310,14 +308,14 @@ public class KeystrokesModule extends HudElement {
         float startX = x + (width - matrixW) * 0.5f;
         float startY = y + height - 14.0f;
 
-        int dotColor = multiplyAlpha(color, 0.12f);
+        int dotColor = Argb.scaleAlpha(color, 0.12f);
 
         detailPaint.setGradCoords(null);
         detailPaint.setColor(dotColor);
 
         for (int row = 0; row < rows; row++) {
             float alphaFactor = 1.0f - row * 0.22f;
-            detailPaint.setColor(multiplyAlpha(dotColor, alphaFactor));
+            detailPaint.setColor(Argb.scaleAlpha(dotColor, alphaFactor));
 
             for (int col = 0; col < columns; col++) {
                 if (((col + row + index) % 5) == 0) {
@@ -382,33 +380,6 @@ public class KeystrokesModule extends HudElement {
 
     private MizuColor color(Value<MizuColor> value, MizuColor fallback) {
         return value != null && value.getValue() != null ? value.getValue() : fallback;
-    }
-
-    private int lerp(int a, int b, float progress) {
-        progress = Mth.clamp(progress, 0.0f, 1.0f);
-
-        int aa = a >>> 24;
-        int ar = a >> 16 & 0xFF;
-        int ag = a >> 8 & 0xFF;
-        int ab = a & 0xFF;
-
-        int ba = b >>> 24;
-        int br = b >> 16 & 0xFF;
-        int bg = b >> 8 & 0xFF;
-        int bb = b & 0xFF;
-
-        int ca = Math.round(aa + (ba - aa) * progress);
-        int cr = Math.round(ar + (br - ar) * progress);
-        int cg = Math.round(ag + (bg - ag) * progress);
-        int cb = Math.round(ab + (bb - ab) * progress);
-
-        return ca << 24 | cr << 16 | cg << 8 | cb;
-    }
-
-    private int multiplyAlpha(int color, float alphaMultiplier) {
-        int alpha = color >>> 24;
-        alpha = Math.round(alpha * Mth.clamp(alphaMultiplier, 0.0f, 1.0f));
-        return alpha << 24 | color & 0x00FFFFFF;
     }
 
     private static final class Layout {

@@ -262,7 +262,7 @@ extends AntiKBMode {
             try {
                 ((Packet)this.packetQueue.poll()).handle(mc.getConnection());
             } catch (Exception exception) {
-                exception.printStackTrace();
+                logger.debug("Failed to flush queued AntiKB packet", exception);
             }
         }
     }

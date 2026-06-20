@@ -50,10 +50,11 @@ import shit.zen.render.shader.ShaderFormats;
 import shit.zen.render.shader.ShaderProgram;
 import shit.zen.utils.animation.Timer;
 import shit.zen.utils.game.EntityUtil;
-import shit.zen.utils.render.ColorUtil;
+import shit.zen.utils.render.Argb;
 import shit.zen.utils.render.RenderHelper;
 import shit.zen.utils.render.RenderUtil.ShadowTexture;
 
+@Deprecated(forRemoval = false)
 public final class RenderUtil
 extends ClientBase {
 
@@ -277,8 +278,8 @@ extends ClientBase {
                 boolean rendered = drawContext.getBackend().drawBackdropBlurredRect(drawContext, x, y, width, height, radius, blurRadius, opacity, color);
                 if (!rendered) {
                     try (Paint paint = new Paint()) {
-                        int fallbackColor = color == 0 ? ColorUtil.fromARGB(24, 24, 24, 120) : color;
-                        paint.setColor(ColorUtil.withAlpha(fallbackColor, Math.max(0.0f, Math.min(1.0f, opacity))));
+                        int fallbackColor = color == 0 ? Argb.fromRgbaComponents(24, 24, 24, 120) : color;
+                        paint.setColor(Argb.withAlpha(fallbackColor, Math.max(0.0f, Math.min(1.0f, opacity))));
                         drawContext.drawRoundedRect(RoundedRectangle.ofXYWHR(x, y, width, height, radius), paint);
                     }
                 }
@@ -307,8 +308,8 @@ extends ClientBase {
                 textureTarget.resize(RenderUtil.mainRenderTarget.width, RenderUtil.mainRenderTarget.height, Minecraft.ON_OSX);
             }
             Matrix4f matrix4f = poseStack.last().pose();
-            int blendColor = color == 0 ? ColorUtil.fromARGB(255, 255, 255, 255) : color;
-            blendColor = ColorUtil.withAlpha(blendColor, opacity);
+            int blendColor = color == 0 ? Argb.fromRgbaComponents(255, 255, 255, 255) : color;
+            blendColor = Argb.withAlpha(blendColor, opacity);
             RenderSystem.enableBlend();
             RenderSystem.defaultBlendFunc();
             float screenArea = RenderUtil.mainRenderTarget.width * RenderUtil.mainRenderTarget.height;
@@ -551,9 +552,9 @@ extends ClientBase {
         bufferBuilder.begin(VertexFormat.Mode.TRIANGLE_STRIP, DefaultVertexFormat.POSITION_COLOR);
         int segments = 60;
         for (int i = 0; i <= segments; ++i) {
-            Color color = ColorUtil.getRainbowColor(10, i * 5);
+            Color color = new Color(Argb.rainbow(10, i * 5), true);
             int baseColor = color.getRGB();
-            outerColor = ColorUtil.withAlphaColor(color, 0.004f).getRGB();
+            outerColor = Argb.scaleAlpha(color.getRGB(), 0.004f);
             angle = (double)i / (double)segments * Math.PI * 2.0;
             offsetZ = Math.cos(angle) * entityWidth;
             offsetX = Math.sin(angle) * entityWidth;
@@ -572,8 +573,8 @@ extends ClientBase {
         bufferBuilder.begin(VertexFormat.Mode.LINE_STRIP, DefaultVertexFormat.POSITION_COLOR);
         RenderSystem.lineWidth(1.0f);
         for (int i = 0; i <= segments; ++i) {
-            Color color = ColorUtil.getRainbowColor(10, i * 5);
-            outerColor = ColorUtil.withAlphaColor(color, 0.004f).getRGB();
+            Color color = new Color(Argb.rainbow(10, i * 5), true);
+            outerColor = Argb.scaleAlpha(color.getRGB(), 0.004f);
             angle = (double)i / (double)segments * Math.PI * 2.0;
             offsetZ = Math.cos(angle) * entityWidth;
             offsetX = Math.sin(angle) * entityWidth;
@@ -732,7 +733,7 @@ extends ClientBase {
     public static void drawTexture(ResourceLocation resourceLocation, PoseStack poseStack, float x, float y, float width, float height, float alpha, int color) {
         if (resourceLocation != null && Renderer.canUseSkiko2D(poseStack) && Renderer.getBackend().canDrawResourceTexture(resourceLocation)) {
             Renderer.renderWithPose(poseStack, drawContext -> {
-                Paint paint = new Paint().setColor(ColorUtil.withAlpha(color, alpha));
+                Paint paint = new Paint().setColor(Argb.withAlpha(color, alpha));
                 drawContext.drawTexture(new Texture(resourceLocation, 0, 0),
                         Rectangle.ofXYWH(0.0f, 0.0f, 0.0f, 0.0f),
                         Rectangle.ofXYWH(x, y, width, height),
@@ -750,7 +751,7 @@ extends ClientBase {
         }
         try {
             Matrix4f matrix4f = poseStack.last().pose();
-            RenderHelper.setShaderColor(ColorUtil.withAlpha(color, alpha));
+            RenderHelper.setShaderColor(Argb.withAlpha(color, alpha));
             if (textureId != -1) {
                 RenderSystem.setShader(GameRenderer::getPositionTexShader);
                 RenderSystem.setShaderTexture(0, textureId);
@@ -798,7 +799,7 @@ extends ClientBase {
         }
         shadowCache.get(cacheKey).bind();
         RenderUtil.enableBlend();
-        RenderUtil.drawTexture(-1, poseStack, x, y, width, height, (float)ColorUtil.getAlpha(color) / 255.0f, color);
+        RenderUtil.drawTexture(-1, poseStack, x, y, width, height, (float)Argb.alpha(color) / 255.0f, color);
         RenderUtil.disableBlend();
     }
 
@@ -809,7 +810,7 @@ extends ClientBase {
             byte[] pngBytes = byteArrayOutputStream.toByteArray();
             RenderUtil.registerTextureBytes(resourceLocationWrapper, pngBytes);
         } catch (Exception exception) {
-            // empty catch block
+            logger.debug("Failed to register generated texture {}", resourceLocationWrapper.get(), exception);
         }
     }
 
@@ -820,7 +821,7 @@ extends ClientBase {
             DynamicTexture dynamicTexture = new DynamicTexture(NativeImage.read(byteBuffer));
             mc.execute(() -> mc.getTextureManager().register(resourceLocationWrapper.get(), dynamicTexture));
         } catch (Exception exception) {
-            // empty catch block
+            logger.debug("Failed to upload generated texture {}", resourceLocationWrapper.get(), exception);
         }
     }
 

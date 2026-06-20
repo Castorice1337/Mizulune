@@ -24,13 +24,13 @@ import shit.zen.render.RoundedRectangle;
 import shit.zen.utils.animation.SmoothAnimationTimer;
 import shit.zen.utils.math.Easings;
 import shit.zen.utils.misc.CursorUtil;
-import shit.zen.utils.render.ColorUtil;
+import shit.zen.utils.render.Argb;
 import shit.zen.utils.render.RenderHelper;
 import shit.zen.utils.render.RenderUtil;
 
 public class CategoryPanel
 extends UIElement {
-    public static final int BG_COLOR = ColorUtil.fromRGB(23, 23, 23);
+    public static final int BG_COLOR = Argb.fromRgb(23, 23, 23);
     public static final int ACCENT_COLOR_DARK = new Color(-13768502).darker().darker().getRGB();
     public static final int ACCENT_COLOR = new Color(-13768502).darker().getRGB();
     @Getter
@@ -89,7 +89,7 @@ extends UIElement {
     public void render(NewClickGui clickGui, GuiGraphics guiGraphics, PoseStack poseStack, int mouseX, int mouseY, float alpha, float partialTicks) {
         this.isHovered = CursorUtil.isInBounds(mouseX, mouseY, this.posX, this.posY, 120.0f, this.panelHeight);
         if (this.isHovered) {
-            NewClickGui.focusedPanel = this;
+            clickGui.setFocusedPanel(this);
         }
         this.scaleTimer.animate(clickGui.isClosing() ? 0.0 : 1.0, clickGui.isClosing() ? 0.22 : 0.32, Easings.BACK_OUT);
         this.scaleTimer.tick();
@@ -118,8 +118,8 @@ extends UIElement {
         float scaleAmount = this.scaleTimer.getValueF();
         RenderHelper.pushScaleAround(poseStack, this.posX + 60.0f, this.posY + this.panelHeight / 2.0f, 0.4f + 0.6f * scaleAmount);
         float shadowSize = 12.0f;
-        RenderUtil.drawRoundedRect(poseStack, this.posX - shadowSize, this.posY - shadowSize, 120.0f + shadowSize * 2.0f, this.panelHeight + shadowSize * 2.0f, 6.0f + shadowSize / 2.0f, shadowSize, ColorUtil.fromARGB(0, 0, 0, (int)(80.0f * alpha * 1.0f)));
-        RenderUtil.drawRoundedRect(poseStack, this.posX, this.posY, 120.0f, this.panelHeight, 6.0f, ColorUtil.withAlpha(BG_COLOR, alpha));
+        RenderUtil.drawRoundedRect(poseStack, this.posX - shadowSize, this.posY - shadowSize, 120.0f + shadowSize * 2.0f, this.panelHeight + shadowSize * 2.0f, 6.0f + shadowSize / 2.0f, shadowSize, Argb.fromRgbaComponents(0, 0, 0, (int)(80.0f * alpha * 1.0f)));
+        RenderUtil.drawRoundedRect(poseStack, this.posX, this.posY, 120.0f, this.panelHeight, 6.0f, Argb.withAlpha(BG_COLOR, alpha));
         if (Renderer.canUseSkiko2D(poseStack) && Renderer.getCanvas() != null) {
             DrawContext drawContext = Renderer.getCanvas();
             boolean pushedPose = false;
@@ -132,8 +132,8 @@ extends UIElement {
                 drawContext.clipRoundedRect(RoundedRectangle.ofXYWHR(this.posX + 0.5f, this.posY, 118.0f, 20.0f, 6.0f), true);
                 Paint paint = new Paint().setGradCoords(new Paint.GradientCoords(
                         this.posX, this.posY, this.posX + 120.0f, this.posY,
-                        ColorUtil.withAlpha(ColorUtil.animateColorOffset(-13768502, ACCENT_COLOR_DARK, 100L), alpha),
-                        ColorUtil.withAlpha(ColorUtil.animateColorOffset(-13768502, ACCENT_COLOR_DARK, 2000L), alpha)));
+                        Argb.withAlpha(Argb.animateOffset(-13768502, ACCENT_COLOR_DARK, 100L), alpha),
+                        Argb.withAlpha(Argb.animateOffset(-13768502, ACCENT_COLOR_DARK, 2000L), alpha)));
                 drawContext.drawRect(Rectangle.ofXYWH(this.posX, this.posY, 120.0f, 1.0f), paint);
             } finally {
                 if (saved) {
@@ -145,10 +145,10 @@ extends UIElement {
             }
         } else {
             RenderUtil.drawGradientH(poseStack, this.posX, this.posY, 120.0f, 1.0f,
-                    ColorUtil.withAlpha(ColorUtil.animateColorOffset(-13768502, ACCENT_COLOR_DARK, 100L), alpha),
-                    ColorUtil.withAlpha(ColorUtil.animateColorOffset(-13768502, ACCENT_COLOR_DARK, 2000L), alpha));
+                    Argb.withAlpha(Argb.animateOffset(-13768502, ACCENT_COLOR_DARK, 100L), alpha),
+                    Argb.withAlpha(Argb.animateOffset(-13768502, ACCENT_COLOR_DARK, 2000L), alpha));
         }
-        FontStore.AXIFORMA_EXTRABOLD_18.drawString(poseStack, this.category.displayName, this.posX + 8.0f, this.posY + (20.0f - FontStore.AXIFORMA_EXTRABOLD_18.getFontHeight()) / 2.0f + 3.0f, ColorUtil.withAlpha(-1, alpha));
+        FontStore.AXIFORMA_EXTRABOLD_18.drawString(poseStack, this.category.displayName, this.posX + 8.0f, this.posY + (20.0f - FontStore.AXIFORMA_EXTRABOLD_18.getFontHeight()) / 2.0f + 3.0f, Argb.withAlpha(-1, alpha));
         float scrollOffset = this.scrollTimer.getValueF();
         float elementY = this.posY + 20.0f - scrollOffset;
         if (Renderer.canUseSkiko2D(poseStack) && Renderer.getCanvas() != null) {
@@ -171,8 +171,8 @@ extends UIElement {
                 Paint fadePaint = new Paint().setGradCoords(new Paint.GradientCoords(
                         this.posX + 0.5f, this.posY + 20.0f - 0.5f,
                         this.posX + 0.5f, this.posY + 20.0f - 0.5f + 6.0f,
-                        ColorUtil.withAlpha(-16777216, 0.36f * alpha),
-                        ColorUtil.withAlpha(-16777216, 0.0f)));
+                        Argb.withAlpha(-16777216, 0.36f * alpha),
+                        Argb.withAlpha(-16777216, 0.0f)));
                 drawContext.drawRect(Rectangle.ofXYWH(this.posX + 0.5f, this.posY + 20.0f - 0.5f, 119.0f, 6.0f), fadePaint);
             } finally {
                 if (saved) {
@@ -190,14 +190,14 @@ extends UIElement {
                 elementY += moduleElement.getHeight();
             }
             RenderUtil.drawGradientV(poseStack, this.posX + 0.5f, this.posY + 20.0f - 0.5f, 119.0f, 6.0f,
-                    ColorUtil.withAlpha(-16777216, 0.36f * alpha), ColorUtil.withAlpha(-16777216, 0.0f));
+                    Argb.withAlpha(-16777216, 0.36f * alpha), Argb.withAlpha(-16777216, 0.0f));
         }
         float tooltipAmount = this.tooltipTimer.getValueF();
         if (tooltipAmount > 0.0f) {
             float tooltipWidth = FontStore.AXIFORMA_REGULAR_16.getStringWidth(this.tooltipText);
-            RenderUtil.drawShadow(poseStack, mouseX + 5, mouseY + 5, tooltipWidth + 6.0f, FontStore.AXIFORMA_REGULAR_16.getFontHeight() + 4.0f, 12, ColorUtil.withAlpha(BG_COLOR, alpha * tooltipAmount * 0.66f));
-            RenderUtil.drawRoundedRect(poseStack, mouseX + 5, mouseY + 5, tooltipWidth + 6.0f, FontStore.AXIFORMA_REGULAR_16.getFontHeight() + 4.0f, 3.0f, ColorUtil.withAlpha(BG_COLOR, alpha * tooltipAmount));
-            FontStore.AXIFORMA_REGULAR_16.drawString(poseStack, this.tooltipText, mouseX + 5 + 3, mouseY + 5 + 1, ColorUtil.withAlpha(-1, alpha * tooltipAmount));
+            RenderUtil.drawShadow(poseStack, mouseX + 5, mouseY + 5, tooltipWidth + 6.0f, FontStore.AXIFORMA_REGULAR_16.getFontHeight() + 4.0f, 12, Argb.withAlpha(BG_COLOR, alpha * tooltipAmount * 0.66f));
+            RenderUtil.drawRoundedRect(poseStack, mouseX + 5, mouseY + 5, tooltipWidth + 6.0f, FontStore.AXIFORMA_REGULAR_16.getFontHeight() + 4.0f, 3.0f, Argb.withAlpha(BG_COLOR, alpha * tooltipAmount));
+            FontStore.AXIFORMA_REGULAR_16.drawString(poseStack, this.tooltipText, mouseX + 5 + 3, mouseY + 5 + 1, Argb.withAlpha(-1, alpha * tooltipAmount));
         }
         RenderHelper.popPose(poseStack);
     }

@@ -36,7 +36,7 @@ import shit.zen.utils.animation.SmoothAnimationTimer;
 import shit.zen.utils.game.ItemUtil;
 import shit.zen.utils.math.Easings;
 import shit.zen.utils.misc.ChatUtil;
-import shit.zen.utils.render.ColorUtil;
+import shit.zen.utils.render.Argb;
 import shit.zen.utils.render.RenderUtil;
 import shit.zen.event.EventTarget;
 
@@ -395,10 +395,10 @@ extends HudElement {
             return;
         }
         float headerTextY = y + padding + (headerHeight - padding * 2.0f - (float)GlHelper.getFontAscent(this.nameFont)) / 2.0f + 1.0f;
-        int textColor = ColorUtil.fromARGB(255, 255, 255, (int)(255.0f * alpha));
+        int textColor = Argb.fromRgbaComponents(255, 255, 255, (int)(255.0f * alpha));
         Paint textPaint = GlHelper.toPaint(textColor);
         try (Paint bgPaint = new Paint()){
-            bgPaint.setColor(ColorUtil.fromARGB(0, 0, 0, (int)(190.0f * alpha)));
+            bgPaint.setColor(Argb.fromRgbaComponents(0, 0, 0, (int)(190.0f * alpha)));
             GlHelper.drawRoundedRect(x, y, width, headerHeight, spacing, bgPaint);
         }
         if (rightAligned) {
@@ -420,14 +420,14 @@ extends HudElement {
             float entryY = entry.fadeAnim.getValueF();
             float entryHeight = headSize + padding * 2.0f;
             try (Paint entryBgPaint = new Paint()){
-                entryBgPaint.setColor(ColorUtil.fromARGB(0, 0, 0, (int)(90.0f * entryAlpha)));
+                entryBgPaint.setColor(Argb.fromRgbaComponents(0, 0, 0, (int)(90.0f * entryAlpha)));
                 float entryWidth = entry.widthAnim.getValueF();
                 float entryDrawX = entryX;
                 GlHelper.drawRoundedRect(entryDrawX, entryY, entryWidth, entryHeight, spacing, entryBgPaint);
             }
             float contentY = entryY + padding;
-            int nameColor = entry.player == mc.player ? ColorUtil.fromRGB(100, 150, 255) : -1;
-            int nameAlpha = ColorUtil.withAlpha(nameColor, (int)entryAlpha);
+            int nameColor = entry.player == mc.player ? Argb.fromRgb(100, 150, 255) : -1;
+            int nameAlpha = Argb.withAlpha(nameColor, entryAlpha);
             float nameY = entryY + padding + (entryHeight - padding * 2.0f - (float)GlHelper.getFontAscent(this.headerFont)) / 2.0f;
             if (rightAligned) {
                 headX = entryX + entry.widthAnim.getValueF();

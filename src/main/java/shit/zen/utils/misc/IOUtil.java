@@ -12,8 +12,11 @@ import java.io.FileWriter;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 public class IOUtil {
+    private static final Logger LOGGER = LogManager.getLogger("Mizulune");
 
     public static void writeBytes(File file, byte[] bytes) throws IOException {
         try (FileOutputStream fos = new FileOutputStream(file)) {
@@ -34,7 +37,7 @@ public class IOUtil {
                 stringBuilder.append(line).append('\n');
             }
         } catch (Exception exception) {
-            exception.printStackTrace();
+            LOGGER.warn("Failed to read input stream", exception);
         }
         return stringBuilder.toString();
     }

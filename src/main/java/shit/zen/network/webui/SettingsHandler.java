@@ -9,6 +9,8 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import shit.zen.ZenClient;
 import shit.zen.exception.ModuleNotFoundException;
 import shit.zen.modules.Module;
@@ -20,6 +22,7 @@ import shit.zen.value.ValueGroup;
 import shit.zen.value.ValueJsonCodec;
 
 public class SettingsHandler extends AbstractHttpHandler {
+    private static final Logger LOGGER = LogManager.getLogger(SettingsHandler.class);
 
     @Override
     public int handleRequest(InputStream in, OutputStream out, HttpExchange exchange) throws Throwable {
@@ -41,9 +44,9 @@ public class SettingsHandler extends AbstractHttpHandler {
                     success = true;
                 }
             } catch (Throwable throwable) {
-                throwable.printStackTrace();
+                LOGGER.warn("Failed to read WebUI settings", throwable);
                 success = false;
-                reason = throwable.toString();
+                reason = "internal error";
             }
         } else {
             reason = "missing module";

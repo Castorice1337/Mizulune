@@ -31,7 +31,7 @@ import shit.zen.render.Texture;
 import shit.zen.value.impl.ModeValue;
 import shit.zen.utils.animation.SpringAnimation;
 import shit.zen.utils.game.MovementUtil;
-import shit.zen.utils.render.ColorUtil;
+import shit.zen.utils.render.Argb;
 import shit.zen.utils.render.RenderUtil;
 
 public class DynamicIsland extends Module {
@@ -304,7 +304,7 @@ public class DynamicIsland extends Module {
         float logoX = x + 14.0f;
         float logoY = y + (height - logoSize) / 2.0f;
         try (Paint paint = new Paint()) {
-            paint.setColor(this.withAlpha(0xFFFFFFFF, alpha));
+            paint.setColor(Argb.scaleAlpha(0xFFFFFFFF, alpha));
             if (LOGO != null) {
                 drawContext.drawTexture(new Texture(LOGO, 200, 200),
                         Rectangle.ofXYWH(0.0f, 0.0f, 200.0f, 200.0f),
@@ -319,9 +319,9 @@ public class DynamicIsland extends Module {
         float infoWidth = GlHelper.getStringWidth(info, this.infoFont);
         float infoX = x + width - infoWidth - 14.0f;
         float infoY = y + height / 2.0f - this.infoFont.getMetrics().capHeight() / 2.0f + 1.0f;
-        GlHelper.drawText(info, infoX, infoY, this.infoFont, this.withAlpha(0xDDECF7FF, alpha));
+        GlHelper.drawText(info, infoX, infoY, this.infoFont, Argb.scaleAlpha(0xDDECF7FF, alpha));
         try (Paint paint = new Paint()) {
-            paint.setColor(this.withAlpha(0x30FFFFFF, alpha));
+            paint.setColor(Argb.scaleAlpha(0x30FFFFFF, alpha));
             drawContext.drawRectXYWH(infoX - 9.0f, y + 10.0f, 1.0f, height - 20.0f, paint);
         }
     }
@@ -333,7 +333,7 @@ public class DynamicIsland extends Module {
             String ch = String.valueOf(name.charAt(i));
             int color = switch (name.charAt(i)) {
                 case 'M', 'Z', 'L' -> this.rainbowColor(i * 90, alpha);
-                default -> this.withAlpha(0xFFFFFFFF, alpha);
+                default -> Argb.scaleAlpha(0xFFFFFFFF, alpha);
             };
             GlHelper.drawText(ch, cursor, y, this.nameFont, color);
             cursor += GlHelper.getStringWidth(ch, this.nameFont);
@@ -370,7 +370,7 @@ public class DynamicIsland extends Module {
 
     private void drawStackDivider(DrawContext drawContext, float x, float y, float width, float alpha) {
         try (Paint paint = new Paint()) {
-            paint.setColor(this.withAlpha(0x22FFFFFF, alpha));
+            paint.setColor(Argb.scaleAlpha(0x22FFFFFF, alpha));
             drawContext.drawRectXYWH(x + 14.0f, y + STACK_GAP / 2.0f - 0.5f, width - 28.0f, 1.0f, paint);
         }
     }
@@ -389,9 +389,9 @@ public class DynamicIsland extends Module {
             this.queueItemRender(iconStack, iconX, iconY, iconSize, alpha, false);
         }
         float textX = iconStack.isEmpty() ? x + 16.0f : x + 46.0f;
-        GlHelper.drawText(source.title(), textX, y + 6.0f, this.scaffoldTitleFont, this.withAlpha(0xFFFFFFFF, alpha));
+        GlHelper.drawText(source.title(), textX, y + 6.0f, this.scaffoldTitleFont, Argb.scaleAlpha(0xFFFFFFFF, alpha));
         String info = blocks + " blocks available  \u00b7  " + this.getScaffoldSpeedText();
-        GlHelper.drawText(info, textX, y + 23.0f, this.scaffoldInfoFont, this.withAlpha(0xEAF4FFFF, alpha));
+        GlHelper.drawText(info, textX, y + 23.0f, this.scaffoldInfoFont, Argb.scaleAlpha(0xEAF4FFFF, alpha));
 
         float barX = x + 14.0f;
         float barY = y + height - 8.0f;
@@ -410,7 +410,7 @@ public class DynamicIsland extends Module {
 
     private void drawBluePinkProgressBar(DrawContext drawContext, float x, float y, float width, float height, float progress, float alpha) {
         try (Paint paint = new Paint()) {
-            paint.setColor(this.withAlpha(0x28FFFFFF, alpha));
+            paint.setColor(Argb.scaleAlpha(0x28FFFFFF, alpha));
             drawContext.drawRoundedRect(RoundedRectangle.ofXYWHR(x, y, width, height, height / 2.0f), paint);
             float filledWidth = width * Mth.clamp(progress, 0.0f, 1.0f);
             if (filledWidth <= 0.5f) {
@@ -418,7 +418,7 @@ public class DynamicIsland extends Module {
             }
             paint.setColor(0xFFFFFFFF);
             paint.setGradCoords(new Paint.GradientCoords(x, y, x + filledWidth, y,
-                    this.withAlpha(0xFF49C7FF, alpha), this.withAlpha(0xFFFF5FDA, alpha)));
+                    Argb.scaleAlpha(0xFF49C7FF, alpha), Argb.scaleAlpha(0xFFFF5FDA, alpha)));
             drawContext.drawRoundedRect(RoundedRectangle.ofXYWHR(x, y, filledWidth, height, height / 2.0f), paint);
         }
     }
@@ -461,18 +461,18 @@ public class DynamicIsland extends Module {
             this.drawNotificationIcon(drawContext, x + 14.0f, rowY + 3.0f, 16.0f, accent, rowAlpha, enabled);
             float textX = x + 38.0f;
             float nameY = rowY + (rowHeight - this.notificationFont.getMetrics().capHeight()) / 2.0f + 1.0f;
-            GlHelper.drawText(notification.getModuleName(), textX, nameY, this.notificationFont, this.withAlpha(0xFFFFFFFF, rowAlpha));
+            GlHelper.drawText(notification.getModuleName(), textX, nameY, this.notificationFont, Argb.scaleAlpha(0xFFFFFFFF, rowAlpha));
             String status = enabled ? "Enabled" : "Disabled";
             float statusWidth = GlHelper.getStringWidth(status, this.notificationStatusFont);
             GlHelper.drawText(status, x + width - statusWidth - 14.0f,
                     rowY + (rowHeight - this.notificationStatusFont.getMetrics().capHeight()) / 2.0f + 1.0f,
-                    this.notificationStatusFont, this.withAlpha(accent, rowAlpha));
+                    this.notificationStatusFont, Argb.scaleAlpha(accent, rowAlpha));
         }
     }
 
     private void drawNotificationIcon(DrawContext drawContext, float x, float y, float size, int accent, float alpha, boolean enabled) {
-        int fill = this.withAlpha(accent, 0.22f * alpha);
-        int stroke = this.withAlpha(accent, alpha);
+        int fill = Argb.scaleAlpha(accent, 0.22f * alpha);
+        int stroke = Argb.scaleAlpha(accent, alpha);
         try (Paint paint = new Paint()) {
             paint.setColor(fill);
             drawContext.drawRoundedRect(RoundedRectangle.ofXYWHR(x, y, size, size, size / 2.0f), paint);
@@ -494,11 +494,11 @@ public class DynamicIsland extends Module {
         int rows = content.chestRows > 0 ? content.chestRows : Mth.clamp(content.chestMenu.getRowCount(), 3, 6);
         int slotCount = rows * 9;
         float titleY = y + 11.0f;
-        GlHelper.drawText("ChestStealer", x + 14.0f, titleY, this.chestTitleFont, this.withAlpha(0xFFFFFFFF, alpha));
+        GlHelper.drawText("ChestStealer", x + 14.0f, titleY, this.chestTitleFont, Argb.scaleAlpha(0xFFFFFFFF, alpha));
         String subtitle = slotCount + " slots";
         float subtitleWidth = GlHelper.getStringWidth(subtitle, this.chestSubFont);
         GlHelper.drawText(subtitle, x + width - subtitleWidth - 14.0f, titleY + 2.0f, this.chestSubFont,
-                this.withAlpha(0xBFEAF7FF, alpha));
+                Argb.scaleAlpha(0xBFEAF7FF, alpha));
 
         float cell = 13.0f;
         float gap = 2.0f;
@@ -510,7 +510,7 @@ public class DynamicIsland extends Module {
                 for (int col = 0; col < 9; col++) {
                     float slotX = gridX + col * (cell + gap);
                     float slotY = gridY + row * (cell + gap);
-                    paint.setColor(this.withAlpha(0x24FFFFFF, alpha));
+                    paint.setColor(Argb.scaleAlpha(0x24FFFFFF, alpha));
                     drawContext.drawRoundedRect(RoundedRectangle.ofXYWHR(slotX, slotY, cell, cell, 3.0f), paint);
                 }
             }
@@ -585,7 +585,7 @@ public class DynamicIsland extends Module {
         try {
             event.guiGraphics().pose().translate(textX, textY, 250.0f);
             event.guiGraphics().pose().scale(scale, scale, 1.0f);
-            event.guiGraphics().drawString(mc.font, count, 0, 0, this.withAlpha(0xFFFFFFFF, pending.alpha), true);
+            event.guiGraphics().drawString(mc.font, count, 0, 0, Argb.scaleAlpha(0xFFFFFFFF, pending.alpha), true);
         } finally {
             event.guiGraphics().pose().popPose();
         }
@@ -608,15 +608,9 @@ public class DynamicIsland extends Module {
     }
 
     private int rainbowColor(int offset, float alpha) {
-        Color rainbow = ColorUtil.getRainbowColor(12, offset);
+        Color rainbow = new Color(Argb.rainbow(12, offset), true);
         int packed = 0xFF000000 | rainbow.getRGB() & 0x00FFFFFF;
-        return this.withAlpha(packed, alpha);
-    }
-
-    private int withAlpha(int color, float alpha) {
-        int baseAlpha = color >>> 24;
-        int nextAlpha = Math.round(baseAlpha * Mth.clamp(alpha, 0.0f, 1.0f));
-        return nextAlpha << 24 | color & 0x00FFFFFF;
+        return Argb.scaleAlpha(packed, alpha);
     }
 
     private static final class PendingItemRender {

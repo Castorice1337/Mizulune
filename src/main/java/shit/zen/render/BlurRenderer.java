@@ -12,11 +12,11 @@ import net.minecraft.client.renderer.GameRenderer;
 import org.joml.Matrix4f;
 import org.lwjgl.opengl.GL11;
 import org.lwjgl.opengl.GL30;
-import shit.zen.render.BlurFbo;
-import shit.zen.render.BlurShader;
-import shit.zen.render.DrawContext;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 
 public final class BlurRenderer {
+    private static final Logger LOGGER = LogManager.getLogger(BlurRenderer.class);
     private static final BlurFbo fboA = new BlurFbo();
     private static final BlurFbo fboB = new BlurFbo();
     private static final BlurShader blurShader = new BlurShader();
@@ -61,7 +61,7 @@ public final class BlurRenderer {
         try {
             drawCallback.run();
         } catch (Throwable throwable) {
-            throwable.printStackTrace();
+            LOGGER.warn("Self-blur draw callback failed", throwable);
         }
         float pixelRadius = Math.max(1.0f, radius * guiScale);
         GlStateManager._disableBlend();

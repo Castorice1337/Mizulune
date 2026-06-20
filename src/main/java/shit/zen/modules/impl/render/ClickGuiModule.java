@@ -23,7 +23,7 @@ extends Module {
             if (this.styleSetting.is("Panel")) {
                 mc.setScreen(PanelClickGui.panelClickGui);
             } else {
-                mc.setScreen(new NewClickGui());
+                mc.setScreen(NewClickGui.INSTANCE);
             }
             LOGGER.info("ClickGUI opened successfully");
         } catch (Exception exception) {

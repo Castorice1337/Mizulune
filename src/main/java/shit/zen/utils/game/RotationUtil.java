@@ -306,9 +306,7 @@ extends ClientBase {
                 Vec3 hitLocation = hitResult.getLocation();
                 return new RotationUtil.BestHitInfo(eyePos, hitLocation, hitLocation.distanceTo(eyePos), RotationUtil.getSensitivitySnappedRotation(rotation.getYaw(), rotation.getPitch(), RotationHandler.prevRotation.yaw, RotationHandler.prevRotation.pitch));
             } catch (Exception exception) {
-                logger.error("er here");
-                logger.error(exception);
-                exception.printStackTrace();
+                logger.error("Failed to compute best hit info", exception);
                 return null;
             }
         }

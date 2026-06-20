@@ -72,7 +72,7 @@ public class FireballBlink extends Module {
                 if (packet == null || mc.getConnection() == null) continue;
                 handlePacket(packet, mc.getConnection());
             } catch (Exception e) {
-                e.printStackTrace();
+                logger.debug("Failed to flush FireballBlink packet", e);
             }
         }
     }
@@ -94,7 +94,7 @@ public class FireballBlink extends Module {
                 }
                 ++count;
             } catch (Exception e) {
-                e.printStackTrace();
+                logger.debug("Failed to release FireballBlink impulse packet", e);
             }
         }
         for (int i = index + 1; i < this.impulsePacketBoundaries.size(); ++i) {

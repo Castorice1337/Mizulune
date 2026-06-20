@@ -153,7 +153,7 @@ implements AutoCloseable {
     public Paint copy() {
         Paint paint = new Paint();
         paint.color = this.color;
-        paint.capStyle = Paint.StrokeCap.FILL;
+        paint.capStyle = this.capStyle;
         paint.joinStyle = this.joinStyle;
         paint.strokeWidth = this.strokeWidth;
         paint.blurRadius = this.blurRadius;
