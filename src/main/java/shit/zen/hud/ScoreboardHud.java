@@ -24,6 +24,7 @@ import shit.zen.render.Paint;
 import shit.zen.render.Renderer;
 import shit.zen.render.RoundedRectangle;
 import shit.zen.render.TextGlow;
+import shit.zen.utils.render.Argb;
 import shit.zen.value.MizuColor;
 import shit.zen.value.ToggleValueGroup;
 import shit.zen.value.Value;
@@ -219,23 +220,23 @@ public class ScoreboardHud extends HudElement {
         RoundedRectangle bounds = RoundedRectangle.ofXYWHR(x, y, layout.width(), layout.height(), radiusValue);
 
         if (Boolean.TRUE.equals(this.panelGlow.getValue())) {
-            ctx.drawBlurredRoundedRect(bounds, 0.0f, 0.0f, 14.0f, 3.0f, this.scaleAlpha(this.glowColor.getValue().toArgb(), 0.42f));
+            ctx.drawBlurredRoundedRect(bounds, 0.0f, 0.0f, 14.0f, 3.0f, Argb.scaleAlpha(this.glowColor.getValue().toArgb(), 0.42f));
         }
 
         if (Boolean.TRUE.equals(this.liquidGlass.getValue())) {
             ctx.drawLiquidGlassPanel(bounds, this.liquidGlassStyle());
         } else {
-            ctx.drawBlurredRoundedRect(bounds, 0.0f, 0.0f, 12.0f, 0.0f, this.scaleAlpha(this.fallbackGlassColor.getValue().toArgb(), 0.42f));
+            ctx.drawBlurredRoundedRect(bounds, 0.0f, 0.0f, 12.0f, 0.0f, Argb.scaleAlpha(this.fallbackGlassColor.getValue().toArgb(), 0.42f));
             this.paint.setGradCoords(new Paint.GradientCoords(x, y, x, y + layout.height(),
-                    this.scaleAlpha(this.fallbackGlassColor.getValue().toArgb(), 0.92f),
-                    this.scaleAlpha(0xFFFFFFFF, 0.46f)));
+                    Argb.scaleAlpha(this.fallbackGlassColor.getValue().toArgb(), 0.92f),
+                    Argb.scaleAlpha(0xFFFFFFFF, 0.46f)));
             ctx.drawRoundedRect(bounds, this.paint);
             this.paint.setGradCoords(null);
         }
 
         this.paint.setStrokeCap(Paint.StrokeCap.STROKE)
                 .setStrokeWidth(0.75f)
-                .setColor(this.scaleAlpha(0xFFFFFFFF, 0.34f));
+                .setColor(Argb.scaleAlpha(0xFFFFFFFF, 0.34f));
         ctx.drawRoundedRect(bounds, this.paint);
         this.paint.setStrokeCap(Paint.StrokeCap.FILL);
 
@@ -263,7 +264,7 @@ public class ScoreboardHud extends HudElement {
 
     private void drawText(String text, float x, float y, FontRenderer font, int color, float glowRadius) {
         if (Boolean.TRUE.equals(this.fontGlow.getValue())) {
-            TextGlow.drawGlowText(text, x, y, font, color, this.scaleAlpha(this.glowColor.getValue().toArgb(), 0.72f), glowRadius);
+            TextGlow.drawGlowText(text, x, y, font, color, Argb.scaleAlpha(this.glowColor.getValue().toArgb(), 0.72f), glowRadius);
             return;
         }
         this.paint.setGradCoords(null).setColor(color);
@@ -313,11 +314,6 @@ public class ScoreboardHud extends HudElement {
         float maxY = Math.max(4.0f, mc.getWindow().getGuiScaledHeight() - height - 4.0f);
         this.setX(Mth.clamp(this.getX(), 4.0f, maxX));
         this.setY(Mth.clamp(this.getY(), 4.0f, maxY));
-    }
-
-    private int scaleAlpha(int color, float multiplier) {
-        int alpha = Math.round((color >>> 24) * Mth.clamp(multiplier, 0.0f, 1.0f));
-        return alpha << 24 | color & 0x00FFFFFF;
     }
 
     private String clipText(String text, FontRenderer font, float maxWidth) {

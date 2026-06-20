@@ -28,6 +28,7 @@ import shit.zen.render.color.RainbowColorProvider;
 import shit.zen.render.color.SolidColorProvider;
 import shit.zen.utils.animation.SmoothAnimationTimer;
 import shit.zen.utils.math.Easings;
+import shit.zen.utils.render.Argb;
 import shit.zen.value.MizuColor;
 import shit.zen.value.ModeValueGroup;
 import shit.zen.value.ToggleValueGroup;
@@ -414,7 +415,7 @@ public class ModuleListHud extends HudElement {
             }
         }
         if (this.sideLineEnabled.getValue()) {
-            this.drawSideLine(drawContext, bounds, this.withAlpha(rowColor, Math.round(255.0f * layout.progress)), alignment, broken);
+            this.drawSideLine(drawContext, bounds, Argb.withAlpha(rowColor, layout.progress), alignment, broken);
         }
         drawContext.save();
         drawContext.clipRoundedRect(this.textClipBounds(layout, bounds, broken), true);
@@ -509,7 +510,7 @@ public class ModuleListHud extends HudElement {
                 float t = (float)i / (float)iterations;
                 float spread = radius * t;
                 int alpha = Math.round((float)baseAlpha * (1.0f - t * 0.72f) / (float)iterations);
-                paint.setColor(this.withAlpha(rowColor, alpha));
+                paint.setColor(Argb.withAlpha(rowColor, alpha));
                 drawContext.drawRoundedRect(this.expandedGlowBounds(bounds, spread, broken), paint);
             }
         }
@@ -576,7 +577,7 @@ public class ModuleListHud extends HudElement {
             float chWidth = GlHelper.getStringWidth(ch, this.moduleFont);
             float charProgress = Mth.clamp((cursorX - x + chWidth * 0.5f) / safeTextWidth, 0.0f, 1.0f);
             int color = this.colorForPosition(rowIndex, charProgress, Math.max(1, rowCount - 1));
-            this.drawGlyphWithGlow(ch, cursorX, y, this.withAlpha(color, Math.round(255.0f * alpha)), alpha);
+            this.drawGlyphWithGlow(ch, cursorX, y, Argb.withAlpha(color, alpha), alpha);
             cursorX += chWidth;
         }
     }
@@ -592,7 +593,7 @@ public class ModuleListHud extends HudElement {
                     double angle = Math.PI * 2.0 * (double)i / (double)quality;
                     float ox = (float)Math.cos(angle) * radius;
                     float oy = (float)Math.sin(angle) * radius;
-                    GlHelper.drawText(text, x + ox, y + oy, this.moduleFont, this.withAlpha(color, animatedGlowAlpha / quality));
+                    GlHelper.drawText(text, x + ox, y + oy, this.moduleFont, Argb.withAlpha(color, animatedGlowAlpha / quality));
                 }
             }
         }
@@ -649,7 +650,7 @@ public class ModuleListHud extends HudElement {
         boolean wasDragging = this.isDragging();
         super.stopDragging();
         if (wasDragging) {
-            ConfigManager.saveAllIfReady();
+            ConfigManager.requestSaveIfReady();
         }
     }
 
@@ -698,10 +699,6 @@ public class ModuleListHud extends HudElement {
         int minValue = min instanceof Number number ? Math.round(number.floatValue()) : Integer.MIN_VALUE;
         int maxValue = max instanceof Number number ? Math.round(number.floatValue()) : Integer.MAX_VALUE;
         return Mth.clamp(value, minValue, maxValue);
-    }
-
-    private int withAlpha(int color, int alpha) {
-        return Mth.clamp(alpha, 0, 255) << 24 | color & 0x00FFFFFF;
     }
 
     @Override

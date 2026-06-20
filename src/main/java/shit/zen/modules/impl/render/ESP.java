@@ -33,7 +33,7 @@ import shit.zen.value.impl.BooleanValue;
 import shit.zen.value.impl.ModeValue;
 import shit.zen.utils.game.EntityUtil;
 import shit.zen.utils.math.Vector2f;
-import shit.zen.utils.render.ColorUtil;
+import shit.zen.utils.render.Argb;
 import shit.zen.utils.render.ProjectionUtil;
 import shit.zen.utils.render.RenderUtil;
 import shit.zen.event.EventTarget;
@@ -167,7 +167,7 @@ public class ESP extends Module {
             Vector4d v = entry.getValue().first;
             if (v.z <= 0.0 || v.w <= 0.0) continue;
             Entity entity = entry.getKey();
-            Color color = entity instanceof Player p ? ColorUtil.getPlayerColor(p) : Color.WHITE;
+            Color color = entity instanceof Player p ? new Color(Argb.playerColor(p), true) : Color.WHITE;
             float x1 = (float) v.x();
             float y1 = (float) v.y();
             float x2 = x1 + (float) v.z();

@@ -23,6 +23,7 @@ import shit.zen.render.Renderer;
 import shit.zen.render.RoundedRectangle;
 import shit.zen.utils.animation.SmoothAnimationTimer;
 import shit.zen.utils.math.Easings;
+import shit.zen.utils.render.Argb;
 import shit.zen.value.MizuColor;
 
 public class ModernTargetStyle extends TargetStyle {
@@ -174,18 +175,18 @@ public class ModernTargetStyle extends TargetStyle {
         boolean glow = config == null || config.isModernGlowEnabled();
         if (glow) {
             drawContext.drawBlurredRoundedRect(bounds, 0.0f, 1.0f, 18.0f, 3.0f,
-                    this.withAlpha(PANEL_COLOR, alpha * 0.62f));
+                    Argb.scaleAlpha(PANEL_COLOR, alpha * 0.62f));
             drawContext.drawBlurredRoundedRect(bounds, 0.0f, 2.0f, 34.0f, 8.0f,
-                    this.withAlpha(PANEL_COLOR, alpha * 0.34f));
+                    Argb.scaleAlpha(PANEL_COLOR, alpha * 0.34f));
             drawContext.drawBlurredRoundedRect(bounds, 0.0f, 3.0f, 48.0f, 13.0f,
-                    this.withAlpha(PANEL_COLOR, alpha * 0.16f));
+                    Argb.scaleAlpha(PANEL_COLOR, alpha * 0.16f));
         }
         boolean backgroundBlur = config == null || config.isModernBackgroundBlurEnabled();
         if (backgroundBlur) {
             drawContext.drawLiquidGlassPanel(bounds, this.backgroundBlurStyle(alpha));
         }
         try (Paint paint = new Paint()) {
-            paint.setColor(this.withAlpha(PANEL_COLOR, alpha));
+            paint.setColor(Argb.scaleAlpha(PANEL_COLOR, alpha));
             drawContext.drawRoundedRect(bounds, paint);
         }
     }
@@ -220,13 +221,13 @@ public class ModernTargetStyle extends TargetStyle {
         float nameY = y + 6.0f;
         float metaY = y + 19.0f;
         String name = this.displayName(target);
-        GlHelper.drawTextWithShadow(name, textX, nameY, this.nameFont, this.withAlpha(0xFFF5F6FF, alpha));
+        GlHelper.drawTextWithShadow(name, textX, nameY, this.nameFont, Argb.scaleAlpha(0xFFF5F6FF, alpha));
 
         String hp = this.healthText(target);
-        int metaColor = this.withAlpha(0xEAF4F7FA, alpha);
+        int metaColor = Argb.scaleAlpha(0xEAF4F7FA, alpha);
         GlHelper.drawTextWithShadow(hp, textX, metaY, this.metaFont, metaColor);
         float sepX = textX + GlHelper.getStringWidth(hp, this.metaFont) + 4.0f;
-        GlHelper.drawTextWithShadow("|", sepX, metaY, this.metaFont, this.withAlpha(0x9FFFFFFF, alpha));
+        GlHelper.drawTextWithShadow("|", sepX, metaY, this.metaFont, Argb.scaleAlpha(0x9FFFFFFF, alpha));
         float itemX = sepX + GlHelper.getStringWidth("|", this.metaFont) + 5.0f;
         float itemY = y + 18.0f;
         for (ItemStack stack : this.collectItemStacks(target)) {
@@ -250,14 +251,14 @@ public class ModernTargetStyle extends TargetStyle {
             GlHelper.drawPlayerHeadRounded(player, headX, headY, headSize, headSize, alpha, radius);
         } else {
             try (Paint paint = new Paint()) {
-                paint.setColor(this.withAlpha(0xFF1E2228, alpha));
+                paint.setColor(Argb.scaleAlpha(0xFF1E2228, alpha));
                 drawContext.drawRoundedRect(RoundedRectangle.ofXYWHR(headX, headY, headSize, headSize, radius), paint);
             }
         }
         float flash = this.hurtFlashAnim.getValueF();
         if (flash > 0.01f) {
             try (Paint paint = new Paint()) {
-                paint.setColor(this.withAlpha(0xFFFF3030, alpha * flash * 0.58f));
+                paint.setColor(Argb.scaleAlpha(0xFFFF3030, alpha * flash * 0.58f));
                 drawContext.drawRoundedRect(RoundedRectangle.ofXYWHR(headX, headY, headSize, headSize, radius), paint);
             }
         }
@@ -274,7 +275,7 @@ public class ModernTargetStyle extends TargetStyle {
         float lagWidth = width * lagPct;
         float fillWidth = width * fillPct;
         try (Paint paint = new Paint()) {
-            paint.setColor(this.withAlpha(0x36FFFFFF, alpha));
+            paint.setColor(Argb.scaleAlpha(0x36FFFFFF, alpha));
             drawContext.drawRoundedRect(RoundedRectangle.ofXYWHR(x, y, width, BAR_HEIGHT, BAR_RADIUS), paint);
         }
         if (lagWidth > fillWidth + 0.5f) {
@@ -283,7 +284,7 @@ public class ModernTargetStyle extends TargetStyle {
         if (fillWidth > 0.5f) {
             if (glow) {
                 drawContext.drawBlurredRoundedRect(RoundedRectangle.ofXYWHR(x, y, fillWidth, BAR_HEIGHT, BAR_RADIUS),
-                        0.0f, 0.0f, 8.0f, 2.0f, this.colorWithAlpha(end, alpha * 0.24f));
+                        0.0f, 0.0f, 8.0f, 2.0f, Argb.scaleAlpha(end.toArgb(), alpha * 0.24f));
             }
             this.drawGradientBar(drawContext, x, y, fillWidth, start, end, alpha);
         }
@@ -295,8 +296,8 @@ public class ModernTargetStyle extends TargetStyle {
             paint.setGradCoords(new Paint.GradientCoords(
                     x, y,
                     x + width, y,
-                    this.colorWithAlpha(start, alpha),
-                    this.colorWithAlpha(end, alpha)));
+                    Argb.scaleAlpha(start.toArgb(), alpha),
+                    Argb.scaleAlpha(end.toArgb(), alpha)));
             drawContext.drawRoundedRect(RoundedRectangle.ofXYWHR(x, y, width, BAR_HEIGHT, BAR_RADIUS), paint);
         }
     }
@@ -353,17 +354,6 @@ public class ModernTargetStyle extends TargetStyle {
             return String.format(Locale.US, "%dHP", Math.round(rounded));
         }
         return String.format(Locale.US, "%.1fHP", health);
-    }
-
-    private int colorWithAlpha(MizuColor color, float alpha) {
-        return color.withAlpha(Math.round((float)color.alpha() * Mth.clamp(alpha, 0.0f, 1.0f))).toArgb();
-    }
-
-    private int withAlpha(int color, float alpha) {
-        float clamped = Mth.clamp(alpha, 0.0f, 1.0f);
-        int baseAlpha = color >>> 24;
-        int nextAlpha = Math.round(baseAlpha * clamped);
-        return nextAlpha << 24 | color & 0x00FFFFFF;
     }
 
     private record ItemRender(ItemStack stack, float x, float y, float alpha) {

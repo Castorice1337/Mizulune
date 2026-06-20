@@ -13,7 +13,8 @@ import shit.zen.render.Paint;
 import shit.zen.render.Rectangle;
 import shit.zen.render.Texture;
 import shit.zen.event.EventTarget;
-import shit.zen.utils.render.ColorUtil;
+import shit.zen.utils.math.MathUtil;
+import shit.zen.utils.render.Argb;
 
 public class IntroAnimation
 extends ClientBase {
@@ -71,7 +72,7 @@ extends ClientBase {
             long sinceZ = elapsed - zAppearStart;
             if (sinceZ <= 900L) {
                 float zProgress = IntroAnimation.easeOutCubic(IntroAnimation.clamp01((float)sinceZ / 900.0f));
-                zScale = IntroAnimation.lerp(2.0f, 1.0f, zProgress);
+                zScale = MathUtil.lerp(zProgress, 2.0f, 1.0f);
                 zAlpha = zProgress;
             } else {
                 zScale = 1.0f;
@@ -94,12 +95,12 @@ extends ClientBase {
         } else if (elapsed > enStart + 500L) {
             textSettleProgress = 1.0f;
         }
-        float textOffsetY = IntroAnimation.lerp(TEXT_START_OFFSET_Y, 0.0f, textSettleProgress);
+        float textOffsetY = MathUtil.lerp(textSettleProgress, TEXT_START_OFFSET_Y, 0.0f);
         float zWidth = GlHelper.getStringWidth("M", scaledZFont);
         float enWidth = GlHelper.getStringWidth("izulune", baseFont);
         float zCenterX = centerX - zWidth / 2.0f;
         float zSlideX = centerX - (zWidth + 0.0f + enWidth) / 2.0f;
-        float zRenderX = IntroAnimation.lerp(zCenterX, zSlideX, slideProgress);
+        float zRenderX = MathUtil.lerp(slideProgress, zCenterX, zSlideX);
         float zRenderY = centerY - scaledZFont.getMetrics().capHeight() / 2.0f + textOffsetY;
         float enAlpha = 0.0f;
         if (elapsed > enStart && elapsed <= enStart + 500L) {
@@ -143,9 +144,9 @@ extends ClientBase {
         float revealLineY = textTopY - 6.0f;
         float logoX = centerX - LOGO_SIZE / 2.0f;
         float logoFinalY = revealLineY - LOGO_GAP - LOGO_SIZE;
-        float logoY = IntroAnimation.lerp(revealLineY, logoFinalY, logoProgress);
+        float logoY = MathUtil.lerp(logoProgress, revealLineY, logoFinalY);
         float clipHeight = Math.max(1.0f, revealLineY - logoFinalY + 2.0f);
-        Paint paint = GlHelper.toPaint(IntroAnimation.withAlpha(0xFFFFFFFF, logoProgress * fadeFactor));
+        Paint paint = GlHelper.toPaint(Argb.withAlpha(0xFFFFFFFF, logoProgress * fadeFactor));
         drawContext.save();
         try {
             drawContext.clip(Rectangle.ofXYWH(logoX - 2.0f, logoFinalY - 2.0f, LOGO_SIZE + 4.0f, clipHeight));
@@ -174,10 +175,6 @@ extends ClientBase {
         return value < 0.0f ? 0.0f : (value > 1.0f ? 1.0f : value);
     }
 
-    private static float lerp(float from, float to, float t) {
-        return from + (to - from) * t;
-    }
-
     private static float easeOutCubic(float t) {
         float clamped = IntroAnimation.clamp01(t);
         clamped = (float)(1.0 - Math.pow(1.0f - clamped, 3.0));
@@ -191,13 +188,9 @@ extends ClientBase {
     }
 
     private static int rainbowColor(float alpha, int offset) {
-        Color rainbow = ColorUtil.getRainbowColor(12, offset);
+        Color rainbow = new Color(Argb.rainbow(12, offset), true);
         return new Color(rainbow.getRed(), rainbow.getGreen(), rainbow.getBlue(),
                 Math.round(255.0f * IntroAnimation.clamp01(alpha))).getRGB();
     }
 
-    private static int withAlpha(int color, float alpha) {
-        int nextAlpha = Math.round(255.0f * IntroAnimation.clamp01(alpha));
-        return nextAlpha << 24 | color & 0x00FFFFFF;
-    }
 }

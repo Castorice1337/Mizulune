@@ -104,7 +104,7 @@ extends AntiKBMode {
                 try {
                     packet.handle(mc.getConnection());
                 } catch (Exception exception) {
-                    exception.printStackTrace();
+                    logger.debug("Failed to handle queued AntiKB packet", exception);
                 }
             }
             this.shouldFlushMotion = false;
@@ -456,7 +456,7 @@ extends AntiKBMode {
             try {
                 mc.getConnection().send(packet);
             } catch (Exception exception) {
-                exception.printStackTrace();
+                logger.debug("Failed to send queued AntiKB move packet", exception);
             }
         }
     }
@@ -466,7 +466,7 @@ extends AntiKBMode {
             try {
                 this.knockbackPacket.handle(mc.getConnection());
             } catch (Exception exception) {
-                exception.printStackTrace();
+                logger.debug("Failed to apply AntiKB knockback packet", exception);
             }
             this.knockbackPacket = null;
         }

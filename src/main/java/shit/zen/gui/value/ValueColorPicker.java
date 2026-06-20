@@ -4,7 +4,7 @@ import com.mojang.blaze3d.vertex.PoseStack;
 import java.awt.Color;
 import net.minecraft.util.Mth;
 import shit.zen.manager.ConfigManager;
-import shit.zen.utils.render.ColorUtil;
+import shit.zen.utils.render.Argb;
 import shit.zen.utils.render.RenderUtil;
 import shit.zen.value.GradientSpec;
 import shit.zen.value.MizuColor;
@@ -104,7 +104,7 @@ public final class ValueColorPicker {
 
     public void onMouseRelease() {
         if (this.dragging != DragPart.NONE) {
-            ConfigManager.saveAllIfReady();
+            ConfigManager.requestSaveIfReady();
         }
         this.dragging = DragPart.NONE;
     }
@@ -142,7 +142,7 @@ public final class ValueColorPicker {
         for (int i = 0; i < checkerCells; i++) {
             float cellX = layout.alphaX + layout.alphaWidth * (float)i / (float)checkerCells;
             float nextX = layout.alphaX + layout.alphaWidth * (float)(i + 1) / (float)checkerCells;
-            int checker = i % 2 == 0 ? ColorUtil.fromRGB(46, 46, 46) : ColorUtil.fromRGB(74, 74, 74);
+            int checker = i % 2 == 0 ? Argb.fromRgb(46, 46, 46) : Argb.fromRgb(74, 74, 74);
             RenderUtil.drawFilledRect(poseStack, cellX, layout.alphaY, nextX - cellX + 0.5f, layout.sliderHeight,
                     this.applyAlpha(checker, alpha));
         }

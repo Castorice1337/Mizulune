@@ -17,7 +17,7 @@ import shit.zen.render.GlHelper;
 import shit.zen.render.Paint;
 import shit.zen.render.RoundedRectangle;
 import shit.zen.utils.math.Easings;
-import shit.zen.utils.render.ColorUtil;
+import shit.zen.utils.render.Argb;
 import shit.zen.event.EventTarget;
 
 public class PotionEffectsHud
@@ -199,19 +199,19 @@ extends HudElement {
             int effectColor = this.getEffectColor(entry.effectInstance.getEffect());
             float barWidth = totalWidth - iconBoxWidth;
             float barX = x + iconBoxWidth;
-            this.iconBgPaint.setColor(ColorUtil.fromARGB(30, 30, 35, (int)(80.0f * animHeight)));
+            this.iconBgPaint.setColor(Argb.fromRgbaComponents(30, 30, 35, (int)(80.0f * animHeight)));
             drawContext.drawRoundedRect(RoundedRectangle.ofXYWHRadii(barX, entryY, barWidth, animWidth, new float[]{0.0f, 0.0f, 4.5f, 4.5f, 4.5f, 4.5f, 0.0f, 0.0f}), this.iconBgPaint);
             float durationPct = entry.effectInstance.isInfiniteDuration() ? 1.0f : (float)entry.effectInstance.getDuration() / (float)entry.originalDuration;
-            this.effectIconPaint.setColor(ColorUtil.fromARGB(effectColor >> 16 & 0xFF, effectColor >> 8 & 0xFF, effectColor & 0xFF, (int)(140.0f * animHeight)));
+            this.effectIconPaint.setColor(Argb.fromRgbaComponents(effectColor >> 16 & 0xFF, effectColor >> 8 & 0xFF, effectColor & 0xFF, (int)(140.0f * animHeight)));
             if (durationPct > 0.0f) {
                 drawContext.drawRoundedRect(RoundedRectangle.ofXYWHRadii(barX, entryY, barWidth * durationPct, animWidth, new float[]{0.0f, 0.0f, cornerRadius * durationPct, cornerRadius * durationPct, cornerRadius * durationPct, cornerRadius * durationPct, 0.0f, 0.0f}), this.effectIconPaint);
             }
             int r = effectColor >> 16 & 0xFF;
             int g = effectColor >> 8 & 0xFF;
             int b = effectColor & 0xFF;
-            this.backgroundPaint.setColor(ColorUtil.fromARGB((int)((float)r * 0.7f + 76.5f), (int)((float)g * 0.7f + 76.5f), (int)((float)b * 0.7f + 76.5f), (int)(160.0f * animHeight)));
+            this.backgroundPaint.setColor(Argb.fromRgbaComponents((int)((float)r * 0.7f + 76.5f), (int)((float)g * 0.7f + 76.5f), (int)((float)b * 0.7f + 76.5f), (int)(160.0f * animHeight)));
             drawContext.drawRoundedRect(RoundedRectangle.ofXYWHRadii(x, entryY, iconBoxWidth, animWidth, new float[]{4.5f, 4.5f, 0.0f, 0.0f, 0.0f, 0.0f, 4.5f, 4.5f}), this.backgroundPaint);
-            this.timerBarPaint.setColor(ColorUtil.fromARGB(255, 255, 255, (int)(185.0f * animHeight)));
+            this.timerBarPaint.setColor(Argb.fromRgbaComponents(255, 255, 255, (int)(185.0f * animHeight)));
             float textY = entryY + (animWidth - (float)GlHelper.getFontAscent(this.effectNameFont)) / 2.0f;
             float ampWidth = GlHelper.getStringWidth(entry.amplifierText, this.timerFont);
             GlHelper.drawTextFormatted(entry.amplifierText, x + (iconBoxWidth - ampWidth) / 2.0f, textY, this.timerFont, this.timerBarPaint, false);

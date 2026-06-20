@@ -15,7 +15,7 @@ import shit.zen.render.FontStore;
 import shit.zen.utils.animation.SmoothAnimationTimer;
 import shit.zen.utils.math.Easings;
 import shit.zen.utils.misc.CursorUtil;
-import shit.zen.utils.render.ColorUtil;
+import shit.zen.utils.render.Argb;
 import shit.zen.utils.render.RenderHelper;
 import shit.zen.utils.render.RenderUtil;
 import shit.zen.value.Value;
@@ -70,20 +70,20 @@ extends UIElement {
         this.expandTimer.tick();
         float expandAmount = this.expandTimer.getValueF();
         this.totalHeight = 20.0f + expandAmount * this.settingsHeightTimer.getValueF();
-        this.isHovered = this.parentPanel.equals(NewClickGui.focusedPanel) && CursorUtil.isInBounds(mouseX, mouseY, this.posX, this.posY, 120.0f, this.totalHeight);
-        RenderUtil.drawFilledRect(poseStack, this.posX + 1.0f, this.posY + 20.0f, 118.0f, this.totalHeight - 20.0f, ColorUtil.withAlpha(BG_COLOR, expandAmount * alpha));
+        this.isHovered = this.parentPanel.equals(clickGui.getFocusedPanel()) && CursorUtil.isInBounds(mouseX, mouseY, this.posX, this.posY, 120.0f, this.totalHeight);
+        RenderUtil.drawFilledRect(poseStack, this.posX + 1.0f, this.posY + 20.0f, 118.0f, this.totalHeight - 20.0f, Argb.withAlpha(BG_COLOR, expandAmount * alpha));
         float hoverAmount = this.hoveredTimer.getValueF();
         if (hoverAmount > 0.0f) {
-            RenderUtil.drawFilledRect(poseStack, this.posX + 0.5f, this.posY, 119.0f, 20.0f, ColorUtil.withAlpha(-1, 0.1f * alpha * hoverAmount));
+            RenderUtil.drawFilledRect(poseStack, this.posX + 0.5f, this.posY, 119.0f, 20.0f, Argb.withAlpha(-1, 0.1f * alpha * hoverAmount));
         }
         if (1.0f - (enabledAmount = this.enabledTimer.getValueF()) > 0.0f) {
-            FontStore.AXIFORMA_REGULAR_16.drawStringCentered(poseStack, this.module.getName(), this.posX + 60.0f, this.posY + (20.0f - FontStore.AXIFORMA_REGULAR_16.getFontHeight()) / 2.0f, ColorUtil.withAlpha(-1, alpha * (1.0f - enabledAmount) * 0.6f));
+            FontStore.AXIFORMA_REGULAR_16.drawStringCentered(poseStack, this.module.getName(), this.posX + 60.0f, this.posY + (20.0f - FontStore.AXIFORMA_REGULAR_16.getFontHeight()) / 2.0f, Argb.withAlpha(-1, alpha * (1.0f - enabledAmount) * 0.6f));
         }
         if (enabledAmount > 0.0f) {
             titleWidth = FontStore.AXIFORMA_BOLD_16.getStringWidth(this.module.getName());
             titleY = this.posY + (20.0f - FontStore.AXIFORMA_BOLD_16.getFontHeight()) / 2.0f;
-            RenderUtil.drawShadow(poseStack, this.posX + (120.0f - titleWidth) / 2.0f, titleY + FontStore.AXIFORMA_BOLD_16.getFontHeight() / 4.0f, titleWidth, FontStore.AXIFORMA_BOLD_16.getFontHeight() / 2.0f, 12, ColorUtil.withAlpha(-13768502, alpha * enabledAmount * 0.36f));
-            FontStore.AXIFORMA_BOLD_16.drawStringCentered(poseStack, this.module.getName(), this.posX + 60.0f, titleY, ColorUtil.withAlpha(-13768502, alpha * enabledAmount));
+            RenderUtil.drawShadow(poseStack, this.posX + (120.0f - titleWidth) / 2.0f, titleY + FontStore.AXIFORMA_BOLD_16.getFontHeight() / 4.0f, titleWidth, FontStore.AXIFORMA_BOLD_16.getFontHeight() / 2.0f, 12, Argb.withAlpha(-13768502, alpha * enabledAmount * 0.36f));
+            FontStore.AXIFORMA_BOLD_16.drawStringCentered(poseStack, this.module.getName(), this.posX + 60.0f, titleY, Argb.withAlpha(-13768502, alpha * enabledAmount));
         }
         if (this.hasValues()) {
             String arrowIcon = String.valueOf('\ueb4e');
@@ -91,7 +91,7 @@ extends UIElement {
             float arrowX = this.posX + 120.0f - titleY - 6.0f;
             float arrowY = this.posY + (20.0f - FontStore.MATERIAL_20.getFontHeight()) / 2.0f + 1.0f;
             RenderHelper.pushRotateAround(poseStack, arrowX + titleY / 2.0f, arrowY + FontStore.MATERIAL_20.getFontHeight() / 2.0f - 1.0f, 180.0f * expandAmount);
-            FontStore.MATERIAL_20.drawString(poseStack, arrowIcon, arrowX, arrowY, ColorUtil.withAlpha(-1, (0.8f - 0.3f * expandAmount) * alpha));
+            FontStore.MATERIAL_20.drawString(poseStack, arrowIcon, arrowX, arrowY, Argb.withAlpha(-1, (0.8f - 0.3f * expandAmount) * alpha));
             RenderHelper.popPose(poseStack);
         }
         if (this.isExpanded) {
@@ -201,6 +201,6 @@ extends UIElement {
 
     static {
         BUILD_TAG = "17";
-        BG_COLOR = ColorUtil.fromRGB(32, 32, 32);
+        BG_COLOR = Argb.fromRgb(32, 32, 32);
     }
 }

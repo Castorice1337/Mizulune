@@ -5,6 +5,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.URLDecoder;
+import java.nio.file.Path;
 import java.nio.charset.StandardCharsets;
 import java.util.Locale;
 import shit.zen.utils.misc.Assets;
@@ -29,13 +30,17 @@ public class StaticFileHandler extends AbstractHttpHandler {
         if (relative.isEmpty() || relative.endsWith("/")) {
             relative += "index.html";
         }
-        String classpath = this.resourcePath + "/" + relative;
+        String normalized = normalizeRelativePath(relative);
+        if (normalized == null) {
+            return 403;
+        }
+        String classpath = this.resourcePath + "/" + normalized;
         InputStream resource = Assets.open(classpath);
         if (resource == null) {
             return 404;
         }
         try (resource) {
-            exchange.getResponseHeaders().add("Content-Type", guessContentType(relative));
+            exchange.getResponseHeaders().add("Content-Type", guessContentType(normalized));
             resource.transferTo(out);
         }
         return 200;
@@ -66,5 +71,21 @@ public class StaticFileHandler extends AbstractHttpHandler {
         if (lower.endsWith(".woff2")) return "font/woff2";
         if (lower.endsWith(".ttf")) return "font/ttf";
         return "application/octet-stream";
+    }
+
+    private static String normalizeRelativePath(String relative) {
+        String candidate = relative.replace('\\', '/');
+        if (candidate.indexOf('\0') >= 0 || candidate.startsWith("/") || candidate.startsWith("../") || candidate.equals("..")) {
+            return null;
+        }
+        Path normalizedPath = Path.of(candidate).normalize();
+        if (normalizedPath.isAbsolute()) {
+            return null;
+        }
+        String normalized = normalizedPath.toString().replace('\\', '/');
+        if (normalized.isEmpty() || normalized.equals(".") || normalized.equals("..") || normalized.startsWith("../") || normalized.contains("/../")) {
+            return null;
+        }
+        return normalized;
     }
 }
