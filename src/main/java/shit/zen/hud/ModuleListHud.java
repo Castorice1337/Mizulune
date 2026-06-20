@@ -360,6 +360,7 @@ public class ModuleListHud extends HudElement {
         boolean broken = this.breakEnabled == null || this.breakEnabled.getValue();
         if (!broken) {
             this.drawConnectedBackgroundBlur(drawContext, layouts, alignment);
+            this.drawConnectedBackgroundGlow(drawContext, layouts, rows, alignment);
         }
         for (RowRenderLayout layout : layouts) {
             this.renderRow(drawContext, rows, layout, broken, alignment);
@@ -401,11 +402,11 @@ public class ModuleListHud extends HudElement {
         RoundedRectangle bounds = this.rowBounds(layout, broken, alignment);
         int rowColor = this.colorForPosition(layout.rowIndex, 0.5f, Math.max(1, rows.size() - 1));
 
-        if (this.backgroundGlowEnabled.getValue()) {
-            this.drawBackgroundGlow(drawContext, bounds, rowColor, layout.progress, broken);
-        }
         if (broken && this.backgroundBlurEnabled.getValue() && Renderer.isSkikoEnabled()) {
             this.drawBackgroundBlur(drawContext, bounds, layout.progress);
+        }
+        if (broken && this.backgroundGlowEnabled.getValue()) {
+            this.drawBackgroundGlow(drawContext, bounds, rowColor, layout.progress, true);
         }
         if (this.backgroundEnabled.getValue()) {
             try (Paint paint = new Paint()) {
@@ -498,6 +499,48 @@ public class ModuleListHud extends HudElement {
         return progress;
     }
 
+    private void drawConnectedBackgroundGlow(DrawContext drawContext, List<RowRenderLayout> layouts,
+                                             List<AnimatedRow> rows, Alignment alignment) {
+        if (!this.backgroundGlowEnabled.getValue() || layouts.isEmpty()) {
+            return;
+        }
+        float radius = this.settingFloat(this.glowRadius);
+        int iterations = Math.max(1, this.settingInt(this.glowIterations));
+        int baseAlpha = Math.round((float)this.settingInt(this.glowAlpha) * this.maxRowProgress(layouts));
+        if (radius <= 0.0f || baseAlpha <= 0) {
+            return;
+        }
+        try (Path outline = new Path();
+             Paint paint = new Paint()) {
+            Rectangle bounds = this.addConnectedOutlinePath(outline, layouts, alignment);
+            if (bounds == null) {
+                return;
+            }
+            int maxRowIndex = Math.max(1, rows.size() - 1);
+            int topColor = this.colorForPosition(layouts.get(0).rowIndex, 0.5f, maxRowIndex);
+            int bottomColor = this.colorForPosition(layouts.get(layouts.size() - 1).rowIndex, 0.5f, maxRowIndex);
+            paint.setStrokeCap(Paint.StrokeCap.STROKE);
+            paint.setStrokeJoin(Paint.StrokeJoin.ROUND);
+            for (int i = iterations; i >= 1; i--) {
+                float t = (float)i / (float)iterations;
+                float spread = radius * t;
+                int alpha = Math.round((float)baseAlpha * (1.0f - t * 0.72f) / (float)iterations);
+                if (alpha <= 0) {
+                    continue;
+                }
+                int startColor = Argb.withAlpha(topColor, alpha);
+                int endColor = Argb.withAlpha(bottomColor, alpha);
+                paint.setColor(startColor);
+                paint.setGradCoords(new Paint.GradientCoords(bounds.getX(), bounds.getY(),
+                        bounds.getX(), bounds.getBottom(), startColor, endColor));
+                paint.setStrokeWidth(Math.max(1.0f, spread * 1.75f));
+                paint.setMaskFilter(new Paint.BlurMaskFilter(Math.max(0.01f, spread * 0.65f)));
+                drawContext.drawPath(outline, paint);
+            }
+            paint.setMaskFilter(null);
+        }
+    }
+
     private void drawBackgroundGlow(DrawContext drawContext, RoundedRectangle bounds, int rowColor, float progress, boolean broken) {
         float radius = this.settingFloat(this.glowRadius);
         int iterations = Math.max(1, this.settingInt(this.glowIterations));
@@ -540,6 +583,51 @@ public class ModuleListHud extends HudElement {
 
     private float expandedCornerRadius(float radius, float spread) {
         return radius > 0.0f ? radius + spread : 0.0f;
+    }
+
+    private Rectangle addConnectedOutlinePath(Path path, List<RowRenderLayout> layouts, Alignment alignment) {
+        List<RoundedRectangle> boundsList = new ArrayList<>();
+        float minX = Float.POSITIVE_INFINITY;
+        float minY = Float.POSITIVE_INFINITY;
+        float maxX = Float.NEGATIVE_INFINITY;
+        float maxY = Float.NEGATIVE_INFINITY;
+        for (RowRenderLayout layout : layouts) {
+            RoundedRectangle bounds = this.rowBounds(layout, false, alignment);
+            if (bounds.getWidth() <= 0.0f || bounds.getHeight() <= 0.0f) {
+                continue;
+            }
+            boundsList.add(bounds);
+            minX = Math.min(minX, bounds.x1);
+            minY = Math.min(minY, bounds.y1);
+            maxX = Math.max(maxX, bounds.x2);
+            maxY = Math.max(maxY, bounds.y2);
+        }
+        if (boundsList.isEmpty() || !Float.isFinite(minX) || maxX <= minX || maxY <= minY) {
+            return null;
+        }
+        RoundedRectangle first = boundsList.get(0);
+        path.moveTo(first.x1, first.y1);
+        path.lineTo(first.x2, first.y1);
+        for (int i = 0; i < boundsList.size(); i++) {
+            RoundedRectangle bounds = boundsList.get(i);
+            path.lineTo(bounds.x2, bounds.y2);
+            if (i + 1 < boundsList.size()) {
+                RoundedRectangle next = boundsList.get(i + 1);
+                path.lineTo(next.x2, bounds.y2);
+            }
+        }
+        RoundedRectangle last = boundsList.get(boundsList.size() - 1);
+        path.lineTo(last.x1, last.y2);
+        for (int i = boundsList.size() - 1; i >= 0; i--) {
+            RoundedRectangle bounds = boundsList.get(i);
+            path.lineTo(bounds.x1, bounds.y1);
+            if (i > 0) {
+                RoundedRectangle previous = boundsList.get(i - 1);
+                path.lineTo(previous.x1, bounds.y1);
+            }
+        }
+        path.closePath();
+        return Rectangle.ofCorners(minX, minY, maxX, maxY);
     }
 
     private void drawSideLine(DrawContext drawContext, RoundedRectangle bounds, int color, Alignment rowAlignment, boolean broken) {
