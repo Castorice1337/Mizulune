@@ -3,10 +3,16 @@ package shit.zen.modules.impl.render;
 import shit.zen.modules.Category;
 import shit.zen.modules.Module;
 import shit.zen.render.LiquidGlassSettings;
+import shit.zen.value.MizuColor;
 import shit.zen.value.Value;
 import shit.zen.value.ValueGroup;
 
 public class HUD extends Module {
+    public static HUD INSTANCE;
+    public static final MizuColor DEFAULT_CLIENT_COLOR_START = MizuColor.ofRgb(0xEA, 0xF7, 0xFF);
+    public static final MizuColor DEFAULT_CLIENT_COLOR_END = MizuColor.ofRgb(0xFF, 0xC4, 0xF1);
+    public static final MizuColor DEFAULT_CLIENT_GLOW_COLOR = MizuColor.ofRgb(0x68, 0xF4, 0xF0);
+
     public Value<Number> liquidGlassRadius;
     public Value<Number> liquidGlassBlurIterations;
     public Value<Number> liquidGlassBlurRadius;
@@ -16,13 +22,25 @@ public class HUD extends Module {
     public Value<Number> liquidGlassRefractionStrength;
     public Value<Number> liquidGlassOpacity;
     public Value<Number> liquidGlassDarkness;
+    public Value<MizuColor> clientColorStart;
+    public Value<MizuColor> clientColorEnd;
+    public Value<MizuColor> clientGlowColor;
 
     public HUD() {
         super("HUD", Category.RENDER);
+        INSTANCE = this;
     }
 
     @Override
     protected void configureValueTree(ValueGroup root) {
+        ValueGroup clientColor = root.group("client_color", "Client Color");
+        this.clientColorStart = clientColor.color("start", "Start", DEFAULT_CLIENT_COLOR_START)
+                .alias("Client Color Start");
+        this.clientColorEnd = clientColor.color("end", "End", DEFAULT_CLIENT_COLOR_END)
+                .alias("Client Color End");
+        this.clientGlowColor = clientColor.color("glow", "Glow", DEFAULT_CLIENT_GLOW_COLOR)
+                .alias("Client Glow Color");
+
         ValueGroup liquidGlass = root.group("liquid_glass", "Liquid Glass");
         this.liquidGlassRadius = listen(liquidGlass.decimal(
                 "radius", "Radius", LiquidGlassSettings.DEFAULT_RADIUS, 1.0f, 8.0f, 0.01f)
@@ -76,5 +94,27 @@ public class HUD extends Module {
 
     private float floatValue(Value<Number> setting) {
         return setting.getValue().floatValue();
+    }
+
+    public static MizuColor clientColorStart() {
+        return INSTANCE != null && INSTANCE.clientColorStart != null
+                ? INSTANCE.clientColorStart.getValue()
+                : DEFAULT_CLIENT_COLOR_START;
+    }
+
+    public static MizuColor clientColorEnd() {
+        return INSTANCE != null && INSTANCE.clientColorEnd != null
+                ? INSTANCE.clientColorEnd.getValue()
+                : DEFAULT_CLIENT_COLOR_END;
+    }
+
+    public static MizuColor clientGlowColor() {
+        return INSTANCE != null && INSTANCE.clientGlowColor != null
+                ? INSTANCE.clientGlowColor.getValue()
+                : DEFAULT_CLIENT_GLOW_COLOR;
+    }
+
+    public static MizuColor clientColorAt(float progress) {
+        return clientColorStart().interpolateTo(clientColorEnd(), progress);
     }
 }

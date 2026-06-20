@@ -9,6 +9,7 @@ import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 import net.minecraft.util.Mth;
 import shit.zen.gui.newclickgui.CategoryPanel;
+import shit.zen.gui.newclickgui.ValueTreeElementRenderer;
 import shit.zen.manager.ConfigManager;
 import shit.zen.modules.Category;
 import shit.zen.render.Renderer;
@@ -69,7 +70,22 @@ extends Screen {
             focusedPanel = categoryPanel;
             return true;
         }
+        ValueTreeElementRenderer.getInstance().blurText();
         return super.mouseClicked(mouseX, mouseY, button);
+    }
+
+    public boolean charTyped(char codePoint, int modifiers) {
+        if (ValueTreeElementRenderer.getInstance().charTyped(codePoint, modifiers)) {
+            return true;
+        }
+        return super.charTyped(codePoint, modifiers);
+    }
+
+    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+        if (ValueTreeElementRenderer.getInstance().keyPressed(keyCode, scanCode, modifiers)) {
+            return true;
+        }
+        return super.keyPressed(keyCode, scanCode, modifiers);
     }
 
     public boolean mouseReleased(double mouseX, double mouseY, int button) {

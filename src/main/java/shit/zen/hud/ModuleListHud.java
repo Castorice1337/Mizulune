@@ -10,6 +10,7 @@ import shit.zen.event.impl.GlRenderEvent;
 import shit.zen.event.impl.Render2DEvent;
 import shit.zen.manager.ConfigManager;
 import shit.zen.modules.Module;
+import shit.zen.modules.impl.render.HUD;
 import shit.zen.modules.impl.render.Interface;
 import shit.zen.render.DrawContext;
 import shit.zen.render.FontPresets;
@@ -81,6 +82,38 @@ public class ModuleListHud extends HudElement {
         }
     }
 
+    private static final class RowRenderLayout {
+        private final AnimatedRow row;
+        private final int rowIndex;
+        private final float x;
+        private final float y;
+        private final float width;
+        private final float height;
+        private final float fullHeight;
+        private final float progress;
+        private float linkHeight;
+
+        private RowRenderLayout(AnimatedRow row, int rowIndex, float x, float y, float width, float height,
+                                float fullHeight, float progress) {
+            this.row = row;
+            this.rowIndex = rowIndex;
+            this.x = x;
+            this.y = y;
+            this.width = width;
+            this.height = height;
+            this.fullHeight = fullHeight;
+            this.progress = progress;
+        }
+
+        private void linkTo(RowRenderLayout next) {
+            this.linkHeight = Math.max(0.0f, next.y - (this.y + this.height));
+        }
+
+        private float visualHeight(boolean broken) {
+            return this.height + (broken ? 0.0f : this.linkHeight);
+        }
+    }
+
     private static final float MIN_VISIBLE_EDGE = 4.0f;
     private static final float DEFAULT_ROW_HEIGHT = 14.0f;
     private static final float DEFAULT_PADDING_X = 4.0f;
@@ -90,6 +123,7 @@ public class ModuleListHud extends HudElement {
     private static final float SLIDE_DISTANCE = 18.0f;
 
     private Value<String> sideMode;
+    private Value<Boolean> breakEnabled;
     private Value<Boolean> backgroundEnabled;
     private Value<MizuColor> backgroundColor;
     private Value<Number> backgroundRadius;
@@ -111,6 +145,7 @@ public class ModuleListHud extends HudElement {
     private Value<String> sideLineMode;
     private Value<Number> sideLineWidth;
 
+    private Value<Boolean> useClientColor;
     private ModeValueGroup textColorGroup;
     private Value<MizuColor> solidTextColor;
     private Value<MizuColor> gradientColorStart;
@@ -148,6 +183,7 @@ public class ModuleListHud extends HudElement {
     protected void configureValueTree(ValueGroup root) {
         ValueGroup layout = root.group("layout", "Layout");
         this.sideMode = layout.enumChoice("side_mode", "Side Mode", "Auto", "Auto", "Left", "Right").alias("Side Mode");
+        this.breakEnabled = layout.bool("break", "Break", true).alias("Break");
         this.paddingX = layout.decimal("padding_x", "Padding X", DEFAULT_PADDING_X, 0.0f, 12.0f, 0.25f).alias("Padding X");
         this.paddingY = layout.decimal("padding_y", "Padding Y", DEFAULT_PADDING_Y, 0.0f, 8.0f, 0.25f).alias("Padding Y");
         this.rowHeight = layout.decimal("row_height", "Row Height", DEFAULT_ROW_HEIGHT, 9.0f, 24.0f, 0.25f).alias("Row Height");
@@ -174,7 +210,9 @@ public class ModuleListHud extends HudElement {
         this.sideLineMode = sideLine.enumChoice("mode", "Mode", "Auto", "Auto", "Left", "Right").alias("Side Line Mode");
         this.sideLineWidth = sideLine.decimal("width", "Width", 2.0f, 0.5f, 5.0f, 0.25f).alias("Side Line Width");
 
+        this.useClientColor = root.bool("use_client_color", "Use Client Color", true).alias("Use Client Color");
         this.textColorGroup = root.modeGroup("text_color", "Text Color", "gradient", "solid", "gradient", "rainbow");
+        this.textColorGroup.visibleWhen(() -> !this.useClientColor.getValue());
         this.textColorGroup.getActiveValue().setValue("gradient");
         ValueGroup solid = this.textColorGroup.getModes().get("solid");
         this.solidTextColor = solid.color("color", "Color", MizuColor.ofArgb(255, 255, 255, 255));
@@ -316,6 +354,15 @@ public class ModuleListHud extends HudElement {
     }
 
     private void renderRows(DrawContext drawContext, List<AnimatedRow> rows, float x, float y, float width, Alignment alignment) {
+        List<RowRenderLayout> layouts = this.computeRowLayouts(rows, x, y, width, alignment);
+        boolean broken = this.breakEnabled == null || this.breakEnabled.getValue();
+        for (RowRenderLayout layout : layouts) {
+            this.renderRow(drawContext, rows, layout, broken, alignment);
+        }
+    }
+
+    private List<RowRenderLayout> computeRowLayouts(List<AnimatedRow> rows, float x, float y, float width, Alignment alignment) {
+        List<RowRenderLayout> layouts = new ArrayList<>();
         float cursorY = y;
         float rowHeightValue = this.settingFloat(this.rowHeight);
         float spacing = this.settingFloat(this.rowSpacing);
@@ -333,40 +380,63 @@ public class ModuleListHud extends HudElement {
             float animatedHeight = Math.max(0.1f, rowHeightValue * progress);
             float rowX = alignment == Alignment.RIGHT ? x + width - animatedWidth : x;
             float slideOffset = (alignment == Alignment.RIGHT ? SLIDE_DISTANCE : -SLIDE_DISTANCE) * (1.0f - progress);
-            this.renderRow(drawContext, rows, row, i, rowX + slideOffset, cursorY,
-                    animatedWidth, animatedHeight, rowHeightValue, progress, alignment);
+            layouts.add(new RowRenderLayout(row, i, rowX + slideOffset, cursorY,
+                    animatedWidth, animatedHeight, rowHeightValue, progress));
             cursorY += rowHeightValue * progress;
             hasRenderedRow = true;
         }
+        for (int i = 0; i < layouts.size() - 1; i++) {
+            layouts.get(i).linkTo(layouts.get(i + 1));
+        }
+        return layouts;
     }
 
-    private void renderRow(DrawContext drawContext, List<AnimatedRow> rows, AnimatedRow row, int index,
-                           float x, float y, float width, float height, float fullHeight,
-                           float progress, Alignment alignment) {
-        float radius = this.settingFloat(this.backgroundRadius);
-        RoundedRectangle bounds = RoundedRectangle.ofXYWHR(x, y, width, height, radius);
-        int rowColor = this.colorForPosition(index, 0.5f, Math.max(1, rows.size() - 1));
+    private void renderRow(DrawContext drawContext, List<AnimatedRow> rows, RowRenderLayout layout,
+                           boolean broken, Alignment alignment) {
+        RoundedRectangle bounds = this.rowBounds(layout, broken, alignment);
+        int rowColor = this.colorForPosition(layout.rowIndex, 0.5f, Math.max(1, rows.size() - 1));
 
         if (this.backgroundGlowEnabled.getValue()) {
-            this.drawBackgroundGlow(drawContext, bounds, rowColor, progress);
+            this.drawBackgroundGlow(drawContext, bounds, rowColor, layout.progress, broken);
         }
         if (this.backgroundBlurEnabled.getValue() && Renderer.isSkikoEnabled()) {
-            this.drawBackgroundBlur(drawContext, bounds, progress);
+            this.drawBackgroundBlur(drawContext, bounds, layout.progress);
         }
         if (this.backgroundEnabled.getValue()) {
             try (Paint paint = new Paint()) {
                 MizuColor color = this.backgroundColor.getValue();
-                paint.setColor(color.withAlpha(Math.round((float)color.alpha() * progress)).toArgb());
+                paint.setColor(color.withAlpha(Math.round((float)color.alpha() * layout.progress)).toArgb());
                 drawContext.drawRoundedRect(bounds, paint);
             }
         }
         if (this.sideLineEnabled.getValue()) {
-            this.drawSideLine(drawContext, bounds, this.withAlpha(rowColor, Math.round(255.0f * progress)), alignment);
+            this.drawSideLine(drawContext, bounds, this.withAlpha(rowColor, Math.round(255.0f * layout.progress)), alignment, broken);
         }
         drawContext.save();
-        drawContext.clipRoundedRect(bounds, true);
-        this.drawModuleName(row.name, x, y, width, fullHeight, index, rows.size(), progress, alignment);
+        drawContext.clipRoundedRect(this.textClipBounds(layout, bounds, broken), true);
+        this.drawModuleName(layout.row.name, layout.x, layout.y, layout.width, layout.fullHeight,
+                layout.rowIndex, rows.size(), layout.progress, alignment);
         drawContext.restore();
+    }
+
+    private RoundedRectangle rowBounds(RowRenderLayout layout, boolean broken, Alignment alignment) {
+        float radius = this.settingFloat(this.backgroundRadius);
+        if (broken) {
+            return RoundedRectangle.ofXYWHR(layout.x, layout.y, layout.width, layout.height, radius);
+        }
+        if (alignment == Alignment.RIGHT) {
+            return RoundedRectangle.ofXYWHRadii(layout.x, layout.y, layout.width, layout.visualHeight(false),
+                    new float[]{0.0f, 0.0f, 0.0f, radius});
+        }
+        return RoundedRectangle.ofXYWHRadii(layout.x, layout.y, layout.width, layout.visualHeight(false),
+                new float[]{0.0f, 0.0f, radius, 0.0f});
+    }
+
+    private RoundedRectangle textClipBounds(RowRenderLayout layout, RoundedRectangle visualBounds, boolean broken) {
+        if (broken) {
+            return visualBounds;
+        }
+        return RoundedRectangle.ofXYWHR(layout.x, layout.y, layout.width, layout.height, 0.0f);
     }
 
     private void drawBackgroundBlur(DrawContext drawContext, RoundedRectangle bounds, float progress) {
@@ -392,7 +462,7 @@ public class ModuleListHud extends HudElement {
         drawContext.restore();
     }
 
-    private void drawBackgroundGlow(DrawContext drawContext, RoundedRectangle bounds, int rowColor, float progress) {
+    private void drawBackgroundGlow(DrawContext drawContext, RoundedRectangle bounds, int rowColor, float progress, boolean broken) {
         float radius = this.settingFloat(this.glowRadius);
         int iterations = Math.max(1, this.settingInt(this.glowIterations));
         int baseAlpha = Math.round((float)this.settingInt(this.glowAlpha) * progress);
@@ -405,24 +475,45 @@ public class ModuleListHud extends HudElement {
                 float spread = radius * t;
                 int alpha = Math.round((float)baseAlpha * (1.0f - t * 0.72f) / (float)iterations);
                 paint.setColor(this.withAlpha(rowColor, alpha));
-                drawContext.drawRoundedRect(RoundedRectangle.ofXYWHR(
-                        bounds.x1 - spread,
-                        bounds.y1 - spread,
-                        bounds.getWidth() + spread * 2.0f,
-                        bounds.getHeight() + spread * 2.0f,
-                        this.settingFloat(this.backgroundRadius) + spread), paint);
+                drawContext.drawRoundedRect(this.expandedGlowBounds(bounds, spread, broken), paint);
             }
         }
     }
 
-    private void drawSideLine(DrawContext drawContext, RoundedRectangle bounds, int color, Alignment rowAlignment) {
+    private RoundedRectangle expandedGlowBounds(RoundedRectangle bounds, float spread, boolean broken) {
+        if (broken) {
+            return RoundedRectangle.ofXYWHR(
+                    bounds.x1 - spread,
+                    bounds.y1 - spread,
+                    bounds.getWidth() + spread * 2.0f,
+                    bounds.getHeight() + spread * 2.0f,
+                    this.settingFloat(this.backgroundRadius) + spread);
+        }
+        return RoundedRectangle.ofXYWHRadii(
+                bounds.x1 - spread,
+                bounds.y1 - spread,
+                bounds.getWidth() + spread * 2.0f,
+                bounds.getHeight() + spread * 2.0f,
+                new float[]{
+                        this.expandedCornerRadius(bounds.topLeftRadius, spread),
+                        this.expandedCornerRadius(bounds.topRightRadius, spread),
+                        this.expandedCornerRadius(bounds.bottomRightRadius, spread),
+                        this.expandedCornerRadius(bounds.bottomLeftRadius, spread)
+                });
+    }
+
+    private float expandedCornerRadius(float radius, float spread) {
+        return radius > 0.0f ? radius + spread : 0.0f;
+    }
+
+    private void drawSideLine(DrawContext drawContext, RoundedRectangle bounds, int color, Alignment rowAlignment, boolean broken) {
         float lineWidth = this.settingFloat(this.sideLineWidth);
         Alignment lineAlignment = this.resolveLineAlignment(rowAlignment);
         float lineX = lineAlignment == Alignment.RIGHT ? bounds.x2 - lineWidth : bounds.x1;
         try (Paint paint = new Paint()) {
             paint.setColor(color);
             drawContext.drawRoundedRect(RoundedRectangle.ofXYWHR(lineX, bounds.y1, lineWidth, bounds.getHeight(),
-                    Math.min(this.settingFloat(this.backgroundRadius), lineWidth)), paint);
+                    broken ? Math.min(this.settingFloat(this.backgroundRadius), lineWidth) : 0.0f), paint);
         }
     }
 
@@ -528,6 +619,15 @@ public class ModuleListHud extends HudElement {
     }
 
     private ColorProvider textColorProvider() {
+        if (this.useClientColor != null && this.useClientColor.getValue()) {
+            return new GradientColorProvider(
+                    HUD.clientColorStart(),
+                    HUD.clientColorEnd(),
+                    "Vertical List",
+                    true,
+                    true,
+                    this.settingFloat(this.dynamicGradientSpeed));
+        }
         String mode = this.textColorGroup.getActiveModeId();
         if ("rainbow".equals(mode)) {
             return new RainbowColorProvider(true,

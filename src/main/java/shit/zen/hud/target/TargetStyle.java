@@ -30,6 +30,7 @@ extends ClientBase {
         }
         registry.put(RoundTargetStyle.class, new RoundTargetStyle());
         registry.put(LiteTargetStyle.class, new LiteTargetStyle());
+        registry.put(ModernTargetStyle.class, new ModernTargetStyle());
     }
 
     public static TargetStyle getByName(String string) {

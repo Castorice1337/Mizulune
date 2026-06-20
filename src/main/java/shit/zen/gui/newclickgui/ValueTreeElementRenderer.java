@@ -6,8 +6,11 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.util.Mth;
+import org.lwjgl.glfw.GLFW;
 import shit.zen.gui.NewClickGui;
 import shit.zen.gui.value.ValueColorPicker;
 import shit.zen.manager.ConfigManager;
@@ -38,6 +41,8 @@ public final class ValueTreeElementRenderer {
     private static final float DROPDOWN_BASE_HEIGHT = 36.0f;
     private static final float DROPDOWN_ITEM_HEIGHT = 14.0f;
     private static final float GROUP_HEIGHT = 18.0f;
+    private static final float TEXT_HEIGHT = 34.0f;
+    private static final int DEFAULT_MAX_TEXT_LENGTH = 96;
 
     private final Map<Value<?>, Boolean> groupExpanded = new HashMap<>();
     private final Map<Value<?>, Boolean> dropdownOpen = new HashMap<>();
@@ -51,6 +56,7 @@ public final class ValueTreeElementRenderer {
     private final Map<Value<?>, SmoothAnimationTimer> highlightYTimers = new HashMap<>();
     private Value<Number> draggingNumber;
     private Value<NumericRange> draggingRange;
+    private Value<String> focusedTextValue;
     private boolean draggingUpperRange;
 
     private ValueTreeElementRenderer() {
@@ -129,6 +135,50 @@ public final class ValueTreeElementRenderer {
         this.draggingRange = null;
     }
 
+    public void blurText() {
+        if (this.focusedTextValue != null) {
+            this.focusedTextValue = null;
+            ConfigManager.saveAllIfReady();
+        }
+    }
+
+    public boolean charTyped(char codePoint, int modifiers) {
+        if (this.focusedTextValue == null || !this.isAllowedTextCharacter(codePoint)) {
+            return false;
+        }
+        this.appendText(String.valueOf(codePoint));
+        return true;
+    }
+
+    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+        if (this.focusedTextValue == null) {
+            return false;
+        }
+        if (keyCode == GLFW.GLFW_KEY_ENTER || keyCode == GLFW.GLFW_KEY_KP_ENTER || keyCode == GLFW.GLFW_KEY_ESCAPE) {
+            this.blurText();
+            return true;
+        }
+        if (Screen.isPaste(keyCode)) {
+            this.appendText(Minecraft.getInstance().keyboardHandler.getClipboard());
+            return true;
+        }
+        if (keyCode == GLFW.GLFW_KEY_BACKSPACE) {
+            String current = String.valueOf(this.focusedTextValue.getValue());
+            if (!current.isEmpty()) {
+                int end = current.offsetByCodePoints(current.length(), -1);
+                this.focusedTextValue.setValue(current.substring(0, end));
+                ConfigManager.saveAllIfReady();
+            }
+            return true;
+        }
+        if (keyCode == GLFW.GLFW_KEY_DELETE) {
+            this.focusedTextValue.setValue("");
+            ConfigManager.saveAllIfReady();
+            return true;
+        }
+        return false;
+    }
+
     private float renderGroup(CategoryPanel parentPanel, PoseStack poseStack, ValueGroup group, float rowX, float y,
                               float rowWidth, float rootX, int mouseX, int mouseY, float alpha, int depth) {
         boolean expanded = this.isGroupExpanded(group);
@@ -204,6 +254,7 @@ public final class ValueTreeElementRenderer {
             case INTEGER, DECIMAL -> this.renderNumber(poseStack, value, x, y, width, mouseX, alpha);
             case ENUM -> this.renderDropdownValue(poseStack, value, value.getDisplayName(), x, y, width, mouseX, mouseY, alpha, false);
             case MULTI_ENUM -> this.renderMultiEnum(poseStack, value, x, y, width, mouseX, mouseY, alpha);
+            case TEXT -> this.renderText(poseStack, value, x, y, width, mouseX, mouseY, alpha);
             case INT_RANGE, DECIMAL_RANGE -> this.renderRange(poseStack, value, x, y, width, mouseX, alpha);
             case COLOR -> this.renderColor(poseStack, value, x, y, width, mouseX, mouseY, alpha);
             case GRADIENT -> this.renderGradient(poseStack, value, x, y, width, mouseX, mouseY, alpha);
@@ -434,8 +485,46 @@ public final class ValueTreeElementRenderer {
         return BOOLEAN_HEIGHT;
     }
 
+    private float renderText(PoseStack poseStack, Value<?> value, float x, float y, float width,
+                             int mouseX, int mouseY, float alpha) {
+        boolean focused = this.focusedTextValue == value;
+        float inputX = x + SIDE_PADDING;
+        float inputY = y + 18.0f;
+        float inputWidth = Math.max(40.0f, width - SIDE_PADDING * 2.0f);
+        float inputHeight = 13.0f;
+        boolean hovered = CursorUtil.isInBounds(mouseX, mouseY, inputX, inputY, inputWidth, inputHeight);
+
+        String name = this.clip(value.getDisplayName(), FontStore.AXIFORMA_REGULAR_14, width - 16.0f);
+        FontStore.AXIFORMA_REGULAR_14.drawString(poseStack, name, x + SIDE_PADDING,
+                y + (18.0f - FontStore.AXIFORMA_REGULAR_14.getFontHeight()) / 2.0f + 1.0f,
+                ColorUtil.withAlpha(-1, alpha * 0.8f));
+
+        int base = ColorUtil.fromRGB(focused ? 82 : hovered ? 70 : 56, focused ? 82 : hovered ? 70 : 56, focused ? 82 : hovered ? 70 : 56);
+        RenderUtil.drawRoundedRect(poseStack, inputX, inputY, inputWidth, inputHeight, 3.0f, ColorUtil.withAlpha(base, alpha));
+        if (focused) {
+            RenderUtil.drawRoundedRect(poseStack, inputX, inputY, inputWidth, 1.0f, 0.5f,
+                    ColorUtil.withAlpha(CategoryPanel.ACCENT_COLOR, alpha));
+        }
+
+        String raw = String.valueOf(value.getValue());
+        String visibleText = this.clipTail(raw, FontStore.AXIFORMA_BOLD_13, inputWidth - 10.0f);
+        float textY = inputY + (inputHeight - FontStore.AXIFORMA_BOLD_13.getFontHeight()) / 2.0f;
+        FontStore.AXIFORMA_BOLD_13.drawString(poseStack, visibleText, inputX + 5.0f, textY,
+                ColorUtil.withAlpha(-1, alpha * (raw.isEmpty() ? 0.38f : 0.86f)));
+        if (focused && ((System.currentTimeMillis() / 500L) & 1L) == 0L) {
+            float cursorX = Math.min(inputX + inputWidth - 5.0f,
+                    inputX + 5.0f + FontStore.AXIFORMA_BOLD_13.getStringWidth(visibleText) + 1.0f);
+            RenderUtil.drawFilledRect(poseStack, cursorX, inputY + 3.0f, 1.0f, inputHeight - 6.0f,
+                    ColorUtil.withAlpha(-1, alpha * 0.86f));
+        }
+        return TEXT_HEIGHT;
+    }
+
     private boolean onGroupClick(ValueGroup group, float rowX, float y, float rowWidth, float rootX,
                                  int mouseX, int mouseY, int button, int depth) {
+        if (button == 0 || button == 1) {
+            this.blurText();
+        }
         if (mouseY >= y && mouseY <= y + GROUP_HEIGHT) {
             if (group instanceof ToggleValueGroup toggleGroup
                     && button == 0
@@ -465,6 +554,9 @@ public final class ValueTreeElementRenderer {
 
     private boolean onModeGroupClick(ModeValueGroup group, float rowX, float y, float rowWidth, float rootX,
                                      int mouseX, int mouseY, int button, int depth) {
+        if (button == 0 || button == 1) {
+            this.blurText();
+        }
         if (mouseY >= y && mouseY <= y + GROUP_HEIGHT && mouseX < rowX + rowWidth - SIDE_PADDING) {
             if (button == 0 || button == 1) {
                 this.groupExpanded.put(group, !this.isGroupExpanded(group));
@@ -493,6 +585,9 @@ public final class ValueTreeElementRenderer {
         if (button != 0 && button != 1) {
             return false;
         }
+        if (value.getType() != ValueType.TEXT) {
+            this.blurText();
+        }
         return switch (value.getType()) {
             case BOOLEAN -> {
                 if (CursorUtil.isInBounds(mouseX, mouseY, x, y, width, BOOLEAN_HEIGHT)) {
@@ -513,6 +608,18 @@ public final class ValueTreeElementRenderer {
             }
             case ENUM -> this.onDropdownClick(value, x, y, width, mouseX, mouseY, button);
             case MULTI_ENUM -> this.onMultiEnumClick((Value<List<String>>)value, x, y, width, mouseX, mouseY, button);
+            case TEXT -> {
+                if (button == 0 && CursorUtil.isInBounds(mouseX, mouseY, x + SIDE_PADDING, y + 18.0f,
+                        Math.max(40.0f, width - SIDE_PADDING * 2.0f), 13.0f)) {
+                    this.focusedTextValue = (Value<String>)value;
+                    yield true;
+                }
+                if (this.focusedTextValue == value) {
+                    this.blurText();
+                    yield true;
+                }
+                yield false;
+            }
             case INT_RANGE, DECIMAL_RANGE -> {
                 if (CursorUtil.isInBounds(mouseX, mouseY, x + SIDE_PADDING, y + SLIDER_HEIGHT / 2.0f + 4.0f,
                         width - SIDE_PADDING * 2.0f, 7.0f)) {
@@ -733,6 +840,7 @@ public final class ValueTreeElementRenderer {
         return switch (value.getType()) {
             case INTEGER, DECIMAL, INT_RANGE, DECIMAL_RANGE -> SLIDER_HEIGHT;
             case ENUM, MULTI_ENUM -> this.dropdownHeight(value);
+            case TEXT -> TEXT_HEIGHT;
             case COLOR, GRADIENT -> BOOLEAN_HEIGHT + COLOR_PICKER.getExtraHeight(value, 1.0f);
             default -> BOOLEAN_HEIGHT;
         };
@@ -818,6 +926,41 @@ public final class ValueTreeElementRenderer {
         return metadataValue instanceof Number number ? number.doubleValue() : fallback;
     }
 
+    private void appendText(String text) {
+        if (this.focusedTextValue == null || text == null || text.isEmpty()) {
+            return;
+        }
+        String current = String.valueOf(this.focusedTextValue.getValue());
+        String filtered = this.sanitizeText(text);
+        int maxLength = this.textMaxLength(this.focusedTextValue);
+        String next = current + filtered;
+        if (next.length() > maxLength) {
+            next = next.substring(0, maxLength);
+        }
+        this.focusedTextValue.setValue(next);
+        ConfigManager.saveAllIfReady();
+    }
+
+    private int textMaxLength(Value<?> value) {
+        Object max = value.getMetadata().get("max_length");
+        return max instanceof Number number ? Math.max(1, number.intValue()) : DEFAULT_MAX_TEXT_LENGTH;
+    }
+
+    private String sanitizeText(String text) {
+        StringBuilder builder = new StringBuilder();
+        for (int i = 0; i < text.length(); i++) {
+            char ch = text.charAt(i);
+            if (this.isAllowedTextCharacter(ch)) {
+                builder.append(ch);
+            }
+        }
+        return builder.toString();
+    }
+
+    private boolean isAllowedTextCharacter(char ch) {
+        return ch >= ' ' && ch != 127;
+    }
+
     private float ratio(double value, double min, double max) {
         if (Math.abs(max - min) < 0.0001) {
             return 0.0f;
@@ -852,5 +995,16 @@ public final class ValueTreeElementRenderer {
             clipped = clipped.substring(0, clipped.length() - 1);
         }
         return clipped + "...";
+    }
+
+    private String clipTail(String text, CustomFont font, float maxWidth) {
+        String clipped = text == null ? "" : text;
+        if (font.getStringWidth(clipped) <= maxWidth) {
+            return clipped;
+        }
+        while (clipped.length() > 1 && font.getStringWidth("..." + clipped) > maxWidth) {
+            clipped = clipped.substring(1);
+        }
+        return "..." + clipped;
     }
 }
