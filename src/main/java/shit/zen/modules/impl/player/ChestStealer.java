@@ -87,6 +87,14 @@ extends Module {
         INSTANCE = this;
     }
 
+    @Override
+    public String getSuffix() {
+        String mode = this.smartStealingSetting.getValue()
+                ? "Smart"
+                : this.randomClickSetting.getValue() ? "Random" : "Normal";
+        return mode + " " + formatSuffixNumber(this.clickDelaySetting.getValue()) + "ms";
+    }
+
     public static boolean isRateLimited() {
         return !stealTimer.hasPassed(100L) && !openTimer.hasPassed((int)clickDelayMs);
     }

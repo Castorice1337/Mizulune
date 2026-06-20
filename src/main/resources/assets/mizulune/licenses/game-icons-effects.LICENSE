@@ -1,0 +1,147 @@
+Effect HUD icon attribution
+===========================
+
+The Effect HUD SVG icons are from Game-icons.net / game-icons/icons:
+https://game-icons.net
+https://github.com/game-icons/icons
+
+License: Creative Commons Attribution 3.0 Unported (CC BY 3.0)
+https://creativecommons.org/licenses/by/3.0/
+
+Bundled icons:
+
+- `textures/hud/effects/icons/standing-potion.svg`
+  Source: https://github.com/game-icons/icons/blob/master/lorc/standing-potion.svg
+  Author: Lorc
+
+- `textures/hud/effects/icons/speedometer.svg`
+  Source: https://github.com/game-icons/icons/blob/master/delapouite/speedometer.svg
+  Author: Delapouite
+
+- `textures/hud/effects/icons/snail-eyes.svg`
+  Source: https://github.com/game-icons/icons/blob/master/delapouite/snail-eyes.svg
+  Author: Delapouite
+
+- `textures/hud/effects/icons/3d-hammer.svg`
+  Source: https://github.com/game-icons/icons/blob/master/delapouite/3d-hammer.svg
+  Author: Delapouite
+
+- `textures/hud/effects/icons/broken-axe.svg`
+  Source: https://github.com/game-icons/icons/blob/master/delapouite/broken-axe.svg
+  Author: Delapouite
+
+- `textures/hud/effects/icons/muscle-up.svg`
+  Source: https://github.com/game-icons/icons/blob/master/lorc/muscle-up.svg
+  Author: Lorc
+
+- `textures/hud/effects/icons/healing.svg`
+  Source: https://github.com/game-icons/icons/blob/master/delapouite/healing.svg
+  Author: Delapouite
+
+- `textures/hud/effects/icons/broken-heart.svg`
+  Source: https://github.com/game-icons/icons/blob/master/lorc/broken-heart.svg
+  Author: Lorc
+
+- `textures/hud/effects/icons/jump-across.svg`
+  Source: https://github.com/game-icons/icons/blob/master/delapouite/jump-across.svg
+  Author: Delapouite
+
+- `textures/hud/effects/icons/maze.svg`
+  Source: https://github.com/game-icons/icons/blob/master/lorc/maze.svg
+  Author: Lorc
+
+- `textures/hud/effects/icons/health-potion.svg`
+  Source: https://github.com/game-icons/icons/blob/master/delapouite/health-potion.svg
+  Author: Delapouite
+
+- `textures/hud/effects/icons/shieldcomb.svg`
+  Source: https://github.com/game-icons/icons/blob/master/lorc/shieldcomb.svg
+  Author: Lorc
+
+- `textures/hud/effects/icons/fire-bottle.svg`
+  Source: https://github.com/game-icons/icons/blob/master/lorc/fire-bottle.svg
+  Author: Lorc
+
+- `textures/hud/effects/icons/water-bottle.svg`
+  Source: https://github.com/game-icons/icons/blob/master/delapouite/water-bottle.svg
+  Author: Delapouite
+
+- `textures/hud/effects/icons/invisible.svg`
+  Source: https://github.com/game-icons/icons/blob/master/delapouite/invisible.svg
+  Author: Delapouite
+
+- `textures/hud/effects/icons/blindfold.svg`
+  Source: https://github.com/game-icons/icons/blob/master/delapouite/blindfold.svg
+  Author: Delapouite
+
+- `textures/hud/effects/icons/night-vision.svg`
+  Source: https://github.com/game-icons/icons/blob/master/delapouite/night-vision.svg
+  Author: Delapouite
+
+- `textures/hud/effects/icons/stomach.svg`
+  Source: https://github.com/game-icons/icons/blob/master/delapouite/stomach.svg
+  Author: Delapouite
+
+- `textures/hud/effects/icons/arm-sling.svg`
+  Source: https://github.com/game-icons/icons/blob/master/delapouite/arm-sling.svg
+  Author: Delapouite
+
+- `textures/hud/effects/icons/poison-bottle.svg`
+  Source: https://github.com/game-icons/icons/blob/master/lorc/poison-bottle.svg
+  Author: Lorc
+
+- `textures/hud/effects/icons/skull-staff.svg`
+  Source: https://github.com/game-icons/icons/blob/master/delapouite/skull-staff.svg
+  Author: Delapouite
+
+- `textures/hud/effects/icons/heart-plus.svg`
+  Source: https://github.com/game-icons/icons/blob/master/zeromancer/heart-plus.svg
+  Author: Zeromancer
+
+- `textures/hud/effects/icons/heart-shield.svg`
+  Source: https://github.com/game-icons/icons/blob/master/delapouite/heart-shield.svg
+  Author: Delapouite
+
+- `textures/hud/effects/icons/meal.svg`
+  Source: https://github.com/game-icons/icons/blob/master/delapouite/meal.svg
+  Author: Delapouite
+
+- `textures/hud/effects/icons/glowing-artifact.svg`
+  Source: https://github.com/game-icons/icons/blob/master/delapouite/glowing-artifact.svg
+  Author: Delapouite
+
+- `textures/hud/effects/icons/floating-crystal.svg`
+  Source: https://github.com/game-icons/icons/blob/master/lorc/floating-crystal.svg
+  Author: Lorc
+
+- `textures/hud/effects/icons/clover.svg`
+  Source: https://github.com/game-icons/icons/blob/master/lorc/clover.svg
+  Author: Lorc
+
+- `textures/hud/effects/icons/broken-heart-zone.svg`
+  Source: https://github.com/game-icons/icons/blob/master/lorc/broken-heart-zone.svg
+  Author: Lorc
+
+- `textures/hud/effects/icons/feather.svg`
+  Source: https://github.com/game-icons/icons/blob/master/lorc/feather.svg
+  Author: Lorc
+
+- `textures/hud/effects/icons/magic-trident.svg`
+  Source: https://github.com/game-icons/icons/blob/master/delapouite/magic-trident.svg
+  Author: Delapouite
+
+- `textures/hud/effects/icons/dolphin.svg`
+  Source: https://github.com/game-icons/icons/blob/master/delapouite/dolphin.svg
+  Author: Delapouite
+
+- `textures/hud/effects/icons/raven.svg`
+  Source: https://github.com/game-icons/icons/blob/master/lorc/raven.svg
+  Author: Lorc
+
+- `textures/hud/effects/icons/village.svg`
+  Source: https://github.com/game-icons/icons/blob/master/delapouite/village.svg
+  Author: Delapouite
+
+- `textures/hud/effects/icons/moon-bats.svg`
+  Source: https://github.com/game-icons/icons/blob/master/delapouite/moon-bats.svg
+  Author: Delapouite

@@ -105,6 +105,11 @@ public class InventoryManager extends Module {
     }
 
     @Override
+    public String getSuffix() {
+        return formatSuffixNumber(this.actionDelaySetting.getValue()) + "ms";
+    }
+
+    @Override
     protected void onDisable() {
         this.sprintDelayTicks = 0;
         isPerformingAction = false;

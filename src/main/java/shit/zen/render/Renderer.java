@@ -134,6 +134,25 @@ extends ClientBase {
         GL11.glDisable(GL11.GL_SCISSOR_TEST);
     }
 
+    public static void captureCleanBackdrop(GuiGraphics guiGraphics) {
+        if (backend == null || !backend.handles2D() || currentCanvas != null) {
+            return;
+        }
+
+        try {
+            Renderer.resetPixelStore();
+            RenderSystem.enableBlend();
+            RenderSystem.defaultBlendFunc();
+            RenderSystem.disableCull();
+
+            backend.captureCleanBackdrop(guiGraphics, guiGraphics != null ? guiGraphics.pose() : null);
+        } catch (Throwable throwable) {
+            logger.error("Failed to capture clean HUD backdrop", throwable);
+        } finally {
+            Renderer.resetRenderState();
+        }
+    }
+
     /*
      * WARNING - Removed try catching itself - possible behaviour change.
      */

@@ -126,6 +126,7 @@ public class ModuleListHud extends HudElement {
 
     private Value<String> sideMode;
     private Value<Boolean> breakEnabled;
+    private Value<Boolean> showSuffix;
     private Value<Boolean> backgroundEnabled;
     private Value<MizuColor> backgroundColor;
     private Value<Number> backgroundRadius;
@@ -186,6 +187,7 @@ public class ModuleListHud extends HudElement {
         ValueGroup layout = root.group("layout", "Layout");
         this.sideMode = layout.enumChoice("side_mode", "Side Mode", "Auto", "Auto", "Left", "Right").alias("Side Mode");
         this.breakEnabled = layout.bool("break", "Break", true).alias("Break");
+        this.showSuffix = layout.bool("show_suffix", "Show Suffix", true).alias("Show Suffix");
         this.paddingX = layout.decimal("padding_x", "Padding X", DEFAULT_PADDING_X, 0.0f, 12.0f, 0.25f).alias("Padding X");
         this.paddingY = layout.decimal("padding_y", "Padding Y", DEFAULT_PADDING_Y, 0.0f, 8.0f, 0.25f).alias("Padding Y");
         this.rowHeight = layout.decimal("row_height", "Row Height", DEFAULT_ROW_HEIGHT, 9.0f, 24.0f, 0.25f).alias("Row Height");
@@ -252,8 +254,9 @@ public class ModuleListHud extends HudElement {
                     row = new AnimatedRow(module);
                     this.rowStates.put(module, row);
                 }
-                float textWidth = GlHelper.getStringWidth(module.getName(), this.moduleFont);
-                row.updateMetrics(module.getName(), textWidth, this.rowWidth(textWidth));
+                String displayName = this.displayName(module);
+                float textWidth = GlHelper.getStringWidth(displayName, this.moduleFont);
+                row.updateMetrics(displayName, textWidth, this.rowWidth(textWidth));
                 row.setTargetVisible(true);
             } else if (row != null) {
                 row.setTargetVisible(false);
@@ -265,6 +268,18 @@ public class ModuleListHud extends HudElement {
         List<AnimatedRow> rows = new ArrayList<>(this.rowStates.values());
         rows.sort((a, b) -> Float.compare(b.textWidth, a.textWidth));
         return rows;
+    }
+
+    private String displayName(Module module) {
+        String name = module.getName();
+        if (this.showSuffix == null || !this.showSuffix.getValue()) {
+            return name;
+        }
+        String suffix = module.getSuffix();
+        if (suffix == null || suffix.isBlank()) {
+            return name;
+        }
+        return name + " " + suffix.trim();
     }
 
     @Override

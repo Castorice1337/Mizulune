@@ -18,6 +18,11 @@ implements TripleProvider {
     }
 
     @Override
+    public String getSuffix() {
+        return formatSuffixNumber(this.brightnessSetting.getValue()) + "%";
+    }
+
+    @Override
     public Triple getTriple() {
         if (this.isEnabled()) {
             return new Triple(this.getName(), String.valueOf(this.brightnessSetting.getValue().intValue()), true);

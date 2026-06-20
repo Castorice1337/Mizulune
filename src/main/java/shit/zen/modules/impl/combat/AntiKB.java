@@ -46,6 +46,11 @@ extends Module {
     }
 
     @Override
+    public String getSuffix() {
+        return String.valueOf(mode.getValue());
+    }
+
+    @Override
     public void onEnable() {
         Optional<AntiKBMode> optional;
         rotation = null;

@@ -29,6 +29,11 @@ extends Module {
     }
 
     @Override
+    public String getSuffix() {
+        return this.mouseButton.getValue();
+    }
+
+    @Override
     public void onEnable() {
         this.resetState();
     }

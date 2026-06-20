@@ -18,6 +18,11 @@ public class Sprint
         this.setEnabled(true);
     }
 
+    @Override
+    public String getSuffix() {
+        return "Legit";
+    }
+
     @EventTarget
     public void onRotation(RotationEvent rotationEvent) {
         if (GuiMove.INSTANCE.isEnabled() && InventoryManager.isPerformingAction) {

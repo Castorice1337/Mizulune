@@ -111,6 +111,14 @@ public class KillAura extends Module {
         super.onDisable();
     }
 
+    @Override
+    public String getSuffix() {
+        if (this.infSwitch.getValue()) {
+            return "Switch";
+        }
+        return this.multiAttack.getValue() || this.switchSize.getValue().intValue() > 1 ? "Multi" : "Single";
+    }
+
     @EventTarget
     public void onWorldChange(WorldChangeEvent event) {
         target = null;

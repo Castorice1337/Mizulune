@@ -70,6 +70,11 @@ public class WTap extends Module {
     }
 
     @Override
+    public String getSuffix() {
+        return this.tapMode.getValue();
+    }
+
+    @Override
     protected void configureValueTree(ValueGroup root) {
         ValueGroup timing = root.group("timing", "Timing");
         timing.add(this.chance);

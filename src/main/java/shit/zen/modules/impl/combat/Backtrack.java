@@ -93,6 +93,11 @@ public class Backtrack extends Module {
         INSTANCE = this;
     }
 
+    @Override
+    public String getSuffix() {
+        return formatSuffixNumber(this.delay.getValue()) + "ms";
+    }
+
     public boolean isBlinking() {
         return this.isBacktrackingActive;
     }

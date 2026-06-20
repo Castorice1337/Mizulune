@@ -48,6 +48,11 @@ extends Module {
     }
 
     @Override
+    public String getSuffix() {
+        return formatSuffixNumber(this.triggerDistanceSetting.getValue());
+    }
+
+    @Override
     protected void onEnable() {
         this.slotToRestore = null;
         this.waterPlaced = false;

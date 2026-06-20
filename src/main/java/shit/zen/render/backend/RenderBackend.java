@@ -30,6 +30,9 @@ public interface RenderBackend {
     default void end() {
     }
 
+    default void captureCleanBackdrop(GuiGraphics guiGraphics, PoseStack poseStack) {
+    }
+
     default void flush() {
     }
 

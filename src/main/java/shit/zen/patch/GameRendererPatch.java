@@ -40,6 +40,7 @@ public class GameRendererPatch {
         GuiGraphics graphics = new GuiGraphics(gameRenderer.getMinecraft(), gameRenderer.getMinecraft().renderBuffers().bufferSource());
         Render2DEvent event = new Render2DEvent(graphics.pose(), graphics, partialTick);
         if (ZenClient.isReady()) {
+            Renderer.captureCleanBackdrop(graphics);
             ZenClient.getInstance().getEventBus().call(event);
             graphics.pose().pushPose();
             try {

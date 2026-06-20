@@ -4,6 +4,7 @@ import java.lang.reflect.Field;
 import java.lang.reflect.Modifier;
 import java.util.Collections;
 import java.util.IdentityHashMap;
+import java.util.Locale;
 import java.util.Set;
 import lombok.Getter;
 import lombok.Generated;
@@ -100,6 +101,28 @@ extends ClientBase {
 
     public Value<Boolean> getHideInModuleListValue() {
         return this.hideInModuleList;
+    }
+
+    public String getSuffix() {
+        return "";
+    }
+
+    protected static String formatSuffixNumber(Number number) {
+        if (number == null) {
+            return "";
+        }
+        double value = number.doubleValue();
+        if (Math.abs(value - Math.rint(value)) < 0.0001) {
+            return Integer.toString((int)Math.round(value));
+        }
+        String formatted = String.format(Locale.US, "%.1f", value);
+        while (formatted.contains(".") && formatted.endsWith("0")) {
+            formatted = formatted.substring(0, formatted.length() - 1);
+        }
+        if (formatted.endsWith(".")) {
+            formatted = formatted.substring(0, formatted.length() - 1);
+        }
+        return formatted;
     }
 
     public Value<?> findValue(String pathOrName) {

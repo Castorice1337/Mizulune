@@ -90,6 +90,20 @@ public class AutoWebPlace extends Module {
     }
 
     @Override
+    public String getSuffix() {
+        if (this.lavaSetting.getValue() && this.groundWebSetting.getValue()) {
+            return "Web+Lava";
+        }
+        if (this.lavaSetting.getValue()) {
+            return "Lava";
+        }
+        if (this.groundWebSetting.getValue()) {
+            return "Ground";
+        }
+        return "Web";
+    }
+
+    @Override
     protected void onEnable() {
         if (BlockIn.INSTANCE != null && BlockIn.INSTANCE.isEnabled()) {
             BlockIn.INSTANCE.setEnabled(false);

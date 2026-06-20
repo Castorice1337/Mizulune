@@ -92,6 +92,11 @@ public class NoSlow extends Module {
     }
 
     @Override
+    public String getSuffix() {
+        return this.mode.getValue();
+    }
+
+    @Override
     public void onEnable() {
         releaseItemSent = false;
         this.releaseTicksRemaining = 0;

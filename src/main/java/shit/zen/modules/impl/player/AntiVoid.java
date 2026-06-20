@@ -42,6 +42,11 @@ extends Module {
     }
 
     @Override
+    public String getSuffix() {
+        return formatSuffixNumber(this.fallDistanceSetting.getValue());
+    }
+
+    @Override
     public void onEnable() {
         this.scaffoldWasActive = false;
         this.reset();

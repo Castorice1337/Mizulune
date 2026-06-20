@@ -47,6 +47,11 @@ extends Module {
     }
 
     @Override
+    public String getSuffix() {
+        return formatSuffixNumber(this.throwDelay.getValue()) + "ms";
+    }
+
+    @Override
     public void onEnable() {
         this.targetRotation = null;
         this.ticksUntilThrow = 0;

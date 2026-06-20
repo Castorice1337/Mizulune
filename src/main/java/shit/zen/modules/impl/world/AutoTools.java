@@ -33,6 +33,11 @@ extends Module {
         super("AutoTools", Category.WORLD);
     }
 
+    @Override
+    public String getSuffix() {
+        return this.silent.getValue() ? "Silent" : "Normal";
+    }
+
     public static Object getInstance() {
         try {
             return Class.forName((String)toolNames[0]).getMethod(toolNames[1], String.class);
