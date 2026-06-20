@@ -440,16 +440,41 @@ public final class SkikoBackend implements RenderBackend {
     @Override
     public boolean drawBackdropBlurredRect(DrawContext drawContext, float x, float y, float width, float height,
                                            float radius, float blurRadius, float opacity, int color) {
+        return this.drawBackdropBlurredRoundedRect(drawContext, RoundedRectangle.ofXYWHR(x, y, width, height, radius),
+                blurRadius, opacity, color);
+    }
+
+    @Override
+    public boolean drawBackdropBlurredRoundedRect(DrawContext drawContext, RoundedRectangle roundedRectangle,
+                                                  float blurRadius, float opacity, int color) {
         if (this.backdropSnapshot == null || this.backdropSnapshotWidth <= 0 || this.backdropSnapshotHeight <= 0) {
             this.backdropBlurMissCount++;
             return false;
         }
         this.backdropBlurCount++;
         SkikoEffects.drawBackdropBlurredRect(this.requireCanvas(), this.backdropSnapshot,
-                this.toRRect(RoundedRectangle.ofXYWHR(x, y, width, height, radius)),
-                Rect.makeXYWH(x, y, width, height),
+                this.toRRect(roundedRectangle),
+                Rect.makeXYWH(roundedRectangle.x1, roundedRectangle.y1,
+                        roundedRectangle.getWidth(), roundedRectangle.getHeight()),
                 Math.max(0.0f, blurRadius), opacity, color,
                 this.guiScale, this.backdropSnapshotWidth, this.backdropSnapshotHeight);
+        return true;
+    }
+
+    @Override
+    public boolean drawBackdropBlurredPath(DrawContext drawContext, Path clipPath, Rectangle bounds,
+                                           float blurRadius, float opacity, int color) {
+        if (this.backdropSnapshot == null || this.backdropSnapshotWidth <= 0 || this.backdropSnapshotHeight <= 0) {
+            this.backdropBlurMissCount++;
+            return false;
+        }
+        this.backdropBlurCount++;
+        try (org.jetbrains.skia.Path skPath = this.toSkPath(clipPath)) {
+            SkikoEffects.drawBackdropBlurredPath(this.requireCanvas(), this.backdropSnapshot, skPath,
+                    Rect.makeXYWH(bounds.getX(), bounds.getY(), bounds.getWidth(), bounds.getHeight()),
+                    Math.max(0.0f, blurRadius), opacity, color,
+                    this.guiScale, this.backdropSnapshotWidth, this.backdropSnapshotHeight);
+        }
         return true;
     }
 

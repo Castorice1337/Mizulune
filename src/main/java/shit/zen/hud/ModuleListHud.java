@@ -16,8 +16,9 @@ import shit.zen.render.DrawContext;
 import shit.zen.render.FontPresets;
 import shit.zen.render.FontRenderer;
 import shit.zen.render.GlHelper;
-import shit.zen.render.LiquidGlassStyle;
 import shit.zen.render.Paint;
+import shit.zen.render.Path;
+import shit.zen.render.Rectangle;
 import shit.zen.render.Renderer;
 import shit.zen.render.RoundedRectangle;
 import shit.zen.render.color.ColorContext;
@@ -356,6 +357,9 @@ public class ModuleListHud extends HudElement {
     private void renderRows(DrawContext drawContext, List<AnimatedRow> rows, float x, float y, float width, Alignment alignment) {
         List<RowRenderLayout> layouts = this.computeRowLayouts(rows, x, y, width, alignment);
         boolean broken = this.breakEnabled == null || this.breakEnabled.getValue();
+        if (!broken) {
+            this.drawConnectedBackgroundBlur(drawContext, layouts, alignment);
+        }
         for (RowRenderLayout layout : layouts) {
             this.renderRow(drawContext, rows, layout, broken, alignment);
         }
@@ -399,7 +403,7 @@ public class ModuleListHud extends HudElement {
         if (this.backgroundGlowEnabled.getValue()) {
             this.drawBackgroundGlow(drawContext, bounds, rowColor, layout.progress, broken);
         }
-        if (this.backgroundBlurEnabled.getValue() && Renderer.isSkikoEnabled()) {
+        if (broken && this.backgroundBlurEnabled.getValue() && Renderer.isSkikoEnabled()) {
             this.drawBackgroundBlur(drawContext, bounds, layout.progress);
         }
         if (this.backgroundEnabled.getValue()) {
@@ -441,25 +445,56 @@ public class ModuleListHud extends HudElement {
 
     private void drawBackgroundBlur(DrawContext drawContext, RoundedRectangle bounds, float progress) {
         float opacity = this.settingFloat(this.blurStrength) * progress;
-        LiquidGlassStyle style = LiquidGlassStyle.builder()
-                .power(this.settingFloat(this.backgroundRadius))
-                .refractionPower(1.0f)
-                .refractionStrength(0.0f)
-                .noise(0.0f)
-                .glow(0.0f, 0.0f)
-                .glowEdges(0.0f, 0.85f)
-                .blurIterations(2)
-                .blurRadius(this.settingFloat(this.blurRadius))
-                .blurDownscale(1.0f)
-                .opacity(opacity)
-                .tint(0x00000000, 0.0f)
-                .chromaStrength(0.0f)
-                .darkness(0.0f)
-                .build();
-        drawContext.save();
-        drawContext.clipRoundedRect(bounds, true);
-        drawContext.drawLiquidGlassPanel(bounds, style);
-        drawContext.restore();
+        if (opacity <= 0.001f) {
+            return;
+        }
+        drawContext.drawBackdropBlurredRoundedRect(bounds, this.settingFloat(this.blurRadius), opacity, 0x00000000);
+    }
+
+    private void drawConnectedBackgroundBlur(DrawContext drawContext, List<RowRenderLayout> layouts, Alignment alignment) {
+        if (!this.backgroundBlurEnabled.getValue() || !Renderer.isSkikoEnabled() || layouts.isEmpty()) {
+            return;
+        }
+        float opacity = this.settingFloat(this.blurStrength) * this.maxRowProgress(layouts);
+        if (opacity <= 0.001f) {
+            return;
+        }
+        try (Path path = new Path()) {
+            Rectangle bounds = this.addConnectedBlurPath(path, layouts, alignment);
+            if (bounds != null) {
+                drawContext.drawBackdropBlurredPath(path, bounds, this.settingFloat(this.blurRadius), opacity, 0x00000000);
+            }
+        }
+    }
+
+    private Rectangle addConnectedBlurPath(Path path, List<RowRenderLayout> layouts, Alignment alignment) {
+        float minX = Float.POSITIVE_INFINITY;
+        float minY = Float.POSITIVE_INFINITY;
+        float maxX = Float.NEGATIVE_INFINITY;
+        float maxY = Float.NEGATIVE_INFINITY;
+        for (RowRenderLayout layout : layouts) {
+            RoundedRectangle bounds = this.rowBounds(layout, false, alignment);
+            if (bounds.getWidth() <= 0.0f || bounds.getHeight() <= 0.0f) {
+                continue;
+            }
+            path.addRoundedRect(bounds);
+            minX = Math.min(minX, bounds.x1);
+            minY = Math.min(minY, bounds.y1);
+            maxX = Math.max(maxX, bounds.x2);
+            maxY = Math.max(maxY, bounds.y2);
+        }
+        if (!Float.isFinite(minX) || maxX <= minX || maxY <= minY) {
+            return null;
+        }
+        return Rectangle.ofCorners(minX, minY, maxX, maxY);
+    }
+
+    private float maxRowProgress(List<RowRenderLayout> layouts) {
+        float progress = 0.0f;
+        for (RowRenderLayout layout : layouts) {
+            progress = Math.max(progress, layout.progress);
+        }
+        return progress;
     }
 
     private void drawBackgroundGlow(DrawContext drawContext, RoundedRectangle bounds, int rowColor, float progress, boolean broken) {
