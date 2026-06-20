@@ -16,6 +16,7 @@ import shit.zen.hud.LieDetector;
 import shit.zen.hud.ModuleListHud;
 import shit.zen.hud.PlayerListHud;
 import shit.zen.hud.PotionEffectsHud;
+import shit.zen.hud.ScoreboardHud;
 import shit.zen.hud.TargetHud;
 import shit.zen.event.EventTarget;
 
@@ -34,6 +35,7 @@ public class HudManager {
         this.registerHudElement(new PotionEffectsHud());
         this.registerHudElement(new LieDetector());
         this.registerHudElement(new KeystrokesModule());
+        this.registerHudElement(new ScoreboardHud());
     }
 
     private void registerHudElement(HudElement hudElement) {

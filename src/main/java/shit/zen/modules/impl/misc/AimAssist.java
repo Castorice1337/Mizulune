@@ -135,6 +135,10 @@ public class AimAssist extends Module implements RotationProvider {
         return "AimAssist";
     }
 
+    public LivingEntity getCurrentTarget() {
+        return this.currentTarget;
+    }
+
     @Override
     public Rotation getRotation() {
         return this.isBlockedByHigherPriorityRotation() ? null : this.currentTargetRotation;

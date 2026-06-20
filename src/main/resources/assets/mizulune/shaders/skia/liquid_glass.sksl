@@ -89,7 +89,7 @@ half4 main(float2 coord) {
         return half4(0.0);
     }
 
-    float dist = max(-d, 0.0) / max(1.0, min(rectSize.x, rectSize.y) * 0.5);
+    float dist = clamp(max(-d, 0.0) / max(1.0, min(rectSize.x, rectSize.y) * 0.5), 0.0, 1.0);
     float refraction = pow(max(0.0, responseCurve(dist)), max(0.01, uRefractionPower));
     float2 offset = coord - center;
     float2 referenceCoord = center + offset * refraction;
@@ -112,10 +112,10 @@ half4 main(float2 coord) {
     rgb = mix(rgb, uTintColor, clamp(uTintStrength, 0.0, 1.0));
     rgb *= 1.0 - clamp(uDarkness, 0.0, 1.0);
 
-    float glow = rimGlow(localUV);
-    float glowMask = smoothstep(uGlowEdge0, uGlowEdge1, dist);
-    float glowStrength = glow * uGlowWeight * glowMask + 1.0 + uGlowBias;
-    rgb = clamp(rgb * max(0.0, glowStrength), float3(0.0), float3(1.0));
+    float rimMask = 1.0 - smoothstep(uGlowEdge0, uGlowEdge1, dist);
+    float glow = max(rimGlow(localUV), 0.0);
+    float rimLight = glow * max(uGlowWeight, 0.0) * rimMask;
+    rgb = clamp(rgb * max(0.0, 1.0 + uGlowBias) + float3(rimLight), float3(0.0), float3(1.0));
 
     float alpha = edge * clamp(uOpacity, 0.0, 1.0);
     return half4(rgb * alpha, alpha);
