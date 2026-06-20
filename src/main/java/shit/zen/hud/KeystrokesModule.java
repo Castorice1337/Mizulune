@@ -8,59 +8,44 @@ import shit.zen.render.DrawContext;
 import shit.zen.render.FontPresets;
 import shit.zen.render.FontRenderer;
 import shit.zen.render.GlHelper;
-import shit.zen.render.LiquidGlassStyle;
 import shit.zen.render.Paint;
 import shit.zen.render.RoundedRectangle;
 import shit.zen.utils.animation.SmoothAnimationTimer;
 import shit.zen.utils.math.Easings;
 import shit.zen.utils.render.Argb;
 import shit.zen.value.MizuColor;
+import shit.zen.value.ToggleValueGroup;
 import shit.zen.value.Value;
 import shit.zen.value.ValueGroup;
 
 public final class KeystrokesModule extends HudElement {
 
-    private static final float DEFAULT_SCALE = 0.92f;
+    private static final float DEFAULT_SCALE = 0.90f;
 
     private static final float KEY_SIZE = 38.0f;
     private static final float KEY_HEIGHT = 38.0f;
     private static final float SPACE_HEIGHT = 24.0f;
     private static final float MOUSE_HEIGHT = 31.0f;
     private static final float GAP = 5.0f;
-    private static final float RADIUS = 10.5f;
+    private static final float RADIUS = 10.0f;
 
     private static final float ROW_WIDTH = KEY_SIZE * 3.0f + GAP * 2.0f;
     private static final float MOUSE_WIDTH = (ROW_WIDTH - GAP) * 0.5f;
     private static final float BASE_HEIGHT = KEY_HEIGHT * 2.0f + SPACE_HEIGHT + MOUSE_HEIGHT + GAP * 3.0f;
 
-    private static final float PRESS_SPEED = 0.20f;
-    private static final float RIPPLE_SPEED = 0.30f;
+    private static final double PRESS_SPEED = 0.18;
+    private static final double RIPPLE_SPEED = 0.32;
 
-    private static final MizuColor DEFAULT_GLASS_TOP = MizuColor.ofArgb(42, 12, 14, 12);
-    private static final MizuColor DEFAULT_GLASS_BOTTOM = MizuColor.ofArgb(66, 4, 6, 5);
-    private static final MizuColor DEFAULT_PRESSED = MizuColor.ofArgb(96, 84, 120, 72);
-    private static final MizuColor DEFAULT_TEXT = MizuColor.ofArgb(238, 255, 255, 255);
+    private static final MizuColor DEFAULT_BACKGROUND_TOP = MizuColor.ofArgb(92, 9, 13, 9);
+    private static final MizuColor DEFAULT_BACKGROUND_BOTTOM = MizuColor.ofArgb(126, 4, 7, 4);
+    private static final MizuColor DEFAULT_PRESSED = MizuColor.ofArgb(140, 74, 104, 60);
+    private static final MizuColor DEFAULT_TEXT = MizuColor.ofArgb(244, 255, 255, 255);
 
-    private static final LiquidGlassStyle KEY_GLASS_STYLE = LiquidGlassStyle.builder()
-            .power(3.4f)
-            .refractionPower(1.10f)
-            .refractionStrength(0.24f)
-            .noise(0.006f)
-            .glow(0.06f, 0.012f)
-            .glowEdges(0.0f, 0.92f)
-            .blurIterations(3)
-            .blurRadius(15.0f)
-            .blurDownscale(0.62f)
-            .opacity(0.74f)
-            .tint(0x66040604, 0.36f)
-            .chromaStrength(0.0f)
-            .darkness(0.30f)
-            .build();
+    private final FontRenderer keyFont = FontPresets.poppinsBold(18.0f);
+    private final FontRenderer mouseFont = FontPresets.poppinsBold(16.5f);
 
-    private final FontRenderer keyFont = FontPresets.poppinsBold(19.0f);
-    private final FontRenderer mouseFont = FontPresets.poppinsBold(17.0f);
-
-    private final Paint fillPaint = new Paint();
+    private final Paint backgroundPaint = new Paint();
+    private final Paint pressedPaint = new Paint();
     private final Paint textPaint = new Paint();
     private final Paint detailPaint = new Paint();
     private final Paint ripplePaint = new Paint();
@@ -75,14 +60,24 @@ public final class KeystrokesModule extends HudElement {
     private Value<Boolean> showLMB;
     private Value<Boolean> showRMB;
 
-    private Value<Boolean> glass;
-    private Value<Boolean> shadow;
-    private Value<Boolean> ripple;
-    private Value<Boolean> softEdge;
-
-    private Value<MizuColor> glassTopColor;
-    private Value<MizuColor> glassBottomColor;
+    private Value<Boolean> backgroundEnabled;
+    private Value<MizuColor> backgroundTopColor;
+    private Value<MizuColor> backgroundBottomColor;
     private Value<MizuColor> pressedColor;
+
+    private Value<Boolean> backgroundBlurEnabled;
+    private Value<Number> backgroundBlurRadius;
+    private Value<Number> backgroundBlurOpacity;
+
+    private Value<Boolean> shadowEnabled;
+    private Value<Number> shadowAlpha;
+    private Value<Number> shadowBlur;
+    private Value<Number> shadowSpread;
+    private Value<Number> shadowOffset;
+
+    private Value<Boolean> rippleEnabled;
+    private Value<Boolean> softEdgeEnabled;
+
     private Value<MizuColor> textColor;
 
     private final KeyButton keyW;
@@ -114,7 +109,7 @@ public final class KeystrokesModule extends HudElement {
     @Override
     protected void configureValueTree(ValueGroup root) {
         ValueGroup layout = root.group("layout", "Layout");
-        this.scale = layout.decimal("scale", "Scale", DEFAULT_SCALE, 0.55, 1.65, 0.02)
+        this.scale = layout.decimal("scale", "Scale", DEFAULT_SCALE, 0.55, 1.45, 0.02)
                 .alias("Size")
                 .alias("整体大小");
 
@@ -127,16 +122,31 @@ public final class KeystrokesModule extends HudElement {
         this.showLMB = visible.bool("show_lmb", "Show LMB", true).alias("LMB");
         this.showRMB = visible.bool("show_rmb", "Show RMB", true).alias("RMB");
 
-        ValueGroup visual = root.group("visual", "Visual");
-        this.glass = visual.bool("glass", "Glass", true).alias("Frosted Glass");
-        this.shadow = visual.bool("shadow", "Shadow", true);
-        this.ripple = visual.bool("ripple", "Ripple", true);
-        this.softEdge = visual.bool("soft_edge", "Soft Edge", true);
+        ToggleValueGroup background = root.toggleGroup("background", "Background", true);
+        this.backgroundEnabled = background.getEnabledValue().alias("Background");
+        this.backgroundTopColor = background.color("top", "Top", DEFAULT_BACKGROUND_TOP);
+        this.backgroundBottomColor = background.color("bottom", "Bottom", DEFAULT_BACKGROUND_BOTTOM);
+        this.pressedColor = background.color("pressed", "Pressed", DEFAULT_PRESSED);
+
+        ToggleValueGroup backgroundBlur = background.toggleGroup("blur", "Background Blur", true);
+        this.backgroundBlurEnabled = backgroundBlur.getEnabledValue().alias("Background Blur");
+        this.backgroundBlurRadius = backgroundBlur.decimal("radius", "Blur Radius", 10.0f, 0.0f, 24.0f, 0.5f)
+                .alias("Blur Radius");
+        this.backgroundBlurOpacity = backgroundBlur.decimal("opacity", "Blur Opacity", 0.62f, 0.0f, 1.0f, 0.01f)
+                .alias("Blur Opacity");
+
+        ToggleValueGroup shadow = root.toggleGroup("shadow", "Shadow", true);
+        this.shadowEnabled = shadow.getEnabledValue().alias("Shadow");
+        this.shadowAlpha = shadow.integer("alpha", "Alpha", 142, 0, 255, 1).alias("Shadow Alpha");
+        this.shadowBlur = shadow.decimal("blur", "Blur", 8.0f, 0.0f, 22.0f, 0.25f).alias("Shadow Blur");
+        this.shadowSpread = shadow.decimal("spread", "Spread", 2.6f, 0.0f, 8.0f, 0.25f).alias("Shadow Spread");
+        this.shadowOffset = shadow.decimal("offset_y", "Offset Y", 3.0f, 0.0f, 10.0f, 0.25f).alias("Shadow Offset Y");
+
+        ValueGroup animation = root.group("animation", "Animation");
+        this.rippleEnabled = animation.bool("ripple", "Ripple", true).alias("Ripple");
+        this.softEdgeEnabled = animation.bool("soft_edge", "Soft Edge", true).alias("Soft Edge");
 
         ValueGroup colors = root.group("colors", "Colors");
-        this.glassTopColor = colors.color("glass_top", "Glass Top", DEFAULT_GLASS_TOP);
-        this.glassBottomColor = colors.color("glass_bottom", "Glass Bottom", DEFAULT_GLASS_BOTTOM);
-        this.pressedColor = colors.color("pressed", "Pressed", DEFAULT_PRESSED);
         this.textColor = colors.color("text", "Text", DEFAULT_TEXT);
     }
 
@@ -151,7 +161,7 @@ public final class KeystrokesModule extends HudElement {
         }
 
         DrawContext ctx = (DrawContext) event.drawContext();
-        Layout layout = buildLayout();
+        Layout layout = this.buildLayout();
 
         this.setWidth(layout.width * layout.scale);
         this.setHeight(layout.height * layout.scale);
@@ -162,50 +172,52 @@ public final class KeystrokesModule extends HudElement {
 
         float cursorY = 0.0f;
 
-        if (bool(this.showW, true)) {
-            drawButton(ctx, this.keyW, (layout.width - KEY_SIZE) * 0.5f, cursorY, KEY_SIZE, KEY_HEIGHT, this.keyFont, false);
+        if (this.bool(this.showW, true)) {
+            this.drawButton(ctx, this.keyW, (layout.width - KEY_SIZE) * 0.5f, cursorY,
+                    KEY_SIZE, KEY_HEIGHT, this.keyFont, false);
             cursorY += KEY_HEIGHT + GAP;
         }
 
-        int movementCount = movementCount();
+        int movementCount = this.movementCount();
         if (movementCount > 0) {
             float rowWidth = movementCount * KEY_SIZE + (movementCount - 1) * GAP;
             float cursorX = (layout.width - rowWidth) * 0.5f;
 
-            if (bool(this.showA, true)) {
-                drawButton(ctx, this.keyA, cursorX, cursorY, KEY_SIZE, KEY_HEIGHT, this.keyFont, false);
+            if (this.bool(this.showA, true)) {
+                this.drawButton(ctx, this.keyA, cursorX, cursorY, KEY_SIZE, KEY_HEIGHT, this.keyFont, false);
                 cursorX += KEY_SIZE + GAP;
             }
 
-            if (bool(this.showS, true)) {
-                drawButton(ctx, this.keyS, cursorX, cursorY, KEY_SIZE, KEY_HEIGHT, this.keyFont, false);
+            if (this.bool(this.showS, true)) {
+                this.drawButton(ctx, this.keyS, cursorX, cursorY, KEY_SIZE, KEY_HEIGHT, this.keyFont, false);
                 cursorX += KEY_SIZE + GAP;
             }
 
-            if (bool(this.showD, true)) {
-                drawButton(ctx, this.keyD, cursorX, cursorY, KEY_SIZE, KEY_HEIGHT, this.keyFont, false);
+            if (this.bool(this.showD, true)) {
+                this.drawButton(ctx, this.keyD, cursorX, cursorY, KEY_SIZE, KEY_HEIGHT, this.keyFont, false);
             }
 
             cursorY += KEY_HEIGHT + GAP;
         }
 
-        if (bool(this.showSpace, true)) {
-            drawButton(ctx, this.keySpace, (layout.width - ROW_WIDTH) * 0.5f, cursorY, ROW_WIDTH, SPACE_HEIGHT, this.keyFont, true);
+        if (this.bool(this.showSpace, true)) {
+            this.drawButton(ctx, this.keySpace, (layout.width - ROW_WIDTH) * 0.5f, cursorY,
+                    ROW_WIDTH, SPACE_HEIGHT, this.keyFont, true);
             cursorY += SPACE_HEIGHT + GAP;
         }
 
-        int mouseCount = mouseCount();
+        int mouseCount = this.mouseCount();
         if (mouseCount > 0) {
             float rowWidth = mouseCount * MOUSE_WIDTH + (mouseCount - 1) * GAP;
             float cursorX = (layout.width - rowWidth) * 0.5f;
 
-            if (bool(this.showLMB, true)) {
-                drawButton(ctx, this.keyLMB, cursorX, cursorY, MOUSE_WIDTH, MOUSE_HEIGHT, this.mouseFont, false);
+            if (this.bool(this.showLMB, true)) {
+                this.drawButton(ctx, this.keyLMB, cursorX, cursorY, MOUSE_WIDTH, MOUSE_HEIGHT, this.mouseFont, false);
                 cursorX += MOUSE_WIDTH + GAP;
             }
 
-            if (bool(this.showRMB, true)) {
-                drawButton(ctx, this.keyRMB, cursorX, cursorY, MOUSE_WIDTH, MOUSE_HEIGHT, this.mouseFont, false);
+            if (this.bool(this.showRMB, true)) {
+                this.drawButton(ctx, this.keyRMB, cursorX, cursorY, MOUSE_WIDTH, MOUSE_HEIGHT, this.mouseFont, false);
             }
         }
 
@@ -217,26 +229,26 @@ public final class KeystrokesModule extends HudElement {
         float height = 0.0f;
         int rows = 0;
 
-        if (bool(this.showW, true)) {
+        if (this.bool(this.showW, true)) {
             width = Math.max(width, KEY_SIZE);
             height += KEY_HEIGHT;
             rows++;
         }
 
-        int movementCount = movementCount();
+        int movementCount = this.movementCount();
         if (movementCount > 0) {
             width = Math.max(width, movementCount * KEY_SIZE + (movementCount - 1) * GAP);
             height += KEY_HEIGHT;
             rows++;
         }
 
-        if (bool(this.showSpace, true)) {
+        if (this.bool(this.showSpace, true)) {
             width = Math.max(width, ROW_WIDTH);
             height += SPACE_HEIGHT;
             rows++;
         }
 
-        int mouseCount = mouseCount();
+        int mouseCount = this.mouseCount();
         if (mouseCount > 0) {
             width = Math.max(width, mouseCount * MOUSE_WIDTH + (mouseCount - 1) * GAP);
             height += MOUSE_HEIGHT;
@@ -251,79 +263,123 @@ public final class KeystrokesModule extends HudElement {
             height = 1.0f;
         }
 
-        return new Layout(number(this.scale, DEFAULT_SCALE), width, height);
+        return new Layout(this.number(this.scale, DEFAULT_SCALE), width, height);
     }
 
     private int movementCount() {
         int count = 0;
-        if (bool(this.showA, true)) count++;
-        if (bool(this.showS, true)) count++;
-        if (bool(this.showD, true)) count++;
+        if (this.bool(this.showA, true)) count++;
+        if (this.bool(this.showS, true)) count++;
+        if (this.bool(this.showD, true)) count++;
         return count;
     }
 
     private int mouseCount() {
         int count = 0;
-        if (bool(this.showLMB, true)) count++;
-        if (bool(this.showRMB, true)) count++;
+        if (this.bool(this.showLMB, true)) count++;
+        if (this.bool(this.showRMB, true)) count++;
         return count;
     }
 
-    private void drawButton(DrawContext ctx, KeyButton button, float x, float y, float width, float height, FontRenderer font, boolean space) {
-        button.update(bool(this.ripple, true));
+    private void drawButton(DrawContext ctx, KeyButton button, float x, float y,
+                            float width, float height, FontRenderer font, boolean space) {
+        button.update(this.bool(this.rippleEnabled, true));
 
         float press = button.press();
-        RoundedRectangle rect = RoundedRectangle.ofXYWHR(x, y, width, height, Math.min(RADIUS, Math.min(width, height) * 0.36f));
+        float radius = Math.min(RADIUS, Math.min(width, height) * 0.45f);
+        RoundedRectangle rect = RoundedRectangle.ofXYWHR(x, y, width, height, radius);
 
-        drawSurface(ctx, rect, button, press);
+        this.drawSurface(ctx, rect, button, press);
 
         if (space) {
-            drawSpaceGlyph(ctx, rect, press);
+            this.drawSpaceGlyph(ctx, rect, press);
         } else {
-            drawTextCentered(ctx, button.label, rect.x1 + rect.getWidth() * 0.5f, rect.y1 + rect.getHeight() * 0.5f, font, press);
+            this.drawTextCentered(ctx, button.label,
+                    rect.x1 + rect.getWidth() * 0.5f,
+                    rect.y1 + rect.getHeight() * 0.5f,
+                    font,
+                    press);
         }
     }
 
     private void drawSurface(DrawContext ctx, RoundedRectangle rect, KeyButton button, float press) {
-        if (bool(this.shadow, true)) {
-            drawNaturalShadow(ctx, rect, press);
+        if (this.bool(this.shadowEnabled, true)) {
+            this.drawCompactShadow(ctx, rect, press);
         }
 
-        if (bool(this.glass, true)) {
-            ctx.drawLiquidGlassPanel(rect, KEY_GLASS_STYLE);
+        if (this.bool(this.backgroundBlurEnabled, true)) {
+            ctx.drawBackdropBlurredRoundedRect(
+                    rect,
+                    this.number(this.backgroundBlurRadius, 10.0f),
+                    this.number(this.backgroundBlurOpacity, 0.62f),
+                    0x00000000
+            );
         }
 
-        drawTransparentSkin(ctx, rect);
-
-        if (bool(this.ripple, true) && button.rippleAlive()) {
-            drawRipple(ctx, rect, button.ripple());
+        if (this.bool(this.backgroundEnabled, true)) {
+            this.drawBackgroundSkin(ctx, rect);
         }
 
-        drawPressedWash(ctx, rect, press);
+        if (this.bool(this.rippleEnabled, true) && button.rippleAlive()) {
+            this.drawRipple(ctx, rect, button.ripple());
+        }
 
-        if (bool(this.softEdge, true)) {
-            drawSoftSpecularEdge(ctx, rect, press);
+        this.drawPressedWash(ctx, rect, press);
+
+        if (this.bool(this.softEdgeEnabled, true)) {
+            this.drawSoftEdge(ctx, rect, press);
         }
     }
 
-    private void drawNaturalShadow(DrawContext ctx, RoundedRectangle rect, float press) {
-        int black = 0xFF000000;
-        int pressed = color(this.pressedColor, DEFAULT_PRESSED).toArgb();
+    private void drawCompactShadow(DrawContext ctx, RoundedRectangle rect, float press) {
+        int baseAlpha = this.integer(this.shadowAlpha, 142);
+        float blur = this.number(this.shadowBlur, 8.0f);
+        float spread = Math.max(this.number(this.shadowSpread, 2.6f), Math.min(4.5f, blur * 0.34f));
+        float offsetY = this.number(this.shadowOffset, 3.0f);
 
-        ctx.drawBlurredRoundedRect(rect, 0.0f, 4.5f, 15.0f, 0.0f, Argb.withAlpha(black, 62));
-        ctx.drawBlurredRoundedRect(rect, 0.0f, 2.0f, 7.5f, 0.0f, Argb.withAlpha(black, 46));
+        int black = 0xFF000000;
+
+        ctx.drawBlurredRoundedRect(
+                rect,
+                0.0f,
+                offsetY,
+                blur,
+                spread,
+                Argb.withAlpha(black, baseAlpha)
+        );
+
+        ctx.drawBlurredRoundedRect(
+                rect,
+                0.0f,
+                Math.max(1.0f, offsetY * 0.42f),
+                Math.max(2.8f, blur * 0.52f),
+                Math.max(0.8f, spread * 0.38f),
+                Argb.withAlpha(black, Math.round(baseAlpha * 0.52f))
+        );
 
         if (press > 0.001f) {
-            ctx.drawBlurredRoundedRect(rect, 0.0f, 0.0f, 9.5f, 0.0f, Argb.scaleAlpha(pressed, press * 0.24f));
+            int pressed = this.color(this.pressedColor, DEFAULT_PRESSED).toArgb();
+            ctx.drawBlurredRoundedRect(
+                    rect,
+                    0.0f,
+                    0.8f,
+                    Math.max(2.0f, blur * 0.60f),
+                    Math.max(0.6f, spread * 0.24f),
+                    Argb.scaleAlpha(pressed, 0.28f * press)
+            );
         }
     }
 
-    private void drawTransparentSkin(DrawContext ctx, RoundedRectangle rect) {
-        int top = color(this.glassTopColor, DEFAULT_GLASS_TOP).toArgb();
-        int bottom = color(this.glassBottomColor, DEFAULT_GLASS_BOTTOM).toArgb();
+    private void drawBackgroundSkin(DrawContext ctx, RoundedRectangle rect) {
+        int top = this.color(this.backgroundTopColor, DEFAULT_BACKGROUND_TOP).toArgb();
+        int bottom = this.color(this.backgroundBottomColor, DEFAULT_BACKGROUND_BOTTOM).toArgb();
 
-        fillPaint.setStrokeCap(Paint.StrokeCap.FILL);
-        fillPaint.setGradCoords(new Paint.GradientCoords(
+        this.backgroundPaint.setColor(0xFFFFFFFF);
+        this.backgroundPaint.setStrokeCap(Paint.StrokeCap.FILL);
+        this.backgroundPaint.setMaskFilter(null);
+        this.backgroundPaint.setLinGradient(null);
+        this.backgroundPaint.setShader(null);
+        this.backgroundPaint.setGradCoords(new Paint.GradientCoords(
                 rect.x1,
                 rect.y1,
                 rect.x1,
@@ -332,7 +388,36 @@ public final class KeystrokesModule extends HudElement {
                 bottom
         ));
 
-        ctx.drawRoundedRect(rect, fillPaint);
+        ctx.drawRoundedRect(rect, this.backgroundPaint);
+    }
+
+    private void drawRipple(DrawContext ctx, RoundedRectangle rect, float progress) {
+        float t = Mth.clamp(progress, 0.0f, 1.0f);
+        float eased = this.easeOutCubic(t);
+
+        float cx = rect.x1 + rect.getWidth() * 0.5f;
+        float cy = rect.y1 + rect.getHeight() * 0.5f;
+        float radius = Math.max(1.0f, (float) Math.hypot(rect.getWidth(), rect.getHeight()) * 0.62f * eased);
+
+        int pressed = this.color(this.pressedColor, DEFAULT_PRESSED).toArgb();
+
+        ctx.save();
+        ctx.clipRoundedRect(rect, true);
+
+        this.ripplePaint.setGradCoords(null);
+        this.ripplePaint.setStrokeCap(Paint.StrokeCap.FILL);
+        this.ripplePaint.setColor(Argb.scaleAlpha(pressed, 0.82f - t * 0.24f));
+        ctx.drawArc(cx - radius, cy - radius, cx + radius, cy + radius, 0.0f, 360.0f, false, this.ripplePaint);
+
+        if (t < 0.96f) {
+            this.ripplePaint.setStrokeCap(Paint.StrokeCap.STROKE);
+            this.ripplePaint.setStrokeWidth(1.05f);
+            this.ripplePaint.setColor(Argb.withAlpha(0xFFFFFFFF, Math.round((1.0f - t) * 44.0f)));
+            ctx.drawArc(cx - radius, cy - radius, cx + radius, cy + radius, 0.0f, 360.0f, false, this.ripplePaint);
+            this.ripplePaint.setStrokeCap(Paint.StrokeCap.FILL);
+        }
+
+        ctx.restore();
     }
 
     private void drawPressedWash(DrawContext ctx, RoundedRectangle rect, float press) {
@@ -340,86 +425,58 @@ public final class KeystrokesModule extends HudElement {
             return;
         }
 
-        int pressed = color(this.pressedColor, DEFAULT_PRESSED).toArgb();
+        int pressed = this.color(this.pressedColor, DEFAULT_PRESSED).toArgb();
 
-        fillPaint.setGradCoords(null);
-        fillPaint.setStrokeCap(Paint.StrokeCap.FILL);
-        fillPaint.setColor(Argb.scaleAlpha(pressed, 0.34f * press));
+        this.pressedPaint.setGradCoords(null);
+        this.pressedPaint.setMaskFilter(null);
+        this.pressedPaint.setLinGradient(null);
+        this.pressedPaint.setShader(null);
+        this.pressedPaint.setStrokeCap(Paint.StrokeCap.FILL);
+        this.pressedPaint.setColor(Argb.scaleAlpha(pressed, 0.30f * press));
 
-        ctx.drawRoundedRect(rect, fillPaint);
+        ctx.drawRoundedRect(rect, this.pressedPaint);
     }
 
-    private void drawRipple(DrawContext ctx, RoundedRectangle rect, float progress) {
-        float t = Mth.clamp(progress, 0.0f, 1.0f);
-        float eased = easeOutCubic(t);
-
-        float cx = rect.x1 + rect.getWidth() * 0.5f;
-        float cy = rect.y1 + rect.getHeight() * 0.5f;
-        float radius = Math.max(1.0f, (float) Math.hypot(rect.getWidth(), rect.getHeight()) * 0.62f * eased);
-
-        int pressed = color(this.pressedColor, DEFAULT_PRESSED).toArgb();
-        int fill = Argb.scaleAlpha(pressed, 0.66f - t * 0.20f);
-
-        ctx.save();
-        ctx.clipRoundedRect(rect, true);
-
-        ripplePaint.setGradCoords(null);
-        ripplePaint.setStrokeCap(Paint.StrokeCap.FILL);
-        ripplePaint.setColor(fill);
-        ctx.drawArc(cx - radius, cy - radius, cx + radius, cy + radius, 0.0f, 360.0f, false, ripplePaint);
-
-        if (t < 0.96f) {
-            ripplePaint.setStrokeCap(Paint.StrokeCap.STROKE);
-            ripplePaint.setStrokeWidth(1.15f);
-            ripplePaint.setColor(Argb.withAlpha(0xFFFFFFFF, Math.round((1.0f - t) * 52.0f)));
-            ctx.drawArc(cx - radius, cy - radius, cx + radius, cy + radius, 0.0f, 360.0f, false, ripplePaint);
-            ripplePaint.setStrokeCap(Paint.StrokeCap.FILL);
-        }
-
-        ctx.restore();
-    }
-
-    private void drawSoftSpecularEdge(DrawContext ctx, RoundedRectangle rect, float press) {
+    private void drawSoftEdge(DrawContext ctx, RoundedRectangle rect, float press) {
         float width = rect.getWidth();
         float height = rect.getHeight();
-        float radius = Math.min(Math.min(rect.topLeftRadius, rect.topRightRadius), Math.min(rect.bottomLeftRadius, rect.bottomRightRadius));
 
         ctx.save();
         ctx.clipRoundedRect(rect, true);
 
-        detailPaint.setGradCoords(null);
-        detailPaint.setStrokeCap(Paint.StrokeCap.FILL);
+        this.detailPaint.setGradCoords(null);
+        this.detailPaint.setStrokeCap(Paint.StrokeCap.FILL);
 
-        detailPaint.setColor(Argb.withAlpha(0xFFFFFFFF, Math.round(18.0f + press * 12.0f)));
+        this.detailPaint.setColor(Argb.withAlpha(0xFFFFFFFF, Math.round(13.0f + press * 10.0f)));
         ctx.drawRoundedRect(RoundedRectangle.ofXYWHR(
-                rect.x1 + radius * 0.80f,
-                rect.y1 + 1.05f,
-                width - radius * 1.60f,
+                rect.x1 + RADIUS * 0.82f,
+                rect.y1 + 1.0f,
+                width - RADIUS * 1.64f,
+                0.75f,
+                0.38f
+        ), this.detailPaint);
+
+        this.detailPaint.setColor(Argb.withAlpha(0xFF000000, Math.round(20.0f + press * 12.0f)));
+        ctx.drawRoundedRect(RoundedRectangle.ofXYWHR(
+                rect.x1 + RADIUS * 0.76f,
+                rect.y1 + height - 1.65f,
+                width - RADIUS * 1.52f,
                 0.85f,
-                0.45f
-        ), detailPaint);
-
-        detailPaint.setColor(Argb.withAlpha(0xFF000000, Math.round(18.0f + press * 10.0f)));
-        ctx.drawRoundedRect(RoundedRectangle.ofXYWHR(
-                rect.x1 + radius * 0.86f,
-                rect.y1 + height - 1.90f,
-                width - radius * 1.72f,
-                0.90f,
-                0.45f
-        ), detailPaint);
+                0.42f
+        ), this.detailPaint);
 
         ctx.restore();
     }
 
     private void drawSpaceGlyph(DrawContext ctx, RoundedRectangle rect, float press) {
-        float lineWidth = rect.getWidth() * 0.56f;
+        float lineWidth = rect.getWidth() * 0.58f;
         float lineHeight = 2.0f;
         float lineX = rect.x1 + (rect.getWidth() - lineWidth) * 0.5f;
         float lineY = rect.y1 + (rect.getHeight() - lineHeight) * 0.5f;
 
-        detailPaint.setGradCoords(null);
-        detailPaint.setStrokeCap(Paint.StrokeCap.FILL);
-        detailPaint.setColor(Argb.interpolate(0xD8FFFFFF, 0xFFFFFFFF, press));
+        this.detailPaint.setGradCoords(null);
+        this.detailPaint.setStrokeCap(Paint.StrokeCap.FILL);
+        this.detailPaint.setColor(Argb.interpolate(0xDDFFFFFF, 0xFFFFFFFF, press));
 
         ctx.drawRoundedRect(RoundedRectangle.ofXYWHR(
                 lineX,
@@ -427,10 +484,11 @@ public final class KeystrokesModule extends HudElement {
                 lineWidth,
                 lineHeight,
                 lineHeight * 0.5f
-        ), detailPaint);
+        ), this.detailPaint);
     }
 
-    private void drawTextCentered(DrawContext ctx, String text, float centerX, float centerY, FontRenderer font, float press) {
+    private void drawTextCentered(DrawContext ctx, String text, float centerX, float centerY,
+                                  FontRenderer font, float press) {
         float textWidth = GlHelper.getStringWidth(text, font);
         float ascent = GlHelper.getFontAscent(font);
         float capHeight = font.getMetrics().capHeight();
@@ -438,39 +496,46 @@ public final class KeystrokesModule extends HudElement {
         float drawX = centerX - textWidth * 0.5f;
         float drawY = centerY - capHeight * 0.5f - (ascent - capHeight);
 
-        textPaint.setGradCoords(null);
-        textPaint.setStrokeCap(Paint.StrokeCap.FILL);
+        this.textPaint.setGradCoords(null);
+        this.textPaint.setStrokeCap(Paint.StrokeCap.FILL);
 
-        textPaint.setColor(Argb.withAlpha(0xFF000000, 82));
-        ctx.drawString(text, drawX, drawY + 0.65f, font, textPaint);
+        this.textPaint.setColor(Argb.withAlpha(0xFF000000, 70));
+        ctx.drawString(text, drawX, drawY + 0.6f, font, this.textPaint);
 
-        textPaint.setColor(resolveTextColor(press));
-        ctx.drawString(text, drawX, drawY, font, textPaint);
+        this.textPaint.setColor(this.resolveTextColor(press));
+        ctx.drawString(text, drawX, drawY, font, this.textPaint);
     }
 
     private int resolveTextColor(float press) {
-        int base = color(this.textColor, DEFAULT_TEXT).toArgb();
-        return Argb.interpolate(base, Argb.withAlpha(0xFFFFFFFF, Argb.alpha(base)), press * 0.18f);
+        int base = this.color(this.textColor, DEFAULT_TEXT).toArgb();
+        return Argb.interpolate(base, 0xFFFFFFFF, press * 0.12f);
     }
 
-    private static float easeOutCubic(float value) {
+    private float easeOutCubic(float value) {
         float t = Mth.clamp(value, 0.0f, 1.0f);
         float inv = 1.0f - t;
         return 1.0f - inv * inv * inv;
     }
 
-    private static boolean bool(Value<Boolean> value, boolean fallback) {
+    private boolean bool(Value<Boolean> value, boolean fallback) {
         return value == null ? fallback : Boolean.TRUE.equals(value.getValue());
     }
 
-    private static float number(Value<Number> value, float fallback) {
+    private float number(Value<Number> value, float fallback) {
         if (value == null || value.getValue() == null) {
             return fallback;
         }
         return value.getValue().floatValue();
     }
 
-    private static MizuColor color(Value<MizuColor> value, MizuColor fallback) {
+    private int integer(Value<Number> value, int fallback) {
+        if (value == null || value.getValue() == null) {
+            return fallback;
+        }
+        return value.getValue().intValue();
+    }
+
+    private MizuColor color(Value<MizuColor> value, MizuColor fallback) {
         return value != null && value.getValue() != null ? value.getValue() : fallback;
     }
 
@@ -491,7 +556,9 @@ public final class KeystrokesModule extends HudElement {
             this.label = label;
             this.binding = binding;
             this.pressAnimation.setCurrentValue(0.0);
+            this.pressAnimation.setToValue(0.0);
             this.rippleAnimation.setCurrentValue(1.0);
+            this.rippleAnimation.setToValue(1.0);
         }
 
         private boolean isDown() {
@@ -501,8 +568,13 @@ public final class KeystrokesModule extends HudElement {
         private void update(boolean rippleEnabled) {
             boolean down = this.isDown();
 
-            if (rippleEnabled && down && !this.wasDown) {
+            if (!rippleEnabled) {
+                this.rippleAlive = false;
+                this.rippleAnimation.setCurrentValue(1.0);
+                this.rippleAnimation.setToValue(1.0);
+            } else if (down && !this.wasDown) {
                 this.rippleAnimation.setCurrentValue(0.0);
+                this.rippleAnimation.setToValue(0.0);
                 this.rippleAlive = true;
             }
 
@@ -516,9 +588,8 @@ public final class KeystrokesModule extends HudElement {
                 if (this.rippleAnimation.getValueF() >= 0.995f) {
                     this.rippleAlive = false;
                     this.rippleAnimation.setCurrentValue(1.0);
+                    this.rippleAnimation.setToValue(1.0);
                 }
-            } else {
-                this.rippleAnimation.setCurrentValue(1.0);
             }
 
             this.wasDown = down;

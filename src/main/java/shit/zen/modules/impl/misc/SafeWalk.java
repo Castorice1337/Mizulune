@@ -52,6 +52,11 @@ extends Module {
         super("SafeWalk", Category.MISC);
     }
 
+    @Override
+    public String getSuffix() {
+        return this.adaptive.getValue() ? "Adaptive" : "Normal";
+    }
+
     public static boolean isOnBlockEdge(float distance) {
         return SafeWalk.isNearBlockEdge(distance);
     }

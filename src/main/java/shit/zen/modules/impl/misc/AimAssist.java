@@ -101,6 +101,11 @@ public class AimAssist extends Module implements RotationProvider {
     }
 
     @Override
+    public String getSuffix() {
+        return this.mode.getValue();
+    }
+
+    @Override
     protected void onEnable() {
         this.resetState();
         RotationHandler.registerProvider(this);

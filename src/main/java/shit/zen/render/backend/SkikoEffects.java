@@ -79,16 +79,27 @@ final class SkikoEffects {
         float scale = Math.max(1.0f, guiScale);
         float guiWidth = Math.max(1.0f, (float)surfaceWidth / scale);
         float guiHeight = Math.max(1.0f, (float)surfaceHeight / scale);
-        float pad = Math.max(1.0f, blurRadius * 2.0f);
-        float sampleLeft = clamp(dst.getLeft() - pad, 0.0f, guiWidth);
-        float sampleTop = clamp(dst.getTop() - pad, 0.0f, guiHeight);
-        float sampleRight = clamp(dst.getRight() + pad, 0.0f, guiWidth);
-        float sampleBottom = clamp(dst.getBottom() + pad, 0.0f, guiHeight);
-        if (sampleRight <= sampleLeft || sampleBottom <= sampleTop) {
+        Rect expandedDst = expandedBackdropDestination(dst, blurRadius);
+        float sampleLeft = clamp(expandedDst.getLeft(), 0.0f, guiWidth);
+        float sampleTop = clamp(expandedDst.getTop(), 0.0f, guiHeight);
+        float sampleRight = clamp(expandedDst.getRight(), 0.0f, guiWidth);
+        float sampleBottom = clamp(expandedDst.getBottom(), 0.0f, guiHeight);
+        Rect src = Rect.makeLTRB(sampleLeft * scale, sampleTop * scale, sampleRight * scale, sampleBottom * scale);
+        Rect clippedDst = Rect.makeLTRB(sampleLeft, sampleTop, sampleRight, sampleBottom);
+        drawBackdropBlurredRect(canvas, snapshot, clip, src, clippedDst, blurRadius, opacity, color);
+    }
+
+    static void drawBackdropBlurredRect(Canvas canvas, Image snapshot, RRect clip, Rect src, Rect expandedDst,
+                                        float blurRadius, float opacity, int color) {
+        if (canvas == null || snapshot == null || clip == null || src == null || expandedDst == null
+                || src.getWidth() <= 0.0f || src.getHeight() <= 0.0f
+                || expandedDst.getWidth() <= 0.0f || expandedDst.getHeight() <= 0.0f) {
             return;
         }
-        Rect src = Rect.makeLTRB(sampleLeft * scale, sampleTop * scale, sampleRight * scale, sampleBottom * scale);
-        Rect expandedDst = Rect.makeLTRB(sampleLeft, sampleTop, sampleRight, sampleBottom);
+        float clampedOpacity = clamp(opacity, 0.0f, 1.0f);
+        if (clampedOpacity <= 0.001f) {
+            return;
+        }
         canvas.save();
         try {
             canvas.clipRRect(clip, true);
@@ -127,16 +138,27 @@ final class SkikoEffects {
         float scale = Math.max(1.0f, guiScale);
         float guiWidth = Math.max(1.0f, (float)surfaceWidth / scale);
         float guiHeight = Math.max(1.0f, (float)surfaceHeight / scale);
-        float pad = Math.max(1.0f, blurRadius * 2.0f);
-        float sampleLeft = clamp(dst.getLeft() - pad, 0.0f, guiWidth);
-        float sampleTop = clamp(dst.getTop() - pad, 0.0f, guiHeight);
-        float sampleRight = clamp(dst.getRight() + pad, 0.0f, guiWidth);
-        float sampleBottom = clamp(dst.getBottom() + pad, 0.0f, guiHeight);
-        if (sampleRight <= sampleLeft || sampleBottom <= sampleTop) {
+        Rect expandedDst = expandedBackdropDestination(dst, blurRadius);
+        float sampleLeft = clamp(expandedDst.getLeft(), 0.0f, guiWidth);
+        float sampleTop = clamp(expandedDst.getTop(), 0.0f, guiHeight);
+        float sampleRight = clamp(expandedDst.getRight(), 0.0f, guiWidth);
+        float sampleBottom = clamp(expandedDst.getBottom(), 0.0f, guiHeight);
+        Rect src = Rect.makeLTRB(sampleLeft * scale, sampleTop * scale, sampleRight * scale, sampleBottom * scale);
+        Rect clippedDst = Rect.makeLTRB(sampleLeft, sampleTop, sampleRight, sampleBottom);
+        drawBackdropBlurredPath(canvas, snapshot, clipPath, src, clippedDst, blurRadius, opacity, color);
+    }
+
+    static void drawBackdropBlurredPath(Canvas canvas, Image snapshot, Path clipPath, Rect src, Rect expandedDst,
+                                        float blurRadius, float opacity, int color) {
+        if (canvas == null || snapshot == null || clipPath == null || src == null || expandedDst == null
+                || src.getWidth() <= 0.0f || src.getHeight() <= 0.0f
+                || expandedDst.getWidth() <= 0.0f || expandedDst.getHeight() <= 0.0f) {
             return;
         }
-        Rect src = Rect.makeLTRB(sampleLeft * scale, sampleTop * scale, sampleRight * scale, sampleBottom * scale);
-        Rect expandedDst = Rect.makeLTRB(sampleLeft, sampleTop, sampleRight, sampleBottom);
+        float clampedOpacity = clamp(opacity, 0.0f, 1.0f);
+        if (clampedOpacity <= 0.001f) {
+            return;
+        }
         canvas.save();
         try {
             canvas.clipPath(clipPath, true);
@@ -164,5 +186,10 @@ final class SkikoEffects {
 
     private static float clamp(float value, float min, float max) {
         return Math.max(min, Math.min(max, value));
+    }
+
+    static Rect expandedBackdropDestination(Rect dst, float blurRadius) {
+        float pad = Math.max(1.0f, blurRadius * 2.0f);
+        return Rect.makeLTRB(dst.getLeft() - pad, dst.getTop() - pad, dst.getRight() + pad, dst.getBottom() + pad);
     }
 }

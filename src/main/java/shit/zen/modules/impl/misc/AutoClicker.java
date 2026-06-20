@@ -34,6 +34,11 @@ public class AutoClicker extends Module {
     }
 
     @Override
+    public String getSuffix() {
+        return this.clickSide.getValue() + " " + formatSuffixNumber(this.cps.getValue()) + " CPS";
+    }
+
+    @Override
     public void onEnable() {
         this.leftClickTimer.reset();
         this.rightClickTimer.reset();

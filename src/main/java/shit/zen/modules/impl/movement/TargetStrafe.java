@@ -30,6 +30,11 @@ extends Module {
         INSTANCE = this;
     }
 
+    @Override
+    public String getSuffix() {
+        return formatSuffixNumber(this.range.getValue());
+    }
+
     public static float getRange() {
         return TargetStrafe.INSTANCE.range.getValue().floatValue();
     }

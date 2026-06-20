@@ -40,6 +40,11 @@ public class AutoOffHand extends Module {
         INSTANCE = this;
     }
 
+    @Override
+    public String getSuffix() {
+        return formatSuffixNumber(this.health.getValue()) + " HP";
+    }
+
     @EventTarget
     public void onTick(TickEvent event) {
         if (!this.isEnabled() || mc.player == null || mc.level == null

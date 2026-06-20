@@ -1,7 +1,7 @@
 package shit.zen.manager;
 
 import java.util.Collection;
-import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import shit.zen.ClientBase;
 import shit.zen.ZenClient;
@@ -21,7 +21,7 @@ import shit.zen.hud.TargetHud;
 import shit.zen.event.EventTarget;
 
 public class HudManager {
-    private final Map<String, HudElement> hudElements = new HashMap<>();
+    private final Map<String, HudElement> hudElements = new LinkedHashMap<>();
 
     public HudManager() {
         this.init();

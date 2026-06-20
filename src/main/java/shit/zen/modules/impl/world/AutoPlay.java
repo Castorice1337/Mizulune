@@ -24,6 +24,11 @@ extends Module {
     }
 
     @Override
+    public String getSuffix() {
+        return formatSuffixNumber(this.delay.getValue()) + "s";
+    }
+
+    @Override
     protected void onEnable() {
         this.pendingDisconnect = false;
         this.disconnectTime = -1L;

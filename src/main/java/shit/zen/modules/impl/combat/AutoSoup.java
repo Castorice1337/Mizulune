@@ -30,6 +30,11 @@ extends Module {
     }
 
     @Override
+    public String getSuffix() {
+        return formatSuffixNumber(this.health.getValue());
+    }
+
+    @Override
     protected void onDisable() {
         this.prevSelectedSlot = -1;
         this.isUsingSoup = false;

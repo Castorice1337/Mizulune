@@ -64,6 +64,7 @@ public final class SkikoBackend implements RenderBackend {
     private BackendRenderTarget renderTarget;
     private Surface surface;
     private Image backdropSnapshot;
+    private Image cleanBackdropSnapshot;
     private Canvas canvas;
     private GlStateGuard frameState;
     private int currentFbo = -1;
@@ -71,6 +72,9 @@ public final class SkikoBackend implements RenderBackend {
     private int currentHeight = -1;
     private int backdropSnapshotWidth = -1;
     private int backdropSnapshotHeight = -1;
+    private int cleanBackdropSnapshotWidth = -1;
+    private int cleanBackdropSnapshotHeight = -1;
+    private boolean backdropSnapshotBorrowed;
     private int backdropBlurCount;
     private int backdropBlurMissCount;
     private float guiScale = 1.0f;
@@ -113,7 +117,9 @@ public final class SkikoBackend implements RenderBackend {
         int width = Math.max(1, mc.getWindow().getWidth());
         int height = Math.max(1, mc.getWindow().getHeight());
         this.ensureSurface(fbo, width, height);
-        this.captureBackdropSnapshot(width, height);
+        if (!this.useCleanBackdropSnapshot(width, height)) {
+            this.captureBackdropSnapshot(width, height);
+        }
         this.canvas = this.surface.getCanvas();
         this.canvas.save();
         this.beginDepth = 1;
@@ -124,6 +130,34 @@ public final class SkikoBackend implements RenderBackend {
         }
         this.canvas.scale(this.guiScale, this.guiScale);
         this.active = true;
+    }
+
+    @Override
+    public void captureCleanBackdrop(GuiGraphics guiGraphics, PoseStack poseStack) {
+        RenderSystem.assertOnRenderThread();
+
+        this.ensureContext();
+        this.directContext.resetGLAll();
+
+        int fbo = GL11.glGetInteger(GL30.GL_FRAMEBUFFER_BINDING);
+        Minecraft mc = Minecraft.getInstance();
+        int width = Math.max(1, mc.getWindow().getWidth());
+        int height = Math.max(1, mc.getWindow().getHeight());
+
+        this.ensureSurface(fbo, width, height);
+        this.closeCleanBackdropSnapshot();
+
+        GL11.glFlush();
+
+        this.cleanBackdropSnapshot = this.surface.makeImageSnapshot();
+        this.cleanBackdropSnapshotWidth = width;
+        this.cleanBackdropSnapshotHeight = height;
+
+        if (this.cleanBackdropSnapshot == null) {
+            this.cleanBackdropSnapshotWidth = -1;
+            this.cleanBackdropSnapshotHeight = -1;
+            this.backdropBlurMissCount++;
+        }
     }
 
     @Override
@@ -452,12 +486,18 @@ public final class SkikoBackend implements RenderBackend {
             return false;
         }
         this.backdropBlurCount++;
-        SkikoEffects.drawBackdropBlurredRect(this.requireCanvas(), this.backdropSnapshot,
-                this.toRRect(roundedRectangle),
-                Rect.makeXYWH(roundedRectangle.x1, roundedRectangle.y1,
-                        roundedRectangle.getWidth(), roundedRectangle.getHeight()),
-                Math.max(0.0f, blurRadius), opacity, color,
-                this.guiScale, this.backdropSnapshotWidth, this.backdropSnapshotHeight);
+        Canvas currentCanvas = this.requireCanvas();
+        float effectiveBlurRadius = Math.max(0.0f, blurRadius);
+        Rect dst = Rect.makeXYWH(roundedRectangle.x1, roundedRectangle.y1,
+                roundedRectangle.getWidth(), roundedRectangle.getHeight());
+        Rect expandedDst = SkikoEffects.expandedBackdropDestination(dst, effectiveBlurRadius);
+        Rect src = this.currentDeviceBounds(expandedDst, this.backdropSnapshotWidth, this.backdropSnapshotHeight);
+        if (src == null) {
+            this.backdropBlurMissCount++;
+            return false;
+        }
+        SkikoEffects.drawBackdropBlurredRect(currentCanvas, this.backdropSnapshot,
+                this.toRRect(roundedRectangle), src, expandedDst, effectiveBlurRadius, opacity, color);
         return true;
     }
 
@@ -470,10 +510,17 @@ public final class SkikoBackend implements RenderBackend {
         }
         this.backdropBlurCount++;
         try (org.jetbrains.skia.Path skPath = this.toSkPath(clipPath)) {
-            SkikoEffects.drawBackdropBlurredPath(this.requireCanvas(), this.backdropSnapshot, skPath,
-                    Rect.makeXYWH(bounds.getX(), bounds.getY(), bounds.getWidth(), bounds.getHeight()),
-                    Math.max(0.0f, blurRadius), opacity, color,
-                    this.guiScale, this.backdropSnapshotWidth, this.backdropSnapshotHeight);
+            Canvas currentCanvas = this.requireCanvas();
+            float effectiveBlurRadius = Math.max(0.0f, blurRadius);
+            Rect dst = Rect.makeXYWH(bounds.getX(), bounds.getY(), bounds.getWidth(), bounds.getHeight());
+            Rect expandedDst = SkikoEffects.expandedBackdropDestination(dst, effectiveBlurRadius);
+            Rect src = this.currentDeviceBounds(expandedDst, this.backdropSnapshotWidth, this.backdropSnapshotHeight);
+            if (src == null) {
+                this.backdropBlurMissCount++;
+                return false;
+            }
+            SkikoEffects.drawBackdropBlurredPath(currentCanvas, this.backdropSnapshot, skPath,
+                    src, expandedDst, effectiveBlurRadius, opacity, color);
         }
         return true;
     }
@@ -501,6 +548,57 @@ public final class SkikoBackend implements RenderBackend {
     @Override
     public void drawBlur(DrawContext drawContext, float x, float y, float width, float height, float radius, Runnable runnable) {
         SkikoEffects.drawSelfBlur(this.requireCanvas(), Rect.makeXYWH(x, y, width, height), radius, runnable);
+    }
+
+    private Rect currentDeviceBounds(Rect localBounds, int surfaceWidth, int surfaceHeight) {
+        if (localBounds == null || localBounds.getWidth() <= 0.0f || localBounds.getHeight() <= 0.0f) {
+            return null;
+        }
+        float[] matrix = this.requireCanvas().getLocalToDeviceAsMatrix33().getMat();
+        if (matrix == null || matrix.length < 9) {
+            return null;
+        }
+
+        float[] mapped = new float[8];
+        if (!mapDevicePoint(matrix, localBounds.getLeft(), localBounds.getTop(), mapped, 0)
+                || !mapDevicePoint(matrix, localBounds.getRight(), localBounds.getTop(), mapped, 2)
+                || !mapDevicePoint(matrix, localBounds.getRight(), localBounds.getBottom(), mapped, 4)
+                || !mapDevicePoint(matrix, localBounds.getLeft(), localBounds.getBottom(), mapped, 6)) {
+            return null;
+        }
+
+        float minX = Math.min(Math.min(mapped[0], mapped[2]), Math.min(mapped[4], mapped[6]));
+        float minY = Math.min(Math.min(mapped[1], mapped[3]), Math.min(mapped[5], mapped[7]));
+        float maxX = Math.max(Math.max(mapped[0], mapped[2]), Math.max(mapped[4], mapped[6]));
+        float maxY = Math.max(Math.max(mapped[1], mapped[3]), Math.max(mapped[5], mapped[7]));
+
+        float left = clamp(minX, 0.0f, surfaceWidth);
+        float top = clamp(minY, 0.0f, surfaceHeight);
+        float right = clamp(maxX, 0.0f, surfaceWidth);
+        float bottom = clamp(maxY, 0.0f, surfaceHeight);
+        if (right <= left || bottom <= top) {
+            return null;
+        }
+        return Rect.makeLTRB(left, top, right, bottom);
+    }
+
+    private static boolean mapDevicePoint(float[] matrix, float x, float y, float[] output, int index) {
+        float denominator = matrix[6] * x + matrix[7] * y + matrix[8];
+        if (Math.abs(denominator) <= 0.00001f) {
+            return false;
+        }
+        float mappedX = (matrix[0] * x + matrix[1] * y + matrix[2]) / denominator;
+        float mappedY = (matrix[3] * x + matrix[4] * y + matrix[5]) / denominator;
+        if (!Float.isFinite(mappedX) || !Float.isFinite(mappedY)) {
+            return false;
+        }
+        output[index] = mappedX;
+        output[index + 1] = mappedY;
+        return true;
+    }
+
+    private static float clamp(float value, float min, float max) {
+        return Math.max(min, Math.min(max, value));
     }
 
     private void ensureContext() {
@@ -542,21 +640,53 @@ public final class SkikoBackend implements RenderBackend {
         }
     }
 
-    private void closeBackdropSnapshot() {
-        if (this.backdropSnapshot != null) {
-            this.backdropSnapshot.close();
-            this.backdropSnapshot = null;
+    private boolean useCleanBackdropSnapshot(int width, int height) {
+        if (this.cleanBackdropSnapshot == null
+                || this.cleanBackdropSnapshotWidth != width
+                || this.cleanBackdropSnapshotHeight != height) {
+            return false;
         }
+
+        this.closeBackdropSnapshot();
+
+        this.backdropSnapshot = this.cleanBackdropSnapshot;
+        this.backdropSnapshotWidth = this.cleanBackdropSnapshotWidth;
+        this.backdropSnapshotHeight = this.cleanBackdropSnapshotHeight;
+        this.backdropSnapshotBorrowed = true;
+
+        return true;
+    }
+
+    private void closeBackdropSnapshot() {
+        if (this.backdropSnapshot != null && !this.backdropSnapshotBorrowed) {
+            this.backdropSnapshot.close();
+        }
+
+        this.backdropSnapshot = null;
         this.backdropSnapshotWidth = -1;
         this.backdropSnapshotHeight = -1;
+        this.backdropSnapshotBorrowed = false;
+    }
+
+    private void closeCleanBackdropSnapshot() {
+        if (this.cleanBackdropSnapshot != null) {
+            this.cleanBackdropSnapshot.close();
+            this.cleanBackdropSnapshot = null;
+        }
+
+        this.cleanBackdropSnapshotWidth = -1;
+        this.cleanBackdropSnapshotHeight = -1;
     }
 
     private void closeSurface() {
         this.closeBackdropSnapshot();
+        this.closeCleanBackdropSnapshot();
+
         if (this.surface != null) {
             this.surface.close();
             this.surface = null;
         }
+
         if (this.renderTarget != null) {
             this.renderTarget.close();
             this.renderTarget = null;

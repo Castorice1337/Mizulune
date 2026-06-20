@@ -93,6 +93,11 @@ public class Scaffold extends Module {
     }
 
     @Override
+    public String getSuffix() {
+        return this.mode.getValue();
+    }
+
+    @Override
     public void onEnable() {
         if (GodBridgeAssist.INSTANCE != null && GodBridgeAssist.INSTANCE.isEnabled()) {
             GodBridgeAssist.INSTANCE.setEnabled(false);
