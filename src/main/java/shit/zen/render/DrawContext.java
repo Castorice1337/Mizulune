@@ -653,6 +653,58 @@ public class DrawContext {
         BlurRenderer.renderBlur(this, x, y, width, height, halfBlur, () -> this.drawRoundedRect(expanded, paint));
     }
 
+    public boolean drawBackdropBlurredRoundedRect(RoundedRectangle roundedRectangle, float blurRadius, float opacity, int overlayColor) {
+        if (roundedRectangle == null) {
+            return false;
+        }
+        float clampedOpacity = Math.max(0.0f, Math.min(1.0f, opacity));
+        if (clampedOpacity <= 0.001f) {
+            return false;
+        }
+        if (this.useBackend() && this.backend.drawBackdropBlurredRoundedRect(this, roundedRectangle,
+                Math.max(0.0f, blurRadius), clampedOpacity, overlayColor)) {
+            return true;
+        }
+        this.drawBackdropFallback(roundedRectangle, clampedOpacity, overlayColor);
+        return false;
+    }
+
+    public boolean drawBackdropBlurredPath(Path clipPath, Rectangle bounds, float blurRadius, float opacity, int overlayColor) {
+        if (clipPath == null || bounds == null || bounds.getWidth() <= 0.0f || bounds.getHeight() <= 0.0f) {
+            return false;
+        }
+        float clampedOpacity = Math.max(0.0f, Math.min(1.0f, opacity));
+        if (clampedOpacity <= 0.001f) {
+            return false;
+        }
+        if (this.useBackend() && this.backend.drawBackdropBlurredPath(this, clipPath, bounds,
+                Math.max(0.0f, blurRadius), clampedOpacity, overlayColor)) {
+            return true;
+        }
+        this.drawBackdropFallback(clipPath, clampedOpacity, overlayColor);
+        return false;
+    }
+
+    private void drawBackdropFallback(RoundedRectangle roundedRectangle, float opacity, int overlayColor) {
+        if ((overlayColor >>> 24) == 0) {
+            return;
+        }
+        try (Paint paint = new Paint()) {
+            paint.setColor(scaleAlpha(overlayColor, opacity));
+            this.drawRoundedRect(roundedRectangle, paint);
+        }
+    }
+
+    private void drawBackdropFallback(Path clipPath, float opacity, int overlayColor) {
+        if ((overlayColor >>> 24) == 0) {
+            return;
+        }
+        try (Paint paint = new Paint()) {
+            paint.setColor(scaleAlpha(overlayColor, opacity));
+            this.drawPath(clipPath, paint);
+        }
+    }
+
     public void drawLiquidGlassPanel(RoundedRectangle roundedRectangle, LiquidGlassStyle style) {
         if (roundedRectangle == null) {
             return;

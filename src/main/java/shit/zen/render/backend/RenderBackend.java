@@ -122,6 +122,22 @@ public interface RenderBackend {
         return false;
     }
 
+    default boolean drawBackdropBlurredRoundedRect(DrawContext drawContext, RoundedRectangle roundedRectangle,
+                                                   float blurRadius, float opacity, int color) {
+        if (roundedRectangle == null) {
+            return false;
+        }
+        float radius = Math.max(0.0f, Math.min(Math.min(roundedRectangle.topLeftRadius, roundedRectangle.topRightRadius),
+                Math.min(roundedRectangle.bottomRightRadius, roundedRectangle.bottomLeftRadius)));
+        return this.drawBackdropBlurredRect(drawContext, roundedRectangle.x1, roundedRectangle.y1,
+                roundedRectangle.getWidth(), roundedRectangle.getHeight(), radius, blurRadius, opacity, color);
+    }
+
+    default boolean drawBackdropBlurredPath(DrawContext drawContext, Path clipPath, Rectangle bounds,
+                                            float blurRadius, float opacity, int color) {
+        return false;
+    }
+
     default boolean drawLiquidGlassPanel(DrawContext drawContext, RoundedRectangle roundedRectangle, LiquidGlassStyle style) {
         return false;
     }
