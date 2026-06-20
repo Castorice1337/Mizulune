@@ -19,7 +19,7 @@ import shit.zen.render.FontStore;
 import shit.zen.utils.animation.SmoothAnimationTimer;
 import shit.zen.utils.math.Easings;
 import shit.zen.utils.misc.CursorUtil;
-import shit.zen.utils.render.ColorUtil;
+import shit.zen.utils.render.Argb;
 import shit.zen.utils.render.RenderHelper;
 import shit.zen.utils.render.RenderUtil;
 import shit.zen.value.GradientSpec;
@@ -129,7 +129,7 @@ public final class ValueTreeElementRenderer {
     public void onMouseRelease(double mouseX, double mouseY, int button) {
         COLOR_PICKER.onMouseRelease();
         if (this.draggingNumber != null || this.draggingRange != null) {
-            ConfigManager.saveAllIfReady();
+            ConfigManager.requestSaveIfReady();
         }
         this.draggingNumber = null;
         this.draggingRange = null;
@@ -138,7 +138,7 @@ public final class ValueTreeElementRenderer {
     public void blurText() {
         if (this.focusedTextValue != null) {
             this.focusedTextValue = null;
-            ConfigManager.saveAllIfReady();
+            ConfigManager.requestSaveIfReady();
         }
     }
 
@@ -167,13 +167,13 @@ public final class ValueTreeElementRenderer {
             if (!current.isEmpty()) {
                 int end = current.offsetByCodePoints(current.length(), -1);
                 this.focusedTextValue.setValue(current.substring(0, end));
-                ConfigManager.saveAllIfReady();
+                ConfigManager.requestSaveIfReady();
             }
             return true;
         }
         if (keyCode == GLFW.GLFW_KEY_DELETE) {
             this.focusedTextValue.setValue("");
-            ConfigManager.saveAllIfReady();
+            ConfigManager.requestSaveIfReady();
             return true;
         }
         return false;
@@ -222,13 +222,13 @@ public final class ValueTreeElementRenderer {
         boolean hovered = CursorUtil.isInBounds(mouseX, mouseY, x + SIDE_PADDING, y, width - SIDE_PADDING * 2.0f, GROUP_HEIGHT);
         if (hovered) {
             RenderUtil.drawRoundedRect(poseStack, x + 3.0f, y + 2.0f, width - 6.0f, GROUP_HEIGHT - 4.0f, 3.0f,
-                    ColorUtil.withAlpha(-1, alpha * 0.06f));
+                    Argb.withAlpha(-1, alpha * 0.06f));
         }
         this.renderGroupDisclosure(poseStack, group, x, y, mouseX, mouseY, alpha);
         String name = this.clip(group.getDisplayName(), FontStore.AXIFORMA_BOLD_13, width - 42.0f);
         FontStore.AXIFORMA_BOLD_13.drawString(poseStack, name, x + 18.0f,
                 y + (GROUP_HEIGHT - FontStore.AXIFORMA_BOLD_13.getFontHeight()) / 2.0f + 1.0f,
-                ColorUtil.withAlpha(-1, alpha * 0.72f));
+                Argb.withAlpha(-1, alpha * 0.72f));
         if (group instanceof ToggleValueGroup toggleGroup) {
             this.renderToggle(poseStack, group, x + width - 26.0f, y + (GROUP_HEIGHT - 10.0f) / 2.0f,
                     toggleGroup.isEnabled(), alpha);
@@ -243,7 +243,7 @@ public final class ValueTreeElementRenderer {
         float amount = this.groupAmount(group);
         RenderHelper.pushRotateAround(poseStack, arrowX + FontStore.MATERIAL_14.getStringWidth(arrowIcon) / 2.0f,
                 arrowY + FontStore.MATERIAL_14.getFontHeight() / 2.0f - 0.5f, 180.0f * amount);
-        FontStore.MATERIAL_14.drawString(poseStack, arrowIcon, arrowX, arrowY, ColorUtil.withAlpha(-1, alpha * (0.48f + 0.24f * amount)));
+        FontStore.MATERIAL_14.drawString(poseStack, arrowIcon, arrowX, arrowY, Argb.withAlpha(-1, alpha * (0.48f + 0.24f * amount)));
         RenderHelper.popPose(poseStack);
     }
 
@@ -267,12 +267,12 @@ public final class ValueTreeElementRenderer {
         boolean hovered = CursorUtil.isInBounds(mouseX, mouseY, x, y, width, BOOLEAN_HEIGHT);
         if (hovered) {
             RenderUtil.drawRoundedRect(poseStack, x + 3.0f, y + 2.0f, width - 6.0f, BOOLEAN_HEIGHT - 4.0f, 3.0f,
-                    ColorUtil.withAlpha(-1, alpha * 0.045f));
+                    Argb.withAlpha(-1, alpha * 0.045f));
         }
         String name = this.clip(value.getDisplayName(), FontStore.AXIFORMA_REGULAR_14, width - 38.0f);
         FontStore.AXIFORMA_REGULAR_14.drawString(poseStack, name, x + SIDE_PADDING,
                 y + (BOOLEAN_HEIGHT - FontStore.AXIFORMA_REGULAR_14.getFontHeight()) / 2.0f,
-                ColorUtil.withAlpha(-1, alpha * 0.8f));
+                Argb.withAlpha(-1, alpha * 0.8f));
         this.renderToggle(poseStack, value, x + width - 26.0f, y + (BOOLEAN_HEIGHT - 10.0f) / 2.0f,
                 Boolean.TRUE.equals(value.getValue()), alpha);
         return BOOLEAN_HEIGHT;
@@ -295,11 +295,11 @@ public final class ValueTreeElementRenderer {
         float nameY = y + (SLIDER_HEIGHT / 2.0f - FontStore.AXIFORMA_REGULAR_14.getFontHeight()) / 2.0f + 1.0f;
         String name = this.clip(value.getDisplayName(), FontStore.AXIFORMA_REGULAR_14, width - 42.0f);
         FontStore.AXIFORMA_REGULAR_14.drawString(poseStack, name, x + SIDE_PADDING, nameY,
-                ColorUtil.withAlpha(-1, alpha * 0.8f));
+                Argb.withAlpha(-1, alpha * 0.8f));
         String valueText = this.formatNumber(current);
         FontStore.AXIFORMA_BOLD_13.drawString(poseStack, valueText,
                 x + width - FontStore.AXIFORMA_BOLD_13.getStringWidth(valueText) - SIDE_PADDING,
-                nameY, ColorUtil.withAlpha(-1, alpha * 0.92f));
+                nameY, Argb.withAlpha(-1, alpha * 0.92f));
         this.renderSlider(poseStack, x + SIDE_PADDING, y + SLIDER_HEIGHT / 2.0f + 4.0f,
                 width - SIDE_PADDING * 2.0f, sliderTimer.getValueF(), alpha);
         return SLIDER_HEIGHT;
@@ -317,11 +317,11 @@ public final class ValueTreeElementRenderer {
         float nameY = y + (SLIDER_HEIGHT / 2.0f - FontStore.AXIFORMA_REGULAR_14.getFontHeight()) / 2.0f + 1.0f;
         String name = this.clip(value.getDisplayName(), FontStore.AXIFORMA_REGULAR_14, width - 52.0f);
         FontStore.AXIFORMA_REGULAR_14.drawString(poseStack, name, x + SIDE_PADDING, nameY,
-                ColorUtil.withAlpha(-1, alpha * 0.8f));
+                Argb.withAlpha(-1, alpha * 0.8f));
         String valueText = this.formatNumber(range.lower()) + "-" + this.formatNumber(range.upper());
         FontStore.AXIFORMA_BOLD_13.drawString(poseStack, valueText,
                 x + width - FontStore.AXIFORMA_BOLD_13.getStringWidth(valueText) - SIDE_PADDING,
-                nameY, ColorUtil.withAlpha(-1, alpha * 0.92f));
+                nameY, Argb.withAlpha(-1, alpha * 0.92f));
         this.renderRangeSlider(poseStack, x + SIDE_PADDING, y + SLIDER_HEIGHT / 2.0f + 4.0f,
                 width - SIDE_PADDING * 2.0f, lowerRatio, upperRatio, alpha);
         return SLIDER_HEIGHT;
@@ -344,9 +344,9 @@ public final class ValueTreeElementRenderer {
         float nameY = y + (18.0f - FontStore.AXIFORMA_REGULAR_14.getFontHeight()) / 2.0f + 1.0f;
         String name = this.clip(displayName, compactGroupLabel ? FontStore.AXIFORMA_BOLD_13 : FontStore.AXIFORMA_REGULAR_14, width - 16.0f);
         if (compactGroupLabel) {
-            FontStore.AXIFORMA_BOLD_13.drawString(poseStack, name, x + 18.0f, nameY, ColorUtil.withAlpha(-1, alpha * 0.72f));
+            FontStore.AXIFORMA_BOLD_13.drawString(poseStack, name, x + 18.0f, nameY, Argb.withAlpha(-1, alpha * 0.72f));
         } else {
-            FontStore.AXIFORMA_REGULAR_14.drawString(poseStack, name, x + SIDE_PADDING, nameY, ColorUtil.withAlpha(-1, alpha * 0.8f));
+            FontStore.AXIFORMA_REGULAR_14.drawString(poseStack, name, x + SIDE_PADDING, nameY, Argb.withAlpha(-1, alpha * 0.8f));
         }
 
         this.renderDropdownOptions(poseStack, value, options, x + SIDE_PADDING, dropdownY, dropdownWidth, itemHeight,
@@ -354,17 +354,17 @@ public final class ValueTreeElementRenderer {
 
         float hoverAmount = hoverTimer.getValueF();
         RenderUtil.drawRoundedRect(poseStack, x + SIDE_PADDING, dropdownY, dropdownWidth, itemHeight, 3.0f,
-                ColorUtil.withAlpha(ColorUtil.fromRGB((int)(60.0f + 30.0f * hoverAmount),
+                Argb.withAlpha(Argb.fromRgb((int)(60.0f + 30.0f * hoverAmount),
                         (int)(60.0f + 30.0f * hoverAmount), (int)(60.0f + 30.0f * hoverAmount)), alpha));
         String current = this.clip(this.optionLabel(value, String.valueOf(value.getValue())), FontStore.AXIFORMA_BOLD_13, dropdownWidth - 22.0f);
         FontStore.AXIFORMA_BOLD_13.drawStringCentered(poseStack, current, x + width / 2.0f,
                 dropdownY + (itemHeight - FontStore.AXIFORMA_BOLD_13.getFontHeight()) / 2.0f,
-                ColorUtil.withAlpha(-1, alpha * 0.8f));
+                Argb.withAlpha(-1, alpha * 0.8f));
         String arrowIcon = String.valueOf('\ueb5d');
         FontStore.MATERIAL_20.drawString(poseStack, arrowIcon,
                 x + SIDE_PADDING + dropdownWidth - FontStore.MATERIAL_20.getStringWidth(arrowIcon) - 2.0f,
                 dropdownY + (itemHeight - FontStore.MATERIAL_20.getFontHeight()) / 2.0f + 0.5f,
-                ColorUtil.withAlpha(-1, alpha * 0.8f));
+                Argb.withAlpha(-1, alpha * 0.8f));
         return this.dropdownHeight(value);
     }
 
@@ -384,23 +384,23 @@ public final class ValueTreeElementRenderer {
 
         float nameY = y + (18.0f - FontStore.AXIFORMA_REGULAR_14.getFontHeight()) / 2.0f + 1.0f;
         String name = this.clip(value.getDisplayName(), FontStore.AXIFORMA_REGULAR_14, width - 16.0f);
-        FontStore.AXIFORMA_REGULAR_14.drawString(poseStack, name, x + SIDE_PADDING, nameY, ColorUtil.withAlpha(-1, alpha * 0.8f));
+        FontStore.AXIFORMA_REGULAR_14.drawString(poseStack, name, x + SIDE_PADDING, nameY, Argb.withAlpha(-1, alpha * 0.8f));
         this.renderDropdownOptions(poseStack, value, options, x + SIDE_PADDING, dropdownY, dropdownWidth, itemHeight,
                 mouseX, mouseY, alpha, openTimer.getValueF());
         float hoverAmount = hoverTimer.getValueF();
         RenderUtil.drawRoundedRect(poseStack, x + SIDE_PADDING, dropdownY, dropdownWidth, itemHeight, 3.0f,
-                ColorUtil.withAlpha(ColorUtil.fromRGB((int)(60.0f + 30.0f * hoverAmount),
+                Argb.withAlpha(Argb.fromRgb((int)(60.0f + 30.0f * hoverAmount),
                         (int)(60.0f + 30.0f * hoverAmount), (int)(60.0f + 30.0f * hoverAmount)), alpha));
         String selectedLabel = this.multiLabel(value);
         selectedLabel = this.clip(selectedLabel, FontStore.AXIFORMA_BOLD_13, dropdownWidth - 22.0f);
         FontStore.AXIFORMA_BOLD_13.drawStringCentered(poseStack, selectedLabel, x + width / 2.0f,
                 dropdownY + (itemHeight - FontStore.AXIFORMA_BOLD_13.getFontHeight()) / 2.0f,
-                ColorUtil.withAlpha(-1, alpha * 0.8f));
+                Argb.withAlpha(-1, alpha * 0.8f));
         String arrowIcon = String.valueOf('\ueb5d');
         FontStore.MATERIAL_20.drawString(poseStack, arrowIcon,
                 x + SIDE_PADDING + dropdownWidth - FontStore.MATERIAL_20.getStringWidth(arrowIcon) - 2.0f,
                 dropdownY + (itemHeight - FontStore.MATERIAL_20.getFontHeight()) / 2.0f + 0.5f,
-                ColorUtil.withAlpha(-1, alpha * 0.8f));
+                Argb.withAlpha(-1, alpha * 0.8f));
         return this.dropdownHeight(value);
     }
 
@@ -410,7 +410,7 @@ public final class ValueTreeElementRenderer {
         if (openAmount > 0.0f && !options.isEmpty()) {
             float dropdownHeight = itemHeight + options.size() * itemHeight * openAmount;
             RenderUtil.drawRoundedRect(poseStack, x, y, width, dropdownHeight, 3.0f,
-                    ColorUtil.withAlpha(ColorUtil.fromRGB(60, 60, 60), alpha * openAmount));
+                    Argb.withAlpha(Argb.fromRgb(60, 60, 60), alpha * openAmount));
             float textInsetY = (itemHeight - FontStore.AXIFORMA_BOLD_13.getFontHeight()) / 2.0f;
             float itemY = y + itemHeight;
             for (String option : options) {
@@ -421,11 +421,11 @@ public final class ValueTreeElementRenderer {
                 if (y + dropdownHeight > itemY + FontStore.AXIFORMA_BOLD_13.getFontHeight()) {
                     String label = this.optionLabel(value, option);
                     FontStore.AXIFORMA_BOLD_13.drawStringCentered(poseStack, label, x + width / 2.0f,
-                            itemY + textInsetY, ColorUtil.withAlpha(-1, alpha * 0.8f * openAmount));
+                            itemY + textInsetY, Argb.withAlpha(-1, alpha * 0.8f * openAmount));
                     if (this.isOptionSelected(value, option)) {
                         FontStore.AXIFORMA_BOLD_13.drawString(poseStack, "x",
                                 x + width - FontStore.AXIFORMA_BOLD_13.getStringWidth("x") - 5.0f,
-                                itemY + textInsetY, ColorUtil.withAlpha(-1, alpha * 0.56f * openAmount));
+                                itemY + textInsetY, Argb.withAlpha(-1, alpha * 0.56f * openAmount));
                     }
                 }
                 itemY += itemHeight;
@@ -439,7 +439,7 @@ public final class ValueTreeElementRenderer {
         highlightYTimer.tick();
         if (highlightTimer.getValueF() > 0.0f) {
             RenderUtil.drawRoundedRect(poseStack, x, highlightYTimer.getValueF(), width, itemHeight, 3.0f,
-                    ColorUtil.withAlpha(-1, alpha * highlightTimer.getValueF() * 0.1f));
+                    Argb.withAlpha(-1, alpha * highlightTimer.getValueF() * 0.1f));
         }
     }
 
@@ -449,11 +449,11 @@ public final class ValueTreeElementRenderer {
         String name = this.clip(value.getDisplayName(), FontStore.AXIFORMA_REGULAR_14, width - 72.0f);
         FontStore.AXIFORMA_REGULAR_14.drawString(poseStack, name, x + SIDE_PADDING,
                 y + (BOOLEAN_HEIGHT - FontStore.AXIFORMA_REGULAR_14.getFontHeight()) / 2.0f,
-                ColorUtil.withAlpha(-1, alpha * 0.8f));
+                Argb.withAlpha(-1, alpha * 0.8f));
         float swatch = 12.0f;
         float swatchX = x + width - 68.0f;
         float swatchY = y + (BOOLEAN_HEIGHT - swatch) / 2.0f;
-        RenderUtil.drawRoundedRect(poseStack, swatchX, swatchY, swatch, swatch, 3.0f, ColorUtil.withAlpha(color.toArgb(), alpha));
+        RenderUtil.drawRoundedRect(poseStack, swatchX, swatchY, swatch, swatch, 3.0f, Argb.withAlpha(color.toArgb(), alpha));
         this.renderSmallPill(poseStack, color.toHexArgb(), swatchX + swatch + 4.0f, swatchY, 50.0f, swatch, alpha);
         return BOOLEAN_HEIGHT + COLOR_PICKER.render(poseStack, value, Math.round(x), Math.round(y + BOOLEAN_HEIGHT),
                 Math.round(width), mouseX, mouseY, alpha, 1.0f);
@@ -465,12 +465,12 @@ public final class ValueTreeElementRenderer {
         String name = this.clip(value.getDisplayName(), FontStore.AXIFORMA_REGULAR_14, width - 44.0f);
         FontStore.AXIFORMA_REGULAR_14.drawString(poseStack, name, x + SIDE_PADDING,
                 y + (BOOLEAN_HEIGHT - FontStore.AXIFORMA_REGULAR_14.getFontHeight()) / 2.0f,
-                ColorUtil.withAlpha(-1, alpha * 0.8f));
+                Argb.withAlpha(-1, alpha * 0.8f));
         float swatch = 12.0f;
         float swatchX = x + width - 34.0f;
         float swatchY = y + (BOOLEAN_HEIGHT - swatch) / 2.0f;
-        RenderUtil.drawRoundedRect(poseStack, swatchX, swatchY, swatch, swatch, 3.0f, ColorUtil.withAlpha(gradient.start().toArgb(), alpha));
-        RenderUtil.drawRoundedRect(poseStack, swatchX + swatch + 4.0f, swatchY, swatch, swatch, 3.0f, ColorUtil.withAlpha(gradient.end().toArgb(), alpha));
+        RenderUtil.drawRoundedRect(poseStack, swatchX, swatchY, swatch, swatch, 3.0f, Argb.withAlpha(gradient.start().toArgb(), alpha));
+        RenderUtil.drawRoundedRect(poseStack, swatchX + swatch + 4.0f, swatchY, swatch, swatch, 3.0f, Argb.withAlpha(gradient.end().toArgb(), alpha));
         return BOOLEAN_HEIGHT + COLOR_PICKER.render(poseStack, value, Math.round(x), Math.round(y + BOOLEAN_HEIGHT),
                 Math.round(width), mouseX, mouseY, alpha, 1.0f);
     }
@@ -479,7 +479,7 @@ public final class ValueTreeElementRenderer {
         String name = this.clip(value.getDisplayName(), FontStore.AXIFORMA_REGULAR_14, width - 58.0f);
         FontStore.AXIFORMA_REGULAR_14.drawString(poseStack, name, x + SIDE_PADDING,
                 y + (BOOLEAN_HEIGHT - FontStore.AXIFORMA_REGULAR_14.getFontHeight()) / 2.0f,
-                ColorUtil.withAlpha(-1, alpha * 0.8f));
+                Argb.withAlpha(-1, alpha * 0.8f));
         String text = this.clip(String.valueOf(value.getValue()), FontStore.AXIFORMA_BOLD_13, 48.0f);
         this.renderSmallPill(poseStack, text, x + width - 54.0f, y + 3.0f, 48.0f, 12.0f, alpha);
         return BOOLEAN_HEIGHT;
@@ -497,25 +497,25 @@ public final class ValueTreeElementRenderer {
         String name = this.clip(value.getDisplayName(), FontStore.AXIFORMA_REGULAR_14, width - 16.0f);
         FontStore.AXIFORMA_REGULAR_14.drawString(poseStack, name, x + SIDE_PADDING,
                 y + (18.0f - FontStore.AXIFORMA_REGULAR_14.getFontHeight()) / 2.0f + 1.0f,
-                ColorUtil.withAlpha(-1, alpha * 0.8f));
+                Argb.withAlpha(-1, alpha * 0.8f));
 
-        int base = ColorUtil.fromRGB(focused ? 82 : hovered ? 70 : 56, focused ? 82 : hovered ? 70 : 56, focused ? 82 : hovered ? 70 : 56);
-        RenderUtil.drawRoundedRect(poseStack, inputX, inputY, inputWidth, inputHeight, 3.0f, ColorUtil.withAlpha(base, alpha));
+        int base = Argb.fromRgb(focused ? 82 : hovered ? 70 : 56, focused ? 82 : hovered ? 70 : 56, focused ? 82 : hovered ? 70 : 56);
+        RenderUtil.drawRoundedRect(poseStack, inputX, inputY, inputWidth, inputHeight, 3.0f, Argb.withAlpha(base, alpha));
         if (focused) {
             RenderUtil.drawRoundedRect(poseStack, inputX, inputY, inputWidth, 1.0f, 0.5f,
-                    ColorUtil.withAlpha(CategoryPanel.ACCENT_COLOR, alpha));
+                    Argb.withAlpha(CategoryPanel.ACCENT_COLOR, alpha));
         }
 
         String raw = String.valueOf(value.getValue());
         String visibleText = this.clipTail(raw, FontStore.AXIFORMA_BOLD_13, inputWidth - 10.0f);
         float textY = inputY + (inputHeight - FontStore.AXIFORMA_BOLD_13.getFontHeight()) / 2.0f;
         FontStore.AXIFORMA_BOLD_13.drawString(poseStack, visibleText, inputX + 5.0f, textY,
-                ColorUtil.withAlpha(-1, alpha * (raw.isEmpty() ? 0.38f : 0.86f)));
+                Argb.withAlpha(-1, alpha * (raw.isEmpty() ? 0.38f : 0.86f)));
         if (focused && ((System.currentTimeMillis() / 500L) & 1L) == 0L) {
             float cursorX = Math.min(inputX + inputWidth - 5.0f,
                     inputX + 5.0f + FontStore.AXIFORMA_BOLD_13.getStringWidth(visibleText) + 1.0f);
             RenderUtil.drawFilledRect(poseStack, cursorX, inputY + 3.0f, 1.0f, inputHeight - 6.0f,
-                    ColorUtil.withAlpha(-1, alpha * 0.86f));
+                    Argb.withAlpha(-1, alpha * 0.86f));
         }
         return TEXT_HEIGHT;
     }
@@ -530,7 +530,7 @@ public final class ValueTreeElementRenderer {
                     && button == 0
                     && CursorUtil.isInBounds(mouseX, mouseY, rowX + rowWidth - 26.0f, y + (GROUP_HEIGHT - 10.0f) / 2.0f, 20.0f, 10.0f)) {
                 toggleGroup.setEnabled(!toggleGroup.isEnabled());
-                ConfigManager.saveAllIfReady();
+                ConfigManager.requestSaveIfReady();
                 return true;
             }
             if (button == 0 || button == 1) {
@@ -592,7 +592,7 @@ public final class ValueTreeElementRenderer {
             case BOOLEAN -> {
                 if (CursorUtil.isInBounds(mouseX, mouseY, x, y, width, BOOLEAN_HEIGHT)) {
                     value.setRawValue(!Boolean.TRUE.equals(value.getValue()));
-                    ConfigManager.saveAllIfReady();
+                    ConfigManager.requestSaveIfReady();
                     yield true;
                 }
                 yield false;
@@ -675,7 +675,7 @@ public final class ValueTreeElementRenderer {
                     Value<String> stringValue = (Value<String>)value;
                     stringValue.setValue(option);
                     this.dropdownOpen.put(value, false);
-                    ConfigManager.saveAllIfReady();
+                    ConfigManager.requestSaveIfReady();
                     return true;
                 }
                 optionY += DROPDOWN_ITEM_HEIGHT;
@@ -708,7 +708,7 @@ public final class ValueTreeElementRenderer {
                         next.add(option);
                     }
                     value.setValue(next);
-                    ConfigManager.saveAllIfReady();
+                    ConfigManager.requestSaveIfReady();
                     return true;
                 }
                 optionY += DROPDOWN_ITEM_HEIGHT;
@@ -727,36 +727,36 @@ public final class ValueTreeElementRenderer {
         toggleTimer.tick();
         float amount = toggleTimer.getValueF();
         if (amount > 0.0f) {
-            RenderUtil.drawShadow(poseStack, x, y, 20.0f, 10.0f, 12, ColorUtil.withAlpha(-13768502, 0.36f * alpha * amount));
+            RenderUtil.drawShadow(poseStack, x, y, 20.0f, 10.0f, 12, Argb.withAlpha(-13768502, 0.36f * alpha * amount));
         }
-        RenderUtil.drawRoundedRect(poseStack, x, y, 20.0f, 10.0f, 4.0f, ColorUtil.withAlpha(ColorUtil.fromRGB(60, 60, 60), alpha));
+        RenderUtil.drawRoundedRect(poseStack, x, y, 20.0f, 10.0f, 4.0f, Argb.withAlpha(Argb.fromRgb(60, 60, 60), alpha));
         if (amount > 0.0f) {
             RenderUtil.drawRoundedRect(poseStack, x, y, 10.0f + 10.0f * amount, 10.0f, 4.0f,
-                    ColorUtil.withAlpha(CategoryPanel.ACCENT_COLOR, alpha * amount));
+                    Argb.withAlpha(CategoryPanel.ACCENT_COLOR, alpha * amount));
         }
-        RenderUtil.drawRoundedRect(poseStack, x + 10.0f * amount, y, 10.0f, 10.0f, 4.8f, ColorUtil.withAlpha(-1, alpha));
+        RenderUtil.drawRoundedRect(poseStack, x + 10.0f * amount, y, 10.0f, 10.0f, 4.8f, Argb.withAlpha(-1, alpha));
     }
 
     private void renderSlider(PoseStack poseStack, float x, float y, float width, float progress, float alpha) {
-        RenderUtil.drawRoundedRect(poseStack, x, y, width, 5.0f, 2.0f, ColorUtil.withAlpha(ColorUtil.fromRGB(60, 60, 60), alpha));
+        RenderUtil.drawRoundedRect(poseStack, x, y, width, 5.0f, 2.0f, Argb.withAlpha(Argb.fromRgb(60, 60, 60), alpha));
         float glowInset = 10.0f;
         float glowSize = 5.0f + glowInset * 2.0f;
         RenderUtil.drawRoundedRect(poseStack, x - glowInset, y - glowInset,
                 Math.max(width * progress + glowInset * 2.0f, glowSize), glowSize, 2.0f + glowInset / 2.0f + 1.0f,
-                glowInset, ColorUtil.withAlpha(-13768502, 0.26f * alpha));
-        RenderUtil.drawRoundedRect(poseStack, x, y, width * progress, 5.0f, 2.0f, ColorUtil.withAlpha(CategoryPanel.ACCENT_COLOR, alpha));
+                glowInset, Argb.withAlpha(-13768502, 0.26f * alpha));
+        RenderUtil.drawRoundedRect(poseStack, x, y, width * progress, 5.0f, 2.0f, Argb.withAlpha(CategoryPanel.ACCENT_COLOR, alpha));
         float knobX = Math.max(x + progress * width - 5.5f, x - 0.5f);
         RenderUtil.drawRoundedRect(poseStack, knobX - glowInset, y - 0.5f - glowInset,
                 6.0f + glowInset * 2.0f, 6.0f + glowInset * 2.0f, 2.0f + glowInset / 2.0f + 1.0f,
-                glowInset, ColorUtil.withAlpha(-1, 0.36f * alpha));
-        RenderUtil.drawRoundedRect(poseStack, knobX, y - 0.5f, 6.0f, 6.0f, 2.9f, ColorUtil.withAlpha(-1, alpha));
+                glowInset, Argb.withAlpha(-1, 0.36f * alpha));
+        RenderUtil.drawRoundedRect(poseStack, knobX, y - 0.5f, 6.0f, 6.0f, 2.9f, Argb.withAlpha(-1, alpha));
     }
 
     private void renderRangeSlider(PoseStack poseStack, float x, float y, float width, float lower, float upper, float alpha) {
-        RenderUtil.drawRoundedRect(poseStack, x, y, width, 5.0f, 2.0f, ColorUtil.withAlpha(ColorUtil.fromRGB(60, 60, 60), alpha));
+        RenderUtil.drawRoundedRect(poseStack, x, y, width, 5.0f, 2.0f, Argb.withAlpha(Argb.fromRgb(60, 60, 60), alpha));
         float fillX = x + lower * width;
         float fillWidth = Math.max(0.0f, (upper - lower) * width);
-        RenderUtil.drawRoundedRect(poseStack, fillX, y, fillWidth, 5.0f, 2.0f, ColorUtil.withAlpha(CategoryPanel.ACCENT_COLOR, alpha));
+        RenderUtil.drawRoundedRect(poseStack, fillX, y, fillWidth, 5.0f, 2.0f, Argb.withAlpha(CategoryPanel.ACCENT_COLOR, alpha));
         this.renderRangeKnob(poseStack, fillX, y, alpha);
         this.renderRangeKnob(poseStack, x + upper * width, y, alpha);
     }
@@ -765,16 +765,16 @@ public final class ValueTreeElementRenderer {
         float glowInset = 8.0f;
         RenderUtil.drawRoundedRect(poseStack, centerX - 3.0f - glowInset, y - 0.5f - glowInset,
                 6.0f + glowInset * 2.0f, 6.0f + glowInset * 2.0f, 2.0f + glowInset / 2.0f + 1.0f,
-                glowInset, ColorUtil.withAlpha(-1, 0.26f * alpha));
-        RenderUtil.drawRoundedRect(poseStack, centerX - 3.0f, y - 0.5f, 6.0f, 6.0f, 2.9f, ColorUtil.withAlpha(-1, alpha));
+                glowInset, Argb.withAlpha(-1, 0.26f * alpha));
+        RenderUtil.drawRoundedRect(poseStack, centerX - 3.0f, y - 0.5f, 6.0f, 6.0f, 2.9f, Argb.withAlpha(-1, alpha));
     }
 
     private void renderSmallPill(PoseStack poseStack, String text, float x, float y, float width, float height, float alpha) {
-        RenderUtil.drawRoundedRect(poseStack, x, y, width, height, 3.0f, ColorUtil.withAlpha(ColorUtil.fromRGB(60, 60, 60), alpha));
+        RenderUtil.drawRoundedRect(poseStack, x, y, width, height, 3.0f, Argb.withAlpha(Argb.fromRgb(60, 60, 60), alpha));
         String clipped = this.clip(text, FontStore.AXIFORMA_BOLD_13, width - 6.0f);
         FontStore.AXIFORMA_BOLD_13.drawStringCentered(poseStack, clipped, x + width / 2.0f,
                 y + (height - FontStore.AXIFORMA_BOLD_13.getFontHeight()) / 2.0f,
-                ColorUtil.withAlpha(-1, alpha * 0.8f));
+                Argb.withAlpha(-1, alpha * 0.8f));
     }
 
     private void applyNumberFromMouse(Value<Number> value, float x, float width, int mouseX) {
@@ -938,7 +938,7 @@ public final class ValueTreeElementRenderer {
             next = next.substring(0, maxLength);
         }
         this.focusedTextValue.setValue(next);
-        ConfigManager.saveAllIfReady();
+        ConfigManager.requestSaveIfReady();
     }
 
     private int textMaxLength(Value<?> value) {

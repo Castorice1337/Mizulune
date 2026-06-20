@@ -140,7 +140,7 @@ public final class ReflectionUtil {
         try {
             field.setInt(renderTarget, depthBufferId);
         } catch (Exception ex) {
-            ex.printStackTrace();
+            ClientBase.logger.error("Failed to set depthBufferId field", ex);
         }
     }
 
@@ -160,7 +160,7 @@ public final class ReflectionUtil {
         try {
             return (Container) field.get(menu);
         } catch (Exception ex) {
-            ex.printStackTrace();
+            ClientBase.logger.warn("Failed to get brewing stand container", ex);
             return null;
         }
     }
@@ -190,7 +190,7 @@ public final class ReflectionUtil {
         try {
             field.setInt(ClientBase.mc, missTime);
         } catch (Exception ex) {
-            ex.printStackTrace();
+            ClientBase.logger.error("Failed to set missTime field", ex);
         }
     }
 

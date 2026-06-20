@@ -452,7 +452,7 @@ extends Module {
                 }
             }
         } catch (Exception exception) {
-            exception.printStackTrace();
+            logger.debug("Failed to steal from furnace", exception);
         }
     }
 
@@ -682,7 +682,7 @@ extends Module {
                 return false;
             }
         } catch (Exception exception) {
-            exception.printStackTrace();
+            logger.debug("Failed to inspect furnace contents", exception);
             return false;
         }
         return true;

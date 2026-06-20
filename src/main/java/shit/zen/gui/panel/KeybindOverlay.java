@@ -6,6 +6,7 @@ import net.minecraft.client.gui.GuiGraphics;
 import shit.zen.ClientBase;
 import shit.zen.ZenClient;
 import shit.zen.gui.PanelClickGui;
+import shit.zen.manager.ConfigManager;
 import shit.zen.modules.KeyBind;
 import shit.zen.modules.Module;
 import shit.zen.render.FontPresets;
@@ -68,7 +69,7 @@ extends ClientBase {
             if (this.targetModule != null) {
                 this.targetModule.setKey(-1);
                 if (ZenClient.isReady()) {
-                    ZenClient.instance.getConfigManager().saveAll();
+                    ConfigManager.requestSaveIfReady();
                 }
                 PanelClickGui.panelClickGui.addToast(this.targetModule.getName() + " keybind cleared");
             }
@@ -78,7 +79,7 @@ extends ClientBase {
         if (this.targetModule != null && keyCode != -1) {
             this.targetModule.setKey(keyCode);
             if (ZenClient.isReady()) {
-                ZenClient.instance.getConfigManager().saveAll();
+                ConfigManager.requestSaveIfReady();
             }
             KeyBind keyBind = new KeyBind(keyCode);
             String keyName = keyBind.getName();

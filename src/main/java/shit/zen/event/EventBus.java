@@ -108,11 +108,9 @@ public final class EventBus {
         try {
             entry.method().invoke(entry.listener(), eventMarker);
         } catch (InvocationTargetException e) {
-            LOGGER.error("invocation target {} {} {}", entry.listener, entry.method, e);
-            e.printStackTrace();
+            LOGGER.error("Listener invocation failed: {} {}", entry.listener, entry.method, e.getCause() != null ? e.getCause() : e);
         } catch (Exception e) {
-            LOGGER.error("{} {}", entry.listener, entry.method);
-            e.printStackTrace();
+            LOGGER.error("Listener dispatch failed: {} {}", entry.listener, entry.method, e);
         }
     }
 }

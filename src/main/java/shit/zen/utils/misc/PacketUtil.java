@@ -62,8 +62,7 @@ extends ClientBase {
                 mc.getConnection().send(predictiveAction.predict(sequence));
             }
         } catch (Exception ex) {
-            logger.error(ex);
-            ex.printStackTrace();
+            logger.error("Failed to send predictive packet", ex);
         }
     }
 
@@ -84,8 +83,7 @@ extends ClientBase {
                 PacketUtil.sendQueued(predictiveAction.predict(sequence));
             }
         } catch (Exception ex) {
-            logger.error(ex);
-            ex.printStackTrace();
+            logger.error("Failed to send queued predictive packet", ex);
         }
     }
 

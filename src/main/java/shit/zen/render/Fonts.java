@@ -4,9 +4,12 @@ import java.awt.Font;
 import java.io.InputStream;
 import java.util.HashMap;
 import java.util.Map;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import shit.zen.utils.misc.Assets;
 
 public final class Fonts {
+    private static final Logger LOGGER = LogManager.getLogger(Fonts.class);
     private static final Map<String, FontRenderer> fontRendererCache = new HashMap<>();
     private static final Map<String, CustomFont> customFontCache = new HashMap<>();
     private static final Map<String, Font> awtFontCache = new HashMap<>();
@@ -34,7 +37,7 @@ public final class Fonts {
             customFontCache.put(key, cf);
             return cf;
         } catch (Exception exception) {
-            exception.printStackTrace();
+            LOGGER.warn("Failed to create custom font renderer {}", name, exception);
             return null;
         }
     }
@@ -46,7 +49,7 @@ public final class Fonts {
             }
             return Font.createFont(Font.TRUETYPE_FONT, stream);
         } catch (Exception exception) {
-            exception.printStackTrace();
+            LOGGER.warn("Failed to load font asset {}", name, exception);
             return null;
         }
     }

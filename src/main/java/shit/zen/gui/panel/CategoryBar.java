@@ -14,6 +14,7 @@ import shit.zen.render.GlHelper;
 import shit.zen.render.Renderer;
 import shit.zen.render.TextGlow;
 import shit.zen.utils.math.LerpUtil;
+import shit.zen.utils.render.Argb;
 
 public class CategoryBar
 extends ClientBase {
@@ -71,24 +72,7 @@ extends ClientBase {
             return -1;
         }
         float hoverAmount = this.hoverAnimations.getOrDefault(category, 0.0f).floatValue();
-        return this.lerpColor(-7829368, -3355444, hoverAmount);
-    }
-
-    private int lerpColor(int fromColor, int toColor, float t) {
-        float inv = 1.0f - t;
-        int aFrom = fromColor >> 24 & 0xFF;
-        int rFrom = fromColor >> 16 & 0xFF;
-        int gFrom = fromColor >> 8 & 0xFF;
-        int bFrom = fromColor & 0xFF;
-        int aTo = toColor >> 24 & 0xFF;
-        int rTo = toColor >> 16 & 0xFF;
-        int gTo = toColor >> 8 & 0xFF;
-        int bTo = toColor & 0xFF;
-        int a = (int)((float)aFrom * inv + (float)aTo * t);
-        int r = (int)((float)rFrom * inv + (float)rTo * t);
-        int g = (int)((float)gFrom * inv + (float)gTo * t);
-        int b = (int)((float)bFrom * inv + (float)bTo * t);
-        return a << 24 | r << 16 | g << 8 | b;
+        return Argb.interpolate(-7829368, -3355444, hoverAmount);
     }
 
     private boolean isMouseOverCategory(int iconX, int iconY, int mouseX, int mouseY, int iconSize) {

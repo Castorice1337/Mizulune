@@ -13,7 +13,7 @@ import shit.zen.render.FontPresets;
 import shit.zen.render.FontRenderer;
 import shit.zen.render.GlHelper;
 import shit.zen.render.Paint;
-import shit.zen.utils.render.ColorUtil;
+import shit.zen.utils.render.Argb;
 
 public class NeverloseWatermark {
     private final FontRenderer boldFont = FontPresets.museoSans(18.0f);
@@ -22,9 +22,9 @@ public class NeverloseWatermark {
     private final FontRenderer tinyFont = FontPresets.materialIcons(16.0f);
     private final SimpleDateFormat timeFormat = new SimpleDateFormat("HH:mm");
     private final float logoWidth = 5.0f;
-    private final Paint backgroundPaint = new Paint().setColor(ColorUtil.fromARGB(36, 36, 36, 120));
+    private final Paint backgroundPaint = new Paint().setColor(Argb.fromRgbaComponents(36, 36, 36, 120));
     private final Paint textPaint = new Paint().setColor(-1);
-    private final Paint accentPaint = new Paint().setColor(ColorUtil.fromRGB(42, 180, 255));
+    private final Paint accentPaint = new Paint().setColor(Argb.fromRgb(42, 180, 255));
 
     public void onRender2D(Render2DEvent render2DEvent) {
         if (ClientBase.mc.options.renderDebug) {

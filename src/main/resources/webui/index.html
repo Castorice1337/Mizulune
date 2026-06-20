@@ -634,6 +634,10 @@ select:focus {
   </div>
   <div id="toast"></div>
   <script>
+const WEBUI_TOKEN = new URLSearchParams(window.location.search).get("token") || "";
+function apiUrl(path) {
+  return path + (path.indexOf("?") === -1 ? "?" : "&") + "token=" + encodeURIComponent(WEBUI_TOKEN);
+}
 function openSidebar() {
   document.getElementById("sidebar").classList.add("open");
   document.getElementById("sidebar-overlay").classList.add("open");
@@ -790,7 +794,7 @@ function patchModules(r) {
 function onswitch(a) {
   let i = a.id.replace(/-checkbox$/, "");
   $.ajax({
-    url: "/api/setStatus?module=" + i + "&state=" + a.checked,
+    url: apiUrl("/api/setStatus?module=" + i + "&state=" + a.checked),
     type: "GET",
     dataType: "json",
     success: t => {
@@ -809,7 +813,7 @@ function closeModal() {
 function opensetting(t) {
   let c = t.dataset.module;
   $.ajax({
-    url: "/api/getModuleSetting?module=" + c,
+    url: apiUrl("/api/getModuleSetting?module=" + c),
     type: "GET",
     dataType: "json",
     success: t => {
@@ -840,7 +844,7 @@ function opensetting(t) {
 function valuechange(n) {
   let t = n.id.split("-"), e = t[0], r = t[1], c = n.type === "checkbox" ? n.checked : n.value;
   $.ajax({
-    url: "/api/setModuleSettingValue?module=" + e + "&name=" + r + "&value=" + c,
+    url: apiUrl("/api/setModuleSettingValue?module=" + e + "&name=" + r + "&value=" + c),
     type: "GET",
     dataType: "json",
     success: t => {
@@ -860,7 +864,7 @@ function loadCategory(n) {
   let r = t !== currentCat;
   r && (currentCat = t, category = t, updateActiveNav(t));
   $.ajax({
-    url: "/api/modulesList?category=" + t,
+    url: apiUrl("/api/modulesList?category=" + t),
     type: "GET",
     dataType: "json",
     success: t => {
@@ -869,7 +873,7 @@ function loadCategory(n) {
   });
 }
 $.ajax({
-  url: "/api/categoriesList",
+  url: apiUrl("/api/categoriesList"),
   type: "GET",
   dataType: "json",
   success: t => {

@@ -20,7 +20,7 @@ import shit.zen.utils.animation.SmoothAnimationTimer;
 import shit.zen.utils.math.Easings;
 import shit.zen.utils.misc.Triple;
 import shit.zen.utils.misc.TripleProvider;
-import shit.zen.utils.render.ColorUtil;
+import shit.zen.utils.render.Argb;
 import shit.zen.event.EventTarget;
 
 public class KeyBindsHud
@@ -320,10 +320,10 @@ extends HudElement {
         if (alpha <= 0.01f) {
             return;
         }
-        this.enabledPaint.setColor(ColorUtil.fromARGB(0, 0, 0, (int)(190.0f * alpha)));
+        this.enabledPaint.setColor(Argb.fromRgbaComponents(0, 0, 0, (int)(190.0f * alpha)));
         GlHelper.drawRoundedRect(x, y, width, headerHeight, 4.5f, this.enabledPaint);
         float headerTextY = y + 5.0f + (headerHeight - 10.0f - this.scrollOffset) / 2.0f + 1.0f;
-        int whiteColor = ColorUtil.fromARGB(255, 255, 255, (int)(255.0f * alpha));
+        int whiteColor = Argb.fromRgbaComponents(255, 255, 255, (int)(255.0f * alpha));
         this.disabledPaint.setColor(whiteColor);
         if (rightAligned) {
             float iconX = x + width - 5.0f - this.maxWidth;
@@ -387,7 +387,7 @@ extends HudElement {
         }
         for (int i = 0; i < this.iconPaths.length; ++i) {
             if (!this.iconLoaded[i]) continue;
-            this.backgroundPaint.setColor(ColorUtil.fromARGB(0, 0, 0, i));
+            this.backgroundPaint.setColor(Argb.fromRgbaComponents(0, 0, 0, i));
             drawContext.drawPath(this.iconPaths[i], this.backgroundPaint);
         }
         for (KeyBindsHud.KeyBindRow row : this.rowList) {
@@ -395,7 +395,7 @@ extends HudElement {
             rowHeightFactor = row.opacity;
             rowAlpha = row.widthValue;
             int alphaInt = (int)(255.0f * row.slideX);
-            int rowColor = ColorUtil.fromARGB(255, 255, 255, alphaInt);
+            int rowColor = Argb.fromRgbaComponents(255, 255, 255, alphaInt);
             boxWidth = rowHeightFactor + 5.0f + (rowH - 10.0f - this.alpha) / 2.0f;
             float keyTextY = rowHeightFactor + 5.0f + (rowH - 10.0f - this.rowHeight) / 2.0f + 2.5f;
             this.disabledPaint.setColor(rowColor);

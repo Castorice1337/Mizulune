@@ -1,32 +1,9 @@
-import org.objectweb.asm.ClassReader
-import org.objectweb.asm.ClassWriter
-import org.objectweb.asm.ClassVisitor
-import org.objectweb.asm.Opcodes
-import org.objectweb.asm.commons.ClassRemapper
-import org.objectweb.asm.commons.Remapper
-
-buildscript {
-    repositories {
-        mavenCentral()
-    }
-    dependencies {
-        // ASM is used by the build-time class-name obfuscation step (ext.obfuscateJar).
-        // It runs on the already-built jar, so it lives on the buildscript classpath
-        // rather than the project compile/runtime classpath.
-        //
-        // NOTE: the buildscript-classpath ASM also backs Groovy's build-script type
-        // resolution, so it must be able to read the class files of the JDK that runs
-        // Gradle. ASM 9.6 supports up to Java 21 (major version 65) — run Gradle on the
-        // project's JDK 17 (not a newer JDK like 25/major 69, which 9.6 cannot read).
-        classpath 'org.ow2.asm:asm-commons:9.6'
-    }
-}
-
 plugins {
     id 'eclipse'
     id 'idea'
     id 'maven-publish'
     id 'net.minecraftforge.gradle' version '[6.0,6.2)'
+    id 'mizulune-obfuscation'
 }
 
 version = mod_version
@@ -264,186 +241,7 @@ tasks.named('jar', Jar).configure {
     finalizedBy 'reobfJar'
 }
 
-// ===== Build-time class-name obfuscation =====
-//
-// Renames EVERY OpenZen class (shit.zen.** and asm.patchify.**) to an opaque
-// generated name, so no original class name survives in the distributed jar.
-// It runs on the reobf'd jar and only touches our two package trees —
-// net.minecraft.** / net.minecraftforge.** references are left exactly as
-// ForgeGradle's mojmap->SRG reobf produced them, so reobf and runtime
-// remapping are unaffected.
-//
-// CLASS NAMES ONLY: method/field names are preserved, so the JNI method lookups
-// (GameLoaderBridge.load, DllBootstrap.start), reflection, GSON @SerializedName
-// wire keys and the manifest member contracts all keep working.
-//
-// NOTHING IS HARD-CODED. The three bootstrap classes referenced by string
-// OUTSIDE the bytecode the remapper rewrites are kept in lockstep by
-// propagating their freshly generated names:
-//   asm.patchify.loader.PatchAgent -> jar manifest Premain/Agent-Class (rewritten below)
-//   shit.zen.dll.DllBootstrap      -> Class.forName(...) string literal (rewritten via Remapper.mapValue)
-//   shit.zen.dll.GameLoaderBridge  -> native DLL loader, via a generated C++ header
-//                                     (native/dll/src/generated_names.h) emitted below.
-ext.obfuscateJar = { File jarFile, File mappingOut ->
-    def owned = { String internal -> internal.startsWith('shit/zen/') || internal.startsWith('asm/patchify/') }
-
-    // Pass 1: enumerate the classes we own (every shit.zen.* / asm.patchify.* class).
-    def ownedNames = []
-    new java.util.zip.ZipFile(jarFile).withCloseable { zf ->
-        for (entry in Collections.list(zf.entries())) {
-            if (!entry.directory && entry.name.endsWith('.class')) {
-                def internal = entry.name.substring(0, entry.name.length() - 6)
-                if (owned(internal)) ownedNames << internal
-            }
-        }
-    }
-    if (ownedNames.isEmpty()) {
-        logger.lifecycle("obfuscateJar: no original class names in ${jarFile.name} (already obfuscated) — skipping")
-        return
-    }
-    // Pass 2: assign each owned class a FRESH RANDOM 16-char name, so the obfuscated
-    // names differ on every build and encode nothing. Uniqueness is enforced. The
-    // names are unpredictable, so build/rename-mapping.txt (written below) is the only
-    // way to de-obfuscate a stack trace — each build's mapping is different; keep it.
-    //
-    // ALL classes go into ONE shared (also random, 16-char) package. They must share a
-    // single package so that package-private (default-access) members originally used
-    // between same-package classes still resolve — flattening into one package only
-    // widens access, never breaks it. Per-class packages would turn those into illegal
-    // cross-package accesses (IllegalAccessError) unless every member were made public.
-    def typeMap = [:]
-    def usedNames = new HashSet()
-    def secureRandom = new java.security.SecureRandom()
-    def leadAlphabet = (('a'..'z') + ('A'..'Z')).join('')                 // first char: a letter
-    def nameAlphabet = (('a'..'z') + ('A'..'Z') + ('0'..'9')).join('')    // rest: alphanumeric
-    def randomName = {
-        def sb = new StringBuilder(16)
-        sb.append(leadAlphabet.charAt(secureRandom.nextInt(leadAlphabet.length())))
-        15.times { sb.append(nameAlphabet.charAt(secureRandom.nextInt(nameAlphabet.length()))) }
-        sb.toString()
-    }
-    def obfPackage = randomName()   // one random package for every class (see note above)
-    ownedNames.each { internal ->
-        def newName
-        while (true) { newName = randomName(); if (usedNames.add(newName)) break }
-        typeMap[internal] = obfPackage + '/' + newName
-    }
-    // String-constant remap table — catches class names embedded as String
-    // literals (e.g. Class.forName("shit.zen.dll.DllBootstrap")). Both the
-    // dotted (Class.forName) and slash (internal) spellings are covered.
-    def stringMap = [:]
-    typeMap.each { o, n ->
-        stringMap[o.replace('/', '.')] = n.replace('/', '.')
-        stringMap[o] = n
-    }
-
-    def remapper = new Remapper() {
-        String map(String internalName) {
-            def n = typeMap[internalName]
-            return n != null ? n : internalName
-        }
-
-        Object mapValue(Object value) {
-            if (value instanceof String) {
-                def repl = stringMap[value]
-                if (repl != null) return repl
-            }
-            return super.mapValue(value)
-        }
-    }
-
-    // Pass 2: rewrite into a temp jar, then atomically swap it in.
-    def tmp = new File(jarFile.parentFile, jarFile.name + '.obf')
-    tmp.delete()
-    new java.util.zip.ZipFile(jarFile).withCloseable { zf ->
-        new java.util.zip.ZipOutputStream(new FileOutputStream(tmp)).withCloseable { zos ->
-            for (entry in Collections.list(zf.entries())) {
-                if (entry.directory) continue
-                def name = entry.name
-                byte[] bytes = zf.getInputStream(entry).bytes
-                if (name.endsWith('.class')) {
-                    def internal = name.substring(0, name.length() - 6)
-                    if (owned(internal)) {
-                        def cr = new ClassReader(bytes)
-                        def cw = new ClassWriter(0)
-                        // Drop the original SourceFile name ("ZenClient.java" etc.) but keep
-                        // line numbers so stack traces still carry positions.
-                        def stripSource = new ClassVisitor(Opcodes.ASM9, cw) {
-                            void visitSource(String source, String debug) { super.visitSource(null, null) }
-                        }
-                        cr.accept(new ClassRemapper(stripSource, remapper), 0)
-                        bytes = cw.toByteArray()
-                        name = typeMap[internal] + '.class'
-                    }
-                    zos.putNextEntry(new java.util.zip.ZipEntry(name)); zos.write(bytes); zos.closeEntry()
-                } else if (name == 'META-INF/MANIFEST.MF') {
-                    def mf = new java.util.jar.Manifest(new ByteArrayInputStream(bytes))
-                    def attrs = mf.getMainAttributes()
-                    ['Premain-Class', 'Agent-Class'].each { key ->
-                        def v = attrs.getValue(key)
-                        if (v != null) {
-                            def internal = v.replace('.', '/')
-                            if (typeMap.containsKey(internal)) attrs.putValue(key, typeMap[internal].replace('/', '.'))
-                        }
-                    }
-                    def bos = new ByteArrayOutputStream(); mf.write(bos)
-                    zos.putNextEntry(new java.util.zip.ZipEntry(name)); zos.write(bos.toByteArray()); zos.closeEntry()
-                } else if (name.startsWith('META-INF/') &&
-                        (name.endsWith('.SF') || name.endsWith('.RSA') || name.endsWith('.DSA') || name.endsWith('.EC'))) {
-                    // Drop signature files — renaming class entries invalidates their digests.
-                } else {
-                    // Resources verbatim: mapping.srg, webui/**, assets/**, fonts, mods.toml, pack.mcmeta.
-                    zos.putNextEntry(new java.util.zip.ZipEntry(name)); zos.write(bytes); zos.closeEntry()
-                }
-            }
-        }
-    }
-    if (!jarFile.delete()) throw new GradleException("obfuscateJar: could not delete ${jarFile}")
-    if (!tmp.renameTo(jarFile)) throw new GradleException("obfuscateJar: could not move ${tmp} -> ${jarFile}")
-
-    mappingOut.parentFile.mkdirs()
-    mappingOut.withWriter('UTF-8') { w ->
-        typeMap.sort { it.key }.each { o, n -> w.writeLine("${o.replace('/', '.')} -> ${n.replace('/', '.')}") }
-    }
-
-    // Propagate the GameLoaderBridge name to the native DLL loader. class_loader.cpp
-    // #includes this generated header and loads the class by OZ_BRIDGE_FQCN, so the
-    // native side always matches whatever opaque name the bridge received — no
-    // hard-coded class name. Generated, never committed (see .gitignore).
-    def bridgeFqcn = typeMap['shit/zen/dll/GameLoaderBridge'].replace('/', '.')
-    def header = file('native/dll/src/generated_names.h')
-    header.parentFile.mkdirs()
-    header.text = """\
-// AUTO-GENERATED by build.gradle (ext.obfuscateJar). DO NOT EDIT, DO NOT COMMIT.
-// The build renames every OpenZen class to an opaque name; this captures the
-// generated FQCN of the DLL bootstrap bridge (originally shit.zen.dll.GameLoaderBridge)
-// so the native loader can request it by name. The bridge's load(String, ClassLoader)
-// method name is preserved by the rename, so main.cpp's GetStaticMethodID still works.
-#pragma once
-#define OZ_BRIDGE_FQCN "${bridgeFqcn}"
-"""
-
-    logger.lifecycle("obfuscateJar: renamed ${typeMap.size()} classes in ${jarFile.name}; " +
-            "bridge=${bridgeFqcn}; mapping -> ${mappingOut}")
-}
-
-tasks.register('obfuscateClasses') {
-    group = 'openzen'
-    description = 'Rename every OpenZen class to an opaque name in the built jar (class names only).'
-    dependsOn 'reobfJar'
-    doLast {
-        obfuscateJar(tasks.jar.archiveFile.get().asFile, file("$buildDir/rename-mapping.txt"))
-    }
-}
-
-// Auto-run after every reobf so `gradlew jar` / `build` / `dll` all emit obfuscated
-// names. reobfJar is created lazily by ForgeGradle, so wire via matching/configureEach.
-tasks.matching { it.name == 'reobfJar' }.configureEach { finalizedBy 'obfuscateClasses' }
-
-// However if you are in a multi-project build, dev time needs unobfed jar files, so you can delay the obfuscation until publishing by doing:
-// tasks.named('publish').configure {
-//     dependsOn 'reobfJar'
-// }
+// Build-time class-name obfuscation is provided by buildSrc's mizulune-obfuscation plugin.
 
 // IZMK-style entry point: build the jar first (so the -javaagent path exists) and then launch
 // the client. The client run config above already references tasks.jar via archiveFile.
@@ -771,5 +569,5 @@ tasks.named('clean').configure {
 }
 
 // Release builds are cut by .github/workflows/build-loader.yml when the head commit
-// message contains [Release]. Every build emits fresh random class names — see
-// ext.obfuscateJar above and the "编译时类名混淆" section in the README.
+// message contains [Release]. Every build emits fresh random class names; see
+// buildSrc's mizulune-obfuscation plugin and the obfuscation section in the README.

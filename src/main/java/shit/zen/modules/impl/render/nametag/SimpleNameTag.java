@@ -114,50 +114,72 @@ public class SimpleNameTag extends NameTagStyle {
         int padding = 4;
         int gap = 4;
         Map<ItemStack, Vector2f> itemPositions = new ConcurrentHashMap<>();
+        List<TagRenderEntry> renderEntries = new ArrayList<>();
+        for (Map.Entry<Entity, Vector2f> entry : this.entityPositions.entrySet()) {
+            Entity entity = entry.getKey();
+            Vector2f screenPos = entry.getValue();
+            if (!(entity instanceof Player player)) continue;
+            Vector2f roundedScreenPos = new Vector2f(Math.round(screenPos.x), Math.round(screenPos.y));
+            if (NameTags.INSTANCE.showArmorSetting.getValue()) {
+                ItemStack main = player.getMainHandItem();
+                if (ItemAlertTracker.isNewItem(main)) {
+                    ItemAlertTracker.trackEntityItem(player, main);
+                }
+                ItemStack off = player.getOffhandItem();
+                if (ItemAlertTracker.isNewItem(off)) {
+                    ItemAlertTracker.trackEntityItem(player, off);
+                }
+            }
+            float health = Math.min(player.getHealth(), 20.0f);
+            float ratio = health / player.getMaxHealth();
+            String nameText = player.getName().getString() + " | ";
+            String healthText = Math.round(health) + "";
+            if (player.getAbsorptionAmount() > 0.0f) {
+                healthText = healthText + "+" + Math.round(player.getAbsorptionAmount());
+            }
+            healthText += "HP";
+            Set<ItemStack> alertItems = ItemAlertTracker.getEntityItems(player);
+            int alertCount = NameTags.INSTANCE.showArmorSetting.getValue() && !alertItems.isEmpty() ? alertItems.size() : 0;
+            String combined = nameText + healthText;
+            float textWidth = this.font.getBounds(combined).getWidth();
+            float lineHeight = this.font.getMetrics().getLineHeight();
+            float itemBoxSize = lineHeight + padding * 2;
+            float alertWidth = itemBoxSize * alertCount + (alertCount > 0 ? gap * alertCount : 0);
+            float boxWidth = textWidth + padding * 2 + alertWidth;
+            float boxHeight = lineHeight + padding * 2;
+            float originX = -boxWidth / 2.0f;
+            float originY = -boxHeight;
+            float blurX = roundedScreenPos.x + originX * scale;
+            float blurY = roundedScreenPos.y + originY * scale;
+            float blurW = boxWidth * scale;
+            float blurH = boxHeight * scale;
+            this.blurRects.add(new BlurRect(blurX, blurY, blurW, blurH));
+            renderEntries.add(new TagRenderEntry(player, roundedScreenPos, nameText, healthText, alertItems,
+                    alertCount, ratio, textWidth, lineHeight, itemBoxSize, boxWidth, boxHeight));
+        }
+        for (BlurRect rect : this.blurRects) {
+            RenderUtil.drawBlurredRect(event.guiGraphics().pose(), rect.x, rect.y, rect.width, rect.height, 8.0f, 2.0f, 0.6f, 0);
+        }
         Renderer.renderConsumer(ctx -> {
-            for (Map.Entry<Entity, Vector2f> entry : this.entityPositions.entrySet()) {
-                Entity entity = entry.getKey();
-                Vector2f screenPos = entry.getValue();
-                if (!(entity instanceof Player player)) continue;
-                screenPos.set(Math.round(screenPos.x), Math.round(screenPos.y));
-                if (NameTags.INSTANCE.showArmorSetting.getValue()) {
-                    ItemStack main = player.getMainHandItem();
-                    if (ItemAlertTracker.isNewItem(main)) {
-                        ItemAlertTracker.trackEntityItem(player, main);
-                    }
-                    ItemStack off = player.getOffhandItem();
-                    if (ItemAlertTracker.isNewItem(off)) {
-                        ItemAlertTracker.trackEntityItem(player, off);
-                    }
-                }
-                float health = Math.min(player.getHealth(), 20.0f);
-                float ratio = health / player.getMaxHealth();
-                String nameText = player.getName().getString() + " | ";
-                String healthText = Math.round(health) + "";
-                if (player.getAbsorptionAmount() > 0.0f) {
-                    healthText = healthText + "+" + Math.round(player.getAbsorptionAmount());
-                }
-                healthText += "HP";
-                Set<ItemStack> alertItems = ItemAlertTracker.getEntityItems(player);
-                int alertCount = NameTags.INSTANCE.showArmorSetting.getValue() && !alertItems.isEmpty() ? alertItems.size() : 0;
+            for (TagRenderEntry renderEntry : renderEntries) {
+                Player player = renderEntry.player();
+                Vector2f screenPos = renderEntry.screenPos();
+                String nameText = renderEntry.nameText();
+                String healthText = renderEntry.healthText();
+                Set<ItemStack> alertItems = renderEntry.alertItems();
+                int alertCount = renderEntry.alertCount();
                 boolean hasAlerts = alertCount > 0;
-                String combined = nameText + healthText;
-                float textWidth = this.font.getBounds(combined).getWidth();
-                float lineHeight = this.font.getMetrics().getLineHeight();
-                float itemBoxSize = lineHeight + padding * 2;
-                float alertWidth = itemBoxSize * alertCount + (alertCount > 0 ? gap * alertCount : 0);
-                float boxWidth = textWidth + padding * 2 + alertWidth;
-                float boxHeight = lineHeight + padding * 2;
+                float ratio = renderEntry.healthRatio();
+                float textWidth = renderEntry.textWidth();
+                float lineHeight = renderEntry.lineHeight();
+                float itemBoxSize = renderEntry.itemBoxSize();
+                float boxWidth = renderEntry.boxWidth();
+                float boxHeight = renderEntry.boxHeight();
                 float originX = -boxWidth / 2.0f;
                 float originY = -boxHeight;
                 ctx.save();
                 ctx.translate(screenPos.x, screenPos.y);
                 ctx.scale(scale, scale);
-                float blurX = screenPos.x + originX * scale;
-                float blurY = screenPos.y + originY * scale;
-                float blurW = boxWidth * scale;
-                float blurH = boxHeight * scale;
-                this.blurRects.add(new BlurRect(blurX, blurY, blurW, blurH));
                 if (this.paint == null) {
                     this.paint = new Paint();
                 }
@@ -191,9 +213,6 @@ public class SimpleNameTag extends NameTagStyle {
                 ctx.restore();
             }
         });
-        for (BlurRect rect : this.blurRects) {
-            RenderUtil.drawBlurredRect(event.guiGraphics().pose(), rect.x, rect.y, rect.width, rect.height, 8.0f, 2.0f, 0.6f, 0);
-        }
         for (Map.Entry<ItemStack, Vector2f> entry : itemPositions.entrySet()) {
             ItemStack item = entry.getKey();
             Vector2f pos = entry.getValue();
@@ -207,5 +226,11 @@ public class SimpleNameTag extends NameTagStyle {
     }
 
     private record BlurRect(float x, float y, float width, float height) {
+    }
+
+    private record TagRenderEntry(Player player, Vector2f screenPos, String nameText, String healthText,
+                                  Set<ItemStack> alertItems, int alertCount, float healthRatio,
+                                  float textWidth, float lineHeight, float itemBoxSize,
+                                  float boxWidth, float boxHeight) {
     }
 }
