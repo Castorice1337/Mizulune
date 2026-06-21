@@ -6,10 +6,12 @@ import lombok.Getter;
 import lombok.Setter;
 import lombok.Generated;
 import net.minecraft.client.gui.GuiGraphics;
+import org.lwjgl.glfw.GLFW;
 import shit.zen.gui.NewClickGui;
 import shit.zen.gui.newclickgui.CategoryPanel;
 import shit.zen.gui.newclickgui.UIElement;
 import shit.zen.gui.newclickgui.ValueTreeElementRenderer;
+import shit.zen.manager.ConfigManager;
 import shit.zen.modules.Module;
 import shit.zen.render.FontStore;
 import shit.zen.utils.animation.SmoothAnimationTimer;
@@ -23,6 +25,7 @@ import shit.zen.value.Value;
 public class ModuleElement
 extends UIElement {
     public static final int BG_COLOR;
+    private static final float BIND_ROW_HEIGHT = 18.0f;
     @Getter
     private final CategoryPanel parentPanel;
     @Getter
@@ -41,6 +44,7 @@ extends UIElement {
     private boolean isHovered;
     @Getter @Setter
     private boolean isExpanded;
+    private static ModuleElement bindingElement;
     private static final String BUILD_TAG;
 
     public ModuleElement(CategoryPanel categoryPanel, Module module) {
@@ -56,6 +60,7 @@ extends UIElement {
         float settingsTotalHeight = 0.0f;
         ValueTreeElementRenderer renderer = ValueTreeElementRenderer.getInstance();
         List<Value<?>> values = this.visibleValues();
+        settingsTotalHeight += BIND_ROW_HEIGHT;
         for (Value<?> value : values) {
             settingsTotalHeight += renderer.getHeight(value);
         }
@@ -85,7 +90,7 @@ extends UIElement {
             RenderUtil.drawShadow(poseStack, this.posX + (120.0f - titleWidth) / 2.0f, titleY + FontStore.AXIFORMA_BOLD_16.getFontHeight() / 4.0f, titleWidth, FontStore.AXIFORMA_BOLD_16.getFontHeight() / 2.0f, 12, Argb.withAlpha(-13768502, alpha * enabledAmount * 0.36f));
             FontStore.AXIFORMA_BOLD_16.drawStringCentered(poseStack, this.module.getName(), this.posX + 60.0f, titleY, Argb.withAlpha(-13768502, alpha * enabledAmount));
         }
-        if (this.hasValues()) {
+        if (this.hasExpandableContent()) {
             String arrowIcon = String.valueOf('\ueb4e');
             titleY = FontStore.MATERIAL_20.getStringWidth(arrowIcon);
             float arrowX = this.posX + 120.0f - titleY - 6.0f;
@@ -96,6 +101,8 @@ extends UIElement {
         }
         if (this.isExpanded) {
             titleWidth = this.posY + 20.0f;
+            this.renderBindRow(poseStack, mouseX, mouseY, alpha * expandAmount, titleWidth);
+            titleWidth += BIND_ROW_HEIGHT;
             int valueX = Math.round(this.posX);
             for (Value<?> value : values) {
                 int height = renderer.render(this.parentPanel, clickGui, guiGraphics, poseStack, value, valueX, titleWidth, mouseX, mouseY, alpha * expandAmount, partialTicks);
@@ -112,7 +119,7 @@ extends UIElement {
         if (CursorUtil.isInBounds((float) mouseX, (float) mouseY, this.posX, this.posY, 120.0f, 20.0f)) {
             if (button == 0) {
                 this.module.toggleFromUser();
-            } else if (button == 1 && this.hasValues()) {
+            } else if (button == 1 && this.hasExpandableContent()) {
                 this.isExpanded = !this.isExpanded;
             }
             return true;
@@ -120,6 +127,15 @@ extends UIElement {
         if (CursorUtil.isInBounds((float) mouseX, (float) mouseY, this.posX, this.posY + 20.0f, 120.0f, this.totalHeight - 20.0f)) {
             int valueX = Math.round(this.posX);
             int valueY = Math.round(this.posY + 20.0f);
+            if (CursorUtil.isInBounds((float) mouseX, (float) mouseY, this.posX + 6.0f, valueY + 2.0f, 108.0f, BIND_ROW_HEIGHT - 4.0f)) {
+                if (button == 0) {
+                    bindingElement = this;
+                    ValueTreeElementRenderer.getInstance().blurText();
+                    return true;
+                }
+                return true;
+            }
+            valueY += Math.round(BIND_ROW_HEIGHT);
             ValueTreeElementRenderer renderer = ValueTreeElementRenderer.getInstance();
             for (Value<?> value : this.visibleValues()) {
                 int height = renderer.getHeight(value);
@@ -145,6 +161,69 @@ extends UIElement {
 
     private boolean hasValues() {
         return !this.visibleValues().isEmpty();
+    }
+
+    private boolean hasExpandableContent() {
+        return true;
+    }
+
+    private boolean isBinding() {
+        return bindingElement == this;
+    }
+
+    private void renderBindRow(PoseStack poseStack, int mouseX, int mouseY, float alpha, float y) {
+        if (alpha <= 0.0f) {
+            return;
+        }
+        boolean hovered = CursorUtil.isInBounds(mouseX, mouseY, this.posX + 6.0f, y + 2.0f, 108.0f, BIND_ROW_HEIGHT - 4.0f);
+        int background = this.isBinding()
+                ? Argb.withAlpha(CategoryPanel.ACCENT_COLOR, alpha * 0.42f)
+                : Argb.withAlpha(Argb.fromRgb(60, 60, 60), alpha * (hovered ? 0.9f : 0.68f));
+        RenderUtil.drawRoundedRect(poseStack, this.posX + 6.0f, y + 2.0f, 108.0f, BIND_ROW_HEIGHT - 4.0f, 3.0f, background);
+        String keyName = this.isBinding() ? "..." : this.module.getBind().getName().toUpperCase();
+        String text = this.clipBindText("BIND: " + keyName, 100.0f);
+        FontStore.AXIFORMA_BOLD_13.drawStringCentered(poseStack, text, this.posX + 60.0f,
+                y + (BIND_ROW_HEIGHT - FontStore.AXIFORMA_BOLD_13.getFontHeight()) / 2.0f,
+                Argb.withAlpha(-1, alpha * 0.88f));
+    }
+
+    private String clipBindText(String text, float maxWidth) {
+        String clipped = text == null ? "" : text;
+        if (FontStore.AXIFORMA_BOLD_13.getStringWidth(clipped) <= maxWidth) {
+            return clipped;
+        }
+        while (clipped.length() > 1 && FontStore.AXIFORMA_BOLD_13.getStringWidth(clipped + "...") > maxWidth) {
+            clipped = clipped.substring(0, clipped.length() - 1);
+        }
+        return clipped + "...";
+    }
+
+    public static boolean hasActiveBindCapture() {
+        return bindingElement != null;
+    }
+
+    public static boolean keyPressed(int keyCode) {
+        if (bindingElement == null) {
+            return false;
+        }
+        ModuleElement target = bindingElement;
+        if (keyCode == GLFW.GLFW_KEY_ESCAPE) {
+            bindingElement = null;
+            return true;
+        }
+        if (keyCode == GLFW.GLFW_KEY_DELETE) {
+            target.module.setKey(0);
+            ConfigManager.requestSaveIfReady();
+            bindingElement = null;
+            return true;
+        }
+        if (keyCode != GLFW.GLFW_KEY_UNKNOWN) {
+            target.module.setKey(keyCode);
+            ConfigManager.requestSaveIfReady();
+            bindingElement = null;
+            return true;
+        }
+        return true;
     }
 
     @Override

@@ -147,6 +147,7 @@ repositories {
 
 configurations {
     skikoNativeRuntime
+    musicRuntime
 }
 
 dependencies {
@@ -176,6 +177,17 @@ dependencies {
     minecraftLibrary 'org.jetbrains.skiko:skiko-awt-runtime-windows-x64:0.148.1'
     minecraftLibrary 'org.jetbrains.kotlin:kotlin-stdlib:2.3.20'
     skikoNativeRuntime 'org.jetbrains.skiko:skiko-awt-runtime-windows-x64:0.148.1'
+
+    // MP3 decoding through Java Sound SPI for the built-in Mizulune Music player.
+    implementation('com.googlecode.soundlibs:mp3spi:1.9.5.4') {
+        exclude group: 'junit', module: 'junit'
+    }
+    minecraftLibrary('com.googlecode.soundlibs:mp3spi:1.9.5.4') {
+        exclude group: 'junit', module: 'junit'
+    }
+    musicRuntime('com.googlecode.soundlibs:mp3spi:1.9.5.4') {
+        exclude group: 'junit', module: 'junit'
+    }
 
     // Example mod dependency with JEI - using fg.deobf() ensures the dependency is remapped to your development mappings
     // The JEI API is declared for compile time use, while the full JEI artifact is used at runtime
@@ -215,6 +227,11 @@ tasks.named('processResources', ProcessResources).configure {
 // Example for how to get properties into the manifest for reading at runtime.
 tasks.named('jar', Jar).configure {
     from({ configurations.skikoNativeRuntime }) {
+        into 'openzen/dll-libs'
+        include '*.jar'
+        duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    }
+    from({ configurations.musicRuntime }) {
         into 'openzen/dll-libs'
         include '*.jar'
         duplicatesStrategy = DuplicatesStrategy.EXCLUDE

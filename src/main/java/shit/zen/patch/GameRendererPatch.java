@@ -18,6 +18,7 @@ import shit.zen.event.impl.Render2DEvent;
 import shit.zen.modules.impl.render.AspectRatio;
 import shit.zen.modules.impl.render.FullBright;
 import shit.zen.modules.impl.render.NoHurtCam;
+import shit.zen.modules.impl.render.NoRender;
 import shit.zen.render.Renderer;
 import shit.zen.utils.misc.ReflectionUtil;
 
@@ -89,6 +90,13 @@ public class GameRendererPatch {
     @Inject(method = "bobHurt", desc = "(Lcom/mojang/blaze3d/vertex/PoseStack;F)V", at = @At(At.Type.HEAD))
     public static void onBobHurt(GameRenderer gameRenderer, PoseStack poseStack, float partial, CallbackInfo callbackInfo) {
         if (ZenClient.isReady() && NoHurtCam.INSTANCE != null && NoHurtCam.INSTANCE.isEnabled()) {
+            callbackInfo.cancel();
+        }
+    }
+
+    @Inject(method = "renderConfusionOverlay", desc = "(Lnet/minecraft/client/gui/GuiGraphics;F)V", at = @At(At.Type.HEAD))
+    public static void onRenderConfusionOverlay(GameRenderer gameRenderer, GuiGraphics graphics, float scale, CallbackInfo callbackInfo) {
+        if (NoRender.shouldHideNausea()) {
             callbackInfo.cancel();
         }
     }

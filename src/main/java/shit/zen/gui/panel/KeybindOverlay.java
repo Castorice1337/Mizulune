@@ -3,6 +3,7 @@ package shit.zen.gui.panel;
 import java.awt.Color;
 
 import net.minecraft.client.gui.GuiGraphics;
+import org.lwjgl.glfw.GLFW;
 import shit.zen.ClientBase;
 import shit.zen.ZenClient;
 import shit.zen.gui.PanelClickGui;
@@ -62,12 +63,16 @@ extends ClientBase {
     }
 
     public boolean onKeyPress(int keyCode, int scanCode, int modifiers) {
-        if (!this.isVisible()) {
+        if (!this.isActive) {
             return false;
         }
-        if (keyCode == 256) {
+        if (keyCode == GLFW.GLFW_KEY_ESCAPE) {
+            this.cancel();
+            return true;
+        }
+        if (keyCode == GLFW.GLFW_KEY_DELETE) {
             if (this.targetModule != null) {
-                this.targetModule.setKey(-1);
+                this.targetModule.setKey(0);
                 if (ZenClient.isReady()) {
                     ConfigManager.requestSaveIfReady();
                 }
@@ -76,7 +81,7 @@ extends ClientBase {
             this.cancel();
             return true;
         }
-        if (this.targetModule != null && keyCode != -1) {
+        if (this.targetModule != null && keyCode != GLFW.GLFW_KEY_UNKNOWN) {
             this.targetModule.setKey(keyCode);
             if (ZenClient.isReady()) {
                 ConfigManager.requestSaveIfReady();
@@ -141,7 +146,7 @@ extends ClientBase {
             GlHelper.drawText(text, textX, textY, textFont, textColor);
             this.drawAnimatedDots(boxX, (int)((float)boxY + 125.0f * scale), (int)boxWidth, alphaByte, scale);
             FontRenderer cancelFont = FontPresets.axiformaRegular(14.0f * scale);
-            String cancelText = "Press ESC to cancel";
+            String cancelText = "Delete to unbind / Esc to cancel";
             float cancelWidth = GlHelper.getStringWidth(cancelText, cancelFont);
             float cancelX = (float)boxX + (boxWidth - cancelWidth) / 2.0f;
             float cancelY = (float)boxY + 155.0f * scale;

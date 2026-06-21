@@ -430,6 +430,11 @@ public final class SkikoBackend implements RenderBackend {
     }
 
     @Override
+    public boolean canDrawTexture(Texture texture) {
+        return this.getImage(texture) != null;
+    }
+
+    @Override
     public boolean drawPlayerHead(DrawContext drawContext, ResourceLocation skinTexture, float x, float y, float width, float height, float alpha, float radius) {
         Image image = this.textures.getResourceImage(skinTexture);
         if (image == null) {
@@ -836,7 +841,13 @@ public final class SkikoBackend implements RenderBackend {
     }
 
     private Image getImage(Texture texture) {
-        if (texture == null || texture.getResourceLocation() == null) {
+        if (texture == null) {
+            return null;
+        }
+        if (texture.getImageFile() != null) {
+            return this.textures.getFileImage(texture.getImageFile());
+        }
+        if (texture.getResourceLocation() == null) {
             return null;
         }
         return this.textures.getResourceImage(texture.getResourceLocation());

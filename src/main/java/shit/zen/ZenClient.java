@@ -25,6 +25,7 @@ import shit.zen.manager.HudManager;
 import shit.zen.manager.LagManager;
 import shit.zen.manager.ModuleManager;
 import shit.zen.manager.TargetManager;
+import shit.zen.music.MusicService;
 import shit.zen.patch.BlockPatch;
 import shit.zen.patch.CameraPatch;
 import shit.zen.patch.ChatScreenPatch;
@@ -34,6 +35,7 @@ import shit.zen.patch.ContainerScreenRenderPatch;
 import shit.zen.patch.EntityPatch;
 import shit.zen.patch.EntityRendererPatch;
 import shit.zen.patch.FriendlyByteBufPatch;
+import shit.zen.patch.FogRendererPatch;
 import shit.zen.patch.GameRendererPatch;
 import shit.zen.patch.GuiPatch;
 import shit.zen.patch.HumanoidModelPatch;
@@ -43,6 +45,7 @@ import shit.zen.patch.ItemPatch;
 import shit.zen.patch.KeyboardHandlerPatch;
 import shit.zen.patch.KeyboardInputPatch;
 import shit.zen.patch.LevelRendererPatch;
+import shit.zen.patch.LightTexturePatch;
 import shit.zen.patch.LivingEntityPatch;
 import shit.zen.patch.LivingEntityRendererPatch;
 import shit.zen.patch.LocalPlayerPatch;
@@ -52,6 +55,7 @@ import shit.zen.patch.MultiPlayerGameModePatch;
 import shit.zen.patch.PacketUtilsPatch;
 import shit.zen.patch.PlayerPatch;
 import shit.zen.patch.PlayerTabOverlayPatch;
+import shit.zen.patch.ScreenEffectRendererPatch;
 import shit.zen.asm.Bootstrap;
 import shit.zen.utils.rotation.RotationHandler;
 
@@ -82,6 +86,7 @@ public class ZenClient extends ClientBase {
     private HudManager hudManager;
     private LagManager lagManager;
     private TargetManager targetManager;
+    private MusicService musicService;
     private int reconnectAttempts;
 
     public ZenClient() {
@@ -106,6 +111,7 @@ public class ZenClient extends ClientBase {
             this.hudManager = new HudManager();
             this.commandManager = new CommandManager();
             this.configManager = new ConfigManager();
+            this.musicService = new MusicService();
             this.extractCloudAssets();
             this.lagManager = new LagManager();
             this.targetManager = new TargetManager();
@@ -172,8 +178,11 @@ public class ZenClient extends ClientBase {
 
     public void shutdown() {
         isReady = false;
+        if (this.musicService != null) {
+            this.musicService.shutdown();
+        }
         if (this.configManager != null) {
-            this.configManager.saveAll();
+            this.configManager.shutdown();
         }
     }
 
@@ -234,8 +243,10 @@ public class ZenClient extends ClientBase {
         PatchRegistry.register(LevelRendererPatch.class);
         PatchRegistry.register(BlockPatch.class);
         PatchRegistry.register(CameraPatch.class);
+        PatchRegistry.register(FogRendererPatch.class);
         PatchRegistry.register(GameRendererPatch.class);
         PatchRegistry.register(GuiPatch.class);
+        PatchRegistry.register(LightTexturePatch.class);
         PatchRegistry.register(MouseHandlerPatch.class);
         PatchRegistry.register(MultiPlayerGameModePatch.class);
         PatchRegistry.register(ItemInHandRendererPatch.class);
@@ -244,6 +255,7 @@ public class ZenClient extends ClientBase {
         PatchRegistry.register(LivingEntityRendererPatch.class);
         PatchRegistry.register(ItemPatch.class);
         PatchRegistry.register(PlayerTabOverlayPatch.class);
+        PatchRegistry.register(ScreenEffectRendererPatch.class);
         PatchRegistry.register(FriendlyByteBufPatch.class);
     }
 
