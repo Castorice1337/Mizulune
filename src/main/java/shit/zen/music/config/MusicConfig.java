@@ -126,6 +126,10 @@ public class MusicConfig {
         return this.temporaryCacheEnabled;
     }
 
+    public int getMaxCacheSizeMb() {
+        return this.maxCacheSizeMb;
+    }
+
     public boolean shouldClearTemporaryCacheOnExit() {
         return this.clearTemporaryCacheOnExit;
     }

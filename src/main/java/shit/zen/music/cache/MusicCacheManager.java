@@ -8,6 +8,7 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.nio.file.AtomicMoveNotSupportedException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -47,7 +48,7 @@ public class MusicCacheManager {
     }
 
     public boolean isCached(MusicTrack track) {
-        return Files.isRegularFile(this.cachedAudio(track));
+        return this.isUsableAudio(this.cachedAudio(track));
     }
 
     public Path cachedAudio(MusicTrack track) {
@@ -69,13 +70,13 @@ public class MusicCacheManager {
 
     public Path downloadAudio(MusicTrack track, String url, boolean persistent, int bitrate) {
         Path target = persistent ? this.cachedAudio(track) : this.tempAudio(track);
-        if (Files.isRegularFile(target) && this.isLikelyValidAudio(target)) {
+        if (this.isUsableAudio(target)) {
             if (persistent) {
                 this.writeMeta(track, bitrate);
             }
             return target;
         }
-        this.downloadToAtomicFile(url, target);
+        this.downloadToAtomicFile(url, target, DownloadKind.AUDIO);
         if (persistent) {
             this.writeMeta(track, bitrate);
         }
@@ -84,11 +85,53 @@ public class MusicCacheManager {
 
     public Path downloadCover(MusicTrack track, String url, int size) {
         Path target = this.coverFile(track, size);
-        if (Files.isRegularFile(target)) {
+        if (this.isUsableImage(target)) {
             return target;
         }
-        this.downloadToAtomicFile(url, target);
+        this.downloadToAtomicFile(url, target, DownloadKind.IMAGE);
         return target;
+    }
+
+    public boolean isUsableAudio(Path path) {
+        return this.isLikelyValidAudio(path);
+    }
+
+    public boolean isUsableImage(Path path) {
+        return this.isLikelyValidImage(path);
+    }
+
+    public void enforcePersistentCacheLimit(int maxCacheSizeMb) {
+        long maxBytes = Math.max(64L, maxCacheSizeMb) * 1024L * 1024L;
+        Path cache = this.root.resolve("cache");
+        if (!Files.isDirectory(cache)) {
+            return;
+        }
+        try (var walk = Files.walk(cache)) {
+            var files = walk.filter(Files::isRegularFile)
+                    .map(path -> {
+                        try {
+                            return new CacheFile(path, Files.size(path), Files.getLastModifiedTime(path).toMillis());
+                        } catch (IOException ignored) {
+                            return new CacheFile(path, 0L, 0L);
+                        }
+                    })
+                    .sorted(Comparator.comparingLong(CacheFile::modifiedAt))
+                    .toList();
+            long total = files.stream().mapToLong(CacheFile::size).sum();
+            for (CacheFile file : files) {
+                if (total <= maxBytes) {
+                    break;
+                }
+                try {
+                    Files.deleteIfExists(file.path());
+                    total -= file.size();
+                } catch (IOException ioException) {
+                    LOGGER.warn("Failed to prune music cache {}", file.path(), ioException);
+                }
+            }
+        } catch (IOException ioException) {
+            LOGGER.warn("Failed to prune music cache", ioException);
+        }
     }
 
     public Path writeLyric(MusicTrack track, String lyric) {
@@ -135,7 +178,7 @@ public class MusicCacheManager {
         }
     }
 
-    private void downloadToAtomicFile(String url, Path target) {
+    private void downloadToAtomicFile(String url, Path target, DownloadKind kind) {
         if (url == null || url.isBlank()) {
             throw new IllegalStateException("No playable URL found.");
         }
@@ -152,11 +195,16 @@ public class MusicCacheManager {
                 Files.deleteIfExists(part);
                 throw new IllegalStateException("Network error. Please try again later.");
             }
-            if (!this.isLikelyValidAudio(part) && target.getFileName().toString().endsWith(".mp3")) {
+            String contentType = response.headers().firstValue("Content-Type").orElse("");
+            if (kind == DownloadKind.AUDIO && (!isAudioContentType(contentType) || !this.isLikelyValidAudio(part))) {
                 Files.deleteIfExists(part);
-                throw new IllegalStateException("Cached file is corrupted. Re-downloading...");
+                throw new IllegalStateException("Only MP3 audio is supported by the current player.");
             }
-            Files.move(part, target, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+            if (kind == DownloadKind.IMAGE && (!isImageContentType(contentType) || !this.isLikelyValidImage(part))) {
+                Files.deleteIfExists(part);
+                throw new IllegalStateException("Cover response is not a valid image.");
+            }
+            moveAtomically(part, target);
         } catch (Exception exception) {
             try {
                 Files.deleteIfExists(part);
@@ -210,14 +258,111 @@ public class MusicCacheManager {
 
     private boolean isLikelyValidAudio(Path path) {
         try {
-            return Files.isRegularFile(path) && Files.size(path) > 1024L;
+            if (!Files.isRegularFile(path) || Files.size(path) <= 1024L) {
+                return false;
+            }
+            byte[] header = this.readHeader(path, 12);
+            if (looksLikeTextResponse(header)) {
+                return false;
+            }
+            return isMp3Header(header);
         } catch (IOException ignored) {
             return false;
+        }
+    }
+
+    private boolean isLikelyValidImage(Path path) {
+        try {
+            if (!Files.isRegularFile(path) || Files.size(path) <= 64L) {
+                return false;
+            }
+            byte[] header = this.readHeader(path, 12);
+            if (looksLikeTextResponse(header)) {
+                return false;
+            }
+            return isImageHeader(header);
+        } catch (IOException ignored) {
+            return false;
+        }
+    }
+
+    private byte[] readHeader(Path path, int maxLength) throws IOException {
+        try (var input = Files.newInputStream(path)) {
+            return input.readNBytes(maxLength);
+        }
+    }
+
+    private static boolean isAudioContentType(String contentType) {
+        String value = contentType == null ? "" : contentType.toLowerCase();
+        return value.isBlank()
+                || value.startsWith("audio/")
+                || value.contains("audio/mpeg")
+                || value.contains("audio/mp3")
+                || value.contains("application/octet-stream")
+                || value.contains("binary/octet-stream");
+    }
+
+    private static boolean isImageContentType(String contentType) {
+        String value = contentType == null ? "" : contentType.toLowerCase();
+        return value.isBlank()
+                || value.startsWith("image/")
+                || value.contains("application/octet-stream")
+                || value.contains("binary/octet-stream");
+    }
+
+    private static boolean isMp3Header(byte[] header) {
+        if (header.length >= 3 && header[0] == 'I' && header[1] == 'D' && header[2] == '3') {
+            return true;
+        }
+        return header.length >= 2 && (header[0] & 0xFF) == 0xFF && (header[1] & 0xE0) == 0xE0;
+    }
+
+    private static boolean isImageHeader(byte[] header) {
+        if (header.length >= 3 && (header[0] & 0xFF) == 0xFF && (header[1] & 0xFF) == 0xD8 && (header[2] & 0xFF) == 0xFF) {
+            return true;
+        }
+        if (header.length >= 8
+                && (header[0] & 0xFF) == 0x89 && header[1] == 'P' && header[2] == 'N' && header[3] == 'G') {
+            return true;
+        }
+        return header.length >= 12
+                && header[0] == 'R' && header[1] == 'I' && header[2] == 'F' && header[3] == 'F'
+                && header[8] == 'W' && header[9] == 'E' && header[10] == 'B' && header[11] == 'P';
+    }
+
+    private static boolean looksLikeTextResponse(byte[] header) {
+        if (header.length == 0) {
+            return true;
+        }
+        int index = 0;
+        while (index < header.length && Character.isWhitespace((char) header[index])) {
+            index++;
+        }
+        if (index >= header.length) {
+            return true;
+        }
+        byte first = header[index];
+        return first == '<' || first == '{' || first == '[';
+    }
+
+    private static void moveAtomically(Path source, Path target) throws IOException {
+        try {
+            Files.move(source, target, StandardCopyOption.REPLACE_EXISTING, StandardCopyOption.ATOMIC_MOVE);
+        } catch (AtomicMoveNotSupportedException ignored) {
+            Files.move(source, target, StandardCopyOption.REPLACE_EXISTING);
         }
     }
 
     private static String safe(String value) {
         String clean = value == null || value.isBlank() ? "unknown" : value;
         return clean.replaceAll("[^A-Za-z0-9._=-]", "_");
+    }
+
+    private enum DownloadKind {
+        AUDIO,
+        IMAGE
+    }
+
+    private record CacheFile(Path path, long size, long modifiedAt) {
     }
 }

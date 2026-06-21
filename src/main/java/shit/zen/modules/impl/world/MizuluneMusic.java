@@ -37,6 +37,10 @@ public class MizuluneMusic extends Module {
     @Override
     protected void onEnable() {
         try {
+            if (!ZenClient.getInstance().getMusicService().config().isEnabled()) {
+                LOGGER.info("Mizulune Music is disabled by music config");
+                return;
+            }
             mc.setScreen(new MusicScreen(ZenClient.getInstance().getMusicService(), this));
         } catch (Exception exception) {
             LOGGER.error("Failed to open Mizulune Music", exception);

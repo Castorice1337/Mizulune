@@ -10,6 +10,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Random;
+import java.util.concurrent.Executor;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import shit.zen.music.cache.MusicCacheManager;
@@ -20,14 +21,21 @@ public class MusicQueueManager {
     private static final Logger LOGGER = LogManager.getLogger(MusicQueueManager.class);
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
     private final MusicCacheManager cacheManager;
+    private final Executor saveExecutor;
     private final Random random = new Random();
     private final List<MusicTrack> queue = new ArrayList<>();
     private final List<Integer> shuffleBag = new ArrayList<>();
     private int currentIndex = -1;
     private PlayMode playMode = PlayMode.ORDER;
+    private boolean saveQueued;
 
     public MusicQueueManager(MusicCacheManager cacheManager) {
+        this(cacheManager, null);
+    }
+
+    public MusicQueueManager(MusicCacheManager cacheManager, Executor saveExecutor) {
         this.cacheManager = cacheManager;
+        this.saveExecutor = saveExecutor;
         this.load();
     }
 
@@ -46,7 +54,7 @@ public class MusicQueueManager {
     public synchronized void setPlayMode(PlayMode playMode) {
         this.playMode = playMode == null ? PlayMode.ORDER : playMode;
         this.rebuildShuffleBag();
-        this.save();
+        this.requestSave();
     }
 
     public synchronized int add(MusicTrack track) {
@@ -55,21 +63,8 @@ public class MusicQueueManager {
         }
         this.queue.add(track.copy());
         this.rebuildShuffleBag();
-        this.save();
+        this.requestSave();
         return this.queue.size() - 1;
-    }
-
-    public synchronized int addOrSelect(MusicTrack track) {
-        int existing = this.indexOf(track);
-        if (existing >= 0) {
-            this.currentIndex = existing;
-            this.save();
-            return existing;
-        }
-        int index = this.add(track);
-        this.currentIndex = index;
-        this.save();
-        return index;
     }
 
     public synchronized MusicTrack playIndex(int index) {
@@ -78,7 +73,7 @@ public class MusicQueueManager {
         }
         this.currentIndex = index;
         this.removeFromShuffleBag(index);
-        this.save();
+        this.requestSave();
         return this.queue.get(index).copy();
     }
 
@@ -92,7 +87,7 @@ public class MusicQueueManager {
     public synchronized MusicTrack next(boolean manual) {
         if (this.queue.isEmpty()) {
             this.currentIndex = -1;
-            this.save();
+            this.requestSave();
             return null;
         }
         if (!manual && this.playMode == PlayMode.SINGLE) {
@@ -101,24 +96,24 @@ public class MusicQueueManager {
         if (this.playMode == PlayMode.SHUFFLE) {
             int next = this.nextShuffleIndex();
             this.currentIndex = next;
-            this.save();
+            this.requestSave();
             return this.queue.get(next).copy();
         }
         int next = this.currentIndex + 1;
         if (next >= this.queue.size()) {
             this.currentIndex = -1;
-            this.save();
+            this.requestSave();
             return null;
         }
         this.currentIndex = next;
-        this.save();
+        this.requestSave();
         return this.queue.get(this.currentIndex).copy();
     }
 
     public synchronized MusicTrack previous() {
         if (this.queue.isEmpty()) {
             this.currentIndex = -1;
-            this.save();
+            this.requestSave();
             return null;
         }
         if (this.currentIndex <= 0) {
@@ -127,7 +122,7 @@ public class MusicQueueManager {
             this.currentIndex--;
         }
         this.removeFromShuffleBag(this.currentIndex);
-        this.save();
+        this.requestSave();
         return this.queue.get(this.currentIndex).copy();
     }
 
@@ -137,7 +132,7 @@ public class MusicQueueManager {
         }
         this.queue.remove(index);
         if (this.currentIndex == index) {
-            this.currentIndex = Math.min(index, this.queue.size() - 1);
+            this.currentIndex = -1;
         } else if (this.currentIndex > index) {
             this.currentIndex--;
         }
@@ -145,17 +140,38 @@ public class MusicQueueManager {
             this.currentIndex = -1;
         }
         this.rebuildShuffleBag();
-        this.save();
+        this.requestSave();
     }
 
     public synchronized void clear() {
         this.queue.clear();
         this.shuffleBag.clear();
         this.currentIndex = -1;
-        this.save();
+        this.requestSave();
     }
 
     public synchronized void save() {
+        this.saveNow();
+    }
+
+    private void requestSave() {
+        if (this.saveExecutor == null) {
+            this.saveNow();
+            return;
+        }
+        if (this.saveQueued) {
+            return;
+        }
+        this.saveQueued = true;
+        this.saveExecutor.execute(() -> {
+            synchronized (MusicQueueManager.this) {
+                MusicQueueManager.this.saveQueued = false;
+                MusicQueueManager.this.saveNow();
+            }
+        });
+    }
+
+    private void saveNow() {
         try {
             Path file = this.cacheManager.getQueueFile();
             Files.createDirectories(file.getParent());
