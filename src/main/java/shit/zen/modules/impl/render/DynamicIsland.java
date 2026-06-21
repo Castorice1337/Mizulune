@@ -204,7 +204,7 @@ public class DynamicIsland extends Module {
 
         if (!notifications.isEmpty()) {
             for (Notification.IslandNotification notification : notifications) {
-                String status = notification.isEnabled() ? "Enabled" : "Disabled";
+                String status = notification.getStatusText();
                 float rowWidth = 58.0f
                         + GlHelper.getStringWidth(notification.getModuleName(), this.notificationFont)
                         + GlHelper.getStringWidth(status, this.notificationStatusFont);
@@ -456,13 +456,12 @@ public class DynamicIsland extends Module {
                 continue;
             }
             float rowY = startY + i * 24.0f;
-            boolean enabled = notification.isEnabled();
-            int accent = enabled ? 0xFF71E19B : 0xFFFF7777;
-            this.drawNotificationIcon(drawContext, x + 14.0f, rowY + 3.0f, 16.0f, accent, rowAlpha, enabled);
+            int accent = notification.getAccentColor();
+            this.drawNotificationIcon(drawContext, x + 14.0f, rowY + 3.0f, 16.0f, accent, rowAlpha, notification.getIconType());
             float textX = x + 38.0f;
             float nameY = rowY + (rowHeight - this.notificationFont.getMetrics().capHeight()) / 2.0f + 1.0f;
             GlHelper.drawText(notification.getModuleName(), textX, nameY, this.notificationFont, Argb.scaleAlpha(0xFFFFFFFF, rowAlpha));
-            String status = enabled ? "Enabled" : "Disabled";
+            String status = notification.getStatusText();
             float statusWidth = GlHelper.getStringWidth(status, this.notificationStatusFont);
             GlHelper.drawText(status, x + width - statusWidth - 14.0f,
                     rowY + (rowHeight - this.notificationStatusFont.getMetrics().capHeight()) / 2.0f + 1.0f,
@@ -470,7 +469,8 @@ public class DynamicIsland extends Module {
         }
     }
 
-    private void drawNotificationIcon(DrawContext drawContext, float x, float y, float size, int accent, float alpha, boolean enabled) {
+    private void drawNotificationIcon(DrawContext drawContext, float x, float y, float size, int accent, float alpha,
+                                      Notification.IconType iconType) {
         int fill = Argb.scaleAlpha(accent, 0.22f * alpha);
         int stroke = Argb.scaleAlpha(accent, alpha);
         try (Paint paint = new Paint()) {
@@ -479,12 +479,19 @@ public class DynamicIsland extends Module {
             paint.setColor(stroke);
             paint.setStrokeCap(Paint.StrokeCap.STROKE);
             paint.setStrokeWidth(1.4f);
-            if (enabled) {
+            if (iconType == Notification.IconType.SUCCESS) {
                 drawContext.drawLine(x + 4.0f, y + 8.5f, x + 7.0f, y + 11.0f, paint);
                 drawContext.drawLine(x + 7.0f, y + 11.0f, x + 12.0f, y + 5.0f, paint);
-            } else {
+            } else if (iconType == Notification.IconType.ERROR) {
                 drawContext.drawLine(x + 5.0f, y + 5.0f, x + 11.0f, y + 11.0f, paint);
                 drawContext.drawLine(x + 11.0f, y + 5.0f, x + 5.0f, y + 11.0f, paint);
+            } else {
+                drawContext.drawLine(x + 8.0f, y + 4.0f, x + 12.0f, y + 12.0f, paint);
+                drawContext.drawLine(x + 12.0f, y + 12.0f, x + 4.0f, y + 12.0f, paint);
+                drawContext.drawLine(x + 4.0f, y + 12.0f, x + 8.0f, y + 4.0f, paint);
+                paint.setStrokeWidth(1.2f);
+                drawContext.drawLine(x + 8.0f, y + 6.8f, x + 8.0f, y + 9.5f, paint);
+                drawContext.drawLine(x + 8.0f, y + 11.0f, x + 8.0f, y + 11.2f, paint);
             }
         }
     }

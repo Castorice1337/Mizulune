@@ -9,6 +9,7 @@ import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 import net.minecraft.util.Mth;
 import shit.zen.gui.newclickgui.CategoryPanel;
+import shit.zen.gui.newclickgui.ModuleElement;
 import shit.zen.gui.newclickgui.ValueTreeElementRenderer;
 import shit.zen.manager.ConfigManager;
 import shit.zen.modules.Category;
@@ -76,6 +77,9 @@ extends Screen {
     }
 
     public boolean charTyped(char codePoint, int modifiers) {
+        if (ModuleElement.hasActiveBindCapture()) {
+            return true;
+        }
         if (ValueTreeElementRenderer.getInstance().charTyped(codePoint, modifiers)) {
             return true;
         }
@@ -83,6 +87,9 @@ extends Screen {
     }
 
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+        if (ModuleElement.keyPressed(keyCode)) {
+            return true;
+        }
         if (ValueTreeElementRenderer.getInstance().keyPressed(keyCode, scanCode, modifiers)) {
             return true;
         }

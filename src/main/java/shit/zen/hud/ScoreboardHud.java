@@ -40,6 +40,7 @@ public class ScoreboardHud extends HudElement {
     private final Paint paint = new Paint();
 
     private Value<Boolean> liquidGlass;
+    private Value<Boolean> backgroundBlur;
     private Value<Boolean> panelGlow;
     private Value<Boolean> fontGlow;
     private Value<Boolean> showScores;
@@ -80,6 +81,8 @@ public class ScoreboardHud extends HudElement {
 
         ToggleValueGroup appearance = root.toggleGroup("appearance", "Appearance", true);
         this.liquidGlass = appearance.bool("liquid_glass", "Liquid Glass", true).alias("liquidglass");
+        this.backgroundBlur = appearance.bool("background_blur", "Background Blur", true)
+                .visibleWhen(() -> !Boolean.TRUE.equals(this.liquidGlass.getValue()));
         this.panelGlow = appearance.bool("glow", "Glow", true);
         this.fontGlow = appearance.bool("font_glow", "Font Glow", true);
         this.showScores = appearance.bool("show_scores", "Show Scores", true)
@@ -226,12 +229,7 @@ public class ScoreboardHud extends HudElement {
         if (Boolean.TRUE.equals(this.liquidGlass.getValue())) {
             ctx.drawLiquidGlassPanel(bounds, this.liquidGlassStyle());
         } else {
-            ctx.drawBlurredRoundedRect(bounds, 0.0f, 0.0f, 12.0f, 0.0f, Argb.scaleAlpha(this.fallbackGlassColor.getValue().toArgb(), 0.42f));
-            this.paint.setGradCoords(new Paint.GradientCoords(x, y, x, y + layout.height(),
-                    Argb.scaleAlpha(this.fallbackGlassColor.getValue().toArgb(), 0.92f),
-                    Argb.scaleAlpha(0xFFFFFFFF, 0.46f)));
-            ctx.drawRoundedRect(bounds, this.paint);
-            this.paint.setGradCoords(null);
+            this.drawFallbackGlass(ctx, bounds);
         }
 
         this.paint.setStrokeCap(Paint.StrokeCap.STROKE)
@@ -260,6 +258,36 @@ public class ScoreboardHud extends HudElement {
             }
             rowY += layout.rowHeight();
         }
+    }
+
+    private void drawFallbackGlass(DrawContext ctx, RoundedRectangle bounds) {
+        int tint = this.fallbackGlassColor.getValue().toArgb();
+        if (Boolean.TRUE.equals(this.backgroundBlur.getValue())) {
+            ctx.drawBackdropBlurredRoundedRect(bounds, 9.0f, 0.62f, 0x00000000);
+        }
+
+        ctx.drawBlurredRoundedRect(bounds, 0.0f, 2.0f, 8.0f, 1.8f, Argb.scaleAlpha(0xFF000000, 0.20f));
+        ctx.drawBlurredRoundedRect(bounds, 0.0f, 0.8f, 5.0f, 0.6f, Argb.scaleAlpha(tint, 0.18f));
+
+        this.paint.setGradCoords(new Paint.GradientCoords(bounds.x1, bounds.y1, bounds.x1, bounds.y2,
+                        Argb.scaleAlpha(tint, 0.78f),
+                        Argb.scaleAlpha(0xFFF5F8FF, 0.38f)))
+                .setStrokeCap(Paint.StrokeCap.FILL)
+                .setColor(0xFFFFFFFF);
+        ctx.drawRoundedRect(bounds, this.paint);
+
+        this.paint.setGradCoords(null)
+                .setColor(Argb.scaleAlpha(0xFF10141B, 0.08f));
+        ctx.drawRoundedRect(bounds, this.paint);
+
+        this.paint.setColor(Argb.scaleAlpha(0xFFFFFFFF, 0.18f));
+        ctx.drawRoundedRect(RoundedRectangle.ofXYWHR(
+                bounds.x1 + bounds.topLeftRadius * 0.75f,
+                bounds.y1 + 1.1f,
+                Math.max(0.0f, bounds.getWidth() - bounds.topLeftRadius * 1.5f),
+                0.75f,
+                0.35f
+        ), this.paint);
     }
 
     private void drawText(String text, float x, float y, FontRenderer font, int color, float glowRadius) {

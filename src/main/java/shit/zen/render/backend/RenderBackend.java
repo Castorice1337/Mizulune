@@ -108,6 +108,12 @@ public interface RenderBackend {
     default void drawTexture(DrawContext drawContext, Texture texture, Rectangle srcRect, Rectangle dstRect, Paint paint) {
     }
 
+    default boolean canDrawTexture(Texture texture) {
+        return texture != null
+                && texture.getResourceLocation() != null
+                && this.canDrawResourceTexture(texture.getResourceLocation());
+    }
+
     default boolean canDrawResourceTexture(ResourceLocation resourceLocation) {
         return false;
     }

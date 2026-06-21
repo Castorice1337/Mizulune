@@ -68,6 +68,7 @@ import shit.zen.modules.impl.render.ItemTags;
 import shit.zen.modules.impl.render.NameProtect;
 import shit.zen.modules.impl.render.NameTags;
 import shit.zen.modules.impl.render.NoHurtCam;
+import shit.zen.modules.impl.render.NoRender;
 import shit.zen.modules.impl.render.Notification;
 import shit.zen.modules.impl.render.OldHitting;
 import shit.zen.modules.impl.render.Projectiles;
@@ -78,6 +79,7 @@ import shit.zen.modules.impl.world.AutoPlay;
 import shit.zen.modules.impl.world.AutoTools;
 import shit.zen.modules.impl.world.BlockIn;
 import shit.zen.modules.impl.world.Debugger;
+import shit.zen.modules.impl.world.MizuluneMusic;
 import shit.zen.modules.impl.world.Teams;
 import shit.zen.modules.impl.world.WebUI;
 import shit.zen.event.EventTarget;
@@ -153,6 +155,7 @@ public class ModuleManager extends ClientBase {
         this.register(new NameProtect());
         this.register(new NameTags());
         this.register(new NoHurtCam());
+        this.register(new NoRender());
         this.register(new Notification());
         this.register(new OldHitting());
         this.register(new Projectiles());
@@ -164,6 +167,7 @@ public class ModuleManager extends ClientBase {
         this.register(new AutoTools());
         this.register(new BlockIn());
         this.register(new Debugger());
+        this.register(new MizuluneMusic());
         this.register(new Teams());
         this.register(new WebUI());
     }

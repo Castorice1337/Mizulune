@@ -6,6 +6,8 @@ import org.jetbrains.skia.Image;
 import shit.zen.utils.misc.Assets;
 
 import java.io.InputStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
@@ -52,6 +54,26 @@ final class SkikoTextures {
         return null;
     }
 
+    Image getFileImage(Path imageFile) {
+        if (imageFile == null || !Files.isRegularFile(imageFile)) {
+            return null;
+        }
+        try {
+            String key = this.fileKey(imageFile);
+            Image cached = this.imageCache.get(key);
+            if (cached != null) {
+                return cached;
+            }
+            Image image = Image.Companion.makeFromEncoded(Files.readAllBytes(imageFile));
+            if (image != null) {
+                this.imageCache.put(key, image);
+                return image;
+            }
+        } catch (Exception ignored) {
+        }
+        return null;
+    }
+
     int getCachedImageCount() {
         return this.imageCache.size();
     }
@@ -63,6 +85,13 @@ final class SkikoTextures {
     private String resourceKey(Minecraft mc, ResourceLocation resourceLocation) {
         String resourceDir = System.getProperty("mizulune.resources", "");
         return System.identityHashCode(mc.getResourceManager()) + ":" + resourceDir + ":" + resourceLocation;
+    }
+
+    private String fileKey(Path imageFile) throws Exception {
+        Path absolute = imageFile.toAbsolutePath().normalize();
+        long size = Files.size(absolute);
+        long modified = Files.getLastModifiedTime(absolute).toMillis();
+        return "file:" + absolute + ":" + size + ":" + modified;
     }
 
     private String toClasspath(ResourceLocation resourceLocation) {

@@ -30,6 +30,7 @@ extends ClientBase {
     private static final int PANEL_BG_COLOR = new Color(255, 255, 255, 20).getRGB();
     private static final int TOGGLE_ON_COLOR = new Color(76, 175, 80).getRGB();
     private static final int TOGGLE_OFF_COLOR = new Color(158, 158, 158).getRGB();
+    private static final int BIND_ROW_BASE_HEIGHT = 24;
     private Module currentModule;
     private boolean isToggleHovered = false;
     private float enabledAlpha = 0.0f;
@@ -197,9 +198,11 @@ extends ClientBase {
             drawContext.translate(0.0f, slideY);
             guiGraphics.pose().pushPose();
             guiGraphics.pose().translate(0.0f, slideY, 0.0f);
+            int settingY = panelY + headerHeight - (int)this.scrollOffset;
+            settingY += this.renderBindRow(guiGraphics, bodyModule, panelX + (int)(10.0f * scale), settingY,
+                    panelWidth - (int)(20.0f * scale), mouseX, mouseY, bodyAlpha, scale);
             ValueGroup valueTree = bodyModule.getValueTree();
             if (valueTree != null && !valueTree.getVisibleChildren().isEmpty()) {
-                int settingY = panelY + headerHeight - (int)this.scrollOffset;
                 for (Value<?> value : valueTree.getVisibleChildren()) {
                     int dy = ValueRendererRegistry.getInstance().render(guiGraphics, value, panelX + (int)(10.0f * scale), settingY, panelWidth - (int)(20.0f * scale), mouseX, mouseY, bodyAlpha, scale);
                     settingY += dy;
@@ -208,7 +211,7 @@ extends ClientBase {
                 String description = this.getModuleDescription(bodyModule);
                 if (description != null && !description.isEmpty()) {
                     FontRenderer descFont = FontPresets.axiformaRegular(12.0f * scale);
-                    this.renderWrappedText(description, panelX + (int)(10.0f * scale), panelY + headerHeight + (int)(10.0f * scale), panelWidth - (int)(20.0f * scale), descFont, -5592406, bodyAlpha, scale);
+                    this.renderWrappedText(description, panelX + (int)(10.0f * scale), settingY + (int)(4.0f * scale), panelWidth - (int)(20.0f * scale), descFont, -5592406, bodyAlpha, scale);
                 }
             }
             guiGraphics.pose().popPose();
@@ -316,14 +319,33 @@ extends ClientBase {
         }
     }
 
+    private int renderBindRow(GuiGraphics guiGraphics, Module module, int x, int y, int width,
+                              int mouseX, int mouseY, float alpha, float scale) {
+        int rowHeight = this.getBindRowHeight(scale);
+        int innerY = y + Math.max(2, (int)(4.0f * scale));
+        int innerHeight = Math.max(12, rowHeight - Math.max(4, (int)(8.0f * scale)));
+        boolean hovered = mouseX >= x && mouseX <= x + width && mouseY >= y && mouseY <= y + rowHeight;
+        int background = this.applyAlpha(hovered
+                ? new Color(255, 255, 255, 36).getRGB()
+                : new Color(255, 255, 255, 20).getRGB(), alpha);
+        RenderUtil.drawRoundedRect(guiGraphics.pose(), x, innerY, width, innerHeight, 4.0f * scale, background);
+
+        FontRenderer font = FontPresets.axiformaBold(13.0f * scale);
+        String text = this.clipText("BIND: " + module.getBind().getName().toUpperCase(), font, width - (int)(12.0f * scale));
+        float textX = x + (float)width / 2.0f - GlHelper.getStringWidth(text, font) / 2.0f;
+        float textY = innerY + ((float)innerHeight - font.getMetrics().capHeight()) / 2.0f + 2.0f * scale;
+        GlHelper.drawText(text, textX, textY, font, this.applyAlpha(-1, alpha * 0.88f));
+        return rowHeight;
+    }
+
     private void calculateTotalHeight(Module module, float scale) {
         if (module == null) {
             this.totalContentHeight = 0.0f;
             return;
         }
+        int total = this.getBindRowHeight(scale);
         ValueGroup valueTree = module.getValueTree();
         if (valueTree != null && !valueTree.getVisibleChildren().isEmpty()) {
-            int total = 0;
             for (Value<?> value : valueTree.getVisibleChildren()) {
                 total += ValueRendererRegistry.getInstance().getHeight(value, scale);
             }
@@ -332,9 +354,9 @@ extends ClientBase {
             String description = this.getModuleDescription(module);
             if (description != null && !description.isEmpty()) {
                 FontRenderer fontRenderer = FontPresets.axiformaRegular(12.0f * scale);
-                this.totalContentHeight = this.calcWrappedTextHeight(description, (int)(385.0f * scale), fontRenderer, scale);
+                this.totalContentHeight = total + this.calcWrappedTextHeight(description, (int)(385.0f * scale), fontRenderer, scale);
             } else {
-                this.totalContentHeight = 0.0f;
+                this.totalContentHeight = total;
             }
         }
     }
@@ -418,10 +440,16 @@ extends ClientBase {
             PanelClickGui.panelClickGui.addToast(this.currentModule.getName() + " Module " + stateLabel);
             return true;
         }
+        int settingY = panelY + headerHeight;
+        int adjustedMouseY = mouseY + (int)this.scrollOffset;
+        int bindHeight = this.getBindRowHeight(scale);
+        if (button == 0 && adjustedMouseY >= settingY && adjustedMouseY <= settingY + bindHeight) {
+            PanelClickGui.panelClickGui.selectModule(this.currentModule);
+            return true;
+        }
+        settingY += bindHeight;
         ValueGroup valueTree = this.currentModule.getValueTree();
         if (valueTree != null && !valueTree.getVisibleChildren().isEmpty()) {
-            int settingY = panelY + headerHeight;
-            int adjustedMouseY = mouseY + (int)this.scrollOffset;
             for (Value<?> value : valueTree.getVisibleChildren()) {
                 int settingHeight = ValueRendererRegistry.getInstance().getHeight(value, scale);
                 if (adjustedMouseY >= settingY && adjustedMouseY <= settingY + settingHeight && ValueRendererRegistry.getInstance().onClick(value, panelX + (int)(10.0f * scale), settingY - (int)this.scrollOffset, panelWidth - (int)(20.0f * scale), mouseX, mouseY, button, scale)) {
@@ -515,5 +543,20 @@ extends ClientBase {
             this.scrollOffset = 0.0f;
             this.scrollTarget = 0.0f;
         }
+    }
+
+    private int getBindRowHeight(float scale) {
+        return Math.max(18, Math.round(BIND_ROW_BASE_HEIGHT * scale));
+    }
+
+    private String clipText(String text, FontRenderer font, float maxWidth) {
+        String clipped = text == null ? "" : text;
+        if (GlHelper.getStringWidth(clipped, font) <= maxWidth) {
+            return clipped;
+        }
+        while (clipped.length() > 1 && GlHelper.getStringWidth(clipped + "...", font) > maxWidth) {
+            clipped = clipped.substring(0, clipped.length() - 1);
+        }
+        return clipped + "...";
     }
 }

@@ -3,6 +3,7 @@ package shit.zen.hud;
 import java.util.ArrayList;
 import java.util.IdentityHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import net.minecraft.util.Mth;
 import shit.zen.ZenClient;
@@ -13,8 +14,8 @@ import shit.zen.modules.Module;
 import shit.zen.modules.impl.render.HUD;
 import shit.zen.modules.impl.render.Interface;
 import shit.zen.render.DrawContext;
-import shit.zen.render.FontPresets;
 import shit.zen.render.FontRenderer;
+import shit.zen.render.Fonts;
 import shit.zen.render.GlHelper;
 import shit.zen.render.Paint;
 import shit.zen.render.Path;
@@ -45,6 +46,7 @@ public class ModuleListHud extends HudElement {
         private final Module module;
         private final SmoothAnimationTimer progressAnim = new SmoothAnimationTimer();
         private String name;
+        private int suffixStart = -1;
         private float textWidth;
         private float rowWidth;
         private boolean targetVisible;
@@ -56,8 +58,9 @@ public class ModuleListHud extends HudElement {
             this.progressAnim.setToValue(0.0f);
         }
 
-        private void updateMetrics(String name, float textWidth, float rowWidth) {
-            this.name = name;
+        private void updateMetrics(DisplayText displayText, float textWidth, float rowWidth) {
+            this.name = displayText.text();
+            this.suffixStart = displayText.suffixStart();
             this.textWidth = textWidth;
             this.rowWidth = rowWidth;
         }
@@ -116,6 +119,9 @@ public class ModuleListHud extends HudElement {
         }
     }
 
+    private record DisplayText(String text, int suffixStart) {
+    }
+
     private static final float MIN_VISIBLE_EDGE = 4.0f;
     private static final float DEFAULT_ROW_HEIGHT = 14.0f;
     private static final float DEFAULT_PADDING_X = 4.0f;
@@ -123,10 +129,32 @@ public class ModuleListHud extends HudElement {
     private static final float DEFAULT_ROW_SPACING = 0.0f;
     private static final float DEFAULT_RADIUS = 1.5f;
     private static final float SLIDE_DISTANCE = 18.0f;
+    private static final String DEFAULT_CLIENT_FONT = "PingFang";
+    private static final int DEFAULT_SUFFIX_GRAY = 0xFFAAAAAA;
+    private static final String[] CLIENT_FONT_OPTIONS = {
+            DEFAULT_CLIENT_FONT,
+            "Product Sans",
+            "Poppins",
+            "Asta Sans",
+            "Axiforma",
+            "Quicksand",
+            "A Nice Day",
+            "Aidian Signature",
+            "Crystal Light",
+            "Minecraft PE",
+            "ZCOOL KuaiLe",
+            "FZ KaiTi SC",
+            "FZ KaiTi TC",
+            "YanZhenQing",
+            "Microsoft"
+    };
 
     private Value<String> sideMode;
     private Value<Boolean> breakEnabled;
     private Value<Boolean> showSuffix;
+    private Value<Boolean> suffixColorEnabled;
+    private Value<Boolean> suffixLowercaseEnabled;
+    private Value<String> clientFont;
     private Value<Boolean> backgroundEnabled;
     private Value<MizuColor> backgroundColor;
     private Value<Number> backgroundRadius;
@@ -167,7 +195,6 @@ public class ModuleListHud extends HudElement {
     private Value<Number> fontGlowAlpha;
     private Value<Number> fontGlowQuality;
 
-    private final FontRenderer moduleFont = FontPresets.pingfang(16.0f);
     private final SmoothAnimationTimer widthAnim = new SmoothAnimationTimer();
     private final SmoothAnimationTimer heightAnim = new SmoothAnimationTimer();
     private final Map<Module, AnimatedRow> rowStates = new IdentityHashMap<>();
@@ -188,6 +215,17 @@ public class ModuleListHud extends HudElement {
         this.sideMode = layout.enumChoice("side_mode", "Side Mode", "Auto", "Auto", "Left", "Right").alias("Side Mode");
         this.breakEnabled = layout.bool("break", "Break", true).alias("Break");
         this.showSuffix = layout.bool("show_suffix", "Show Suffix", true).alias("Show Suffix");
+        this.suffixColorEnabled = layout.bool("suffix_color", "Suffix Color", true)
+                .alias("suffixcolor")
+                .alias("Suffix Color")
+                .visibleWhen(() -> this.showSuffix == null || this.showSuffix.getValue());
+        this.suffixLowercaseEnabled = layout.bool("suffix_lowercase", "Suffix Lowercase", false)
+                .alias("Suffix Lowercase")
+                .alias("Suffix Lower Case")
+                .visibleWhen(() -> this.showSuffix == null || this.showSuffix.getValue());
+        this.clientFont = layout.enumChoice("client_font", "Client Font", DEFAULT_CLIENT_FONT, CLIENT_FONT_OPTIONS)
+                .alias("Client Fonts")
+                .alias("client fonts");
         this.paddingX = layout.decimal("padding_x", "Padding X", DEFAULT_PADDING_X, 0.0f, 12.0f, 0.25f).alias("Padding X");
         this.paddingY = layout.decimal("padding_y", "Padding Y", DEFAULT_PADDING_Y, 0.0f, 8.0f, 0.25f).alias("Padding Y");
         this.rowHeight = layout.decimal("row_height", "Row Height", DEFAULT_ROW_HEIGHT, 9.0f, 24.0f, 0.25f).alias("Row Height");
@@ -243,6 +281,7 @@ public class ModuleListHud extends HudElement {
     }
 
     private List<AnimatedRow> updateRows() {
+        FontRenderer font = this.moduleFont();
         for (Module module : ZenClient.getInstance().getModuleManager().getModules()) {
             if (module == this || module.getName().isEmpty() || module.isHiddenInModuleList()) {
                 this.rowStates.remove(module);
@@ -254,8 +293,8 @@ public class ModuleListHud extends HudElement {
                     row = new AnimatedRow(module);
                     this.rowStates.put(module, row);
                 }
-                String displayName = this.displayName(module);
-                float textWidth = GlHelper.getStringWidth(displayName, this.moduleFont);
+                DisplayText displayName = this.displayName(module);
+                float textWidth = GlHelper.getStringWidth(displayName.text(), font);
                 row.updateMetrics(displayName, textWidth, this.rowWidth(textWidth));
                 row.setTargetVisible(true);
             } else if (row != null) {
@@ -270,16 +309,20 @@ public class ModuleListHud extends HudElement {
         return rows;
     }
 
-    private String displayName(Module module) {
+    private DisplayText displayName(Module module) {
         String name = module.getName();
         if (this.showSuffix == null || !this.showSuffix.getValue()) {
-            return name;
+            return new DisplayText(name, -1);
         }
         String suffix = module.getSuffix();
         if (suffix == null || suffix.isBlank()) {
-            return name;
+            return new DisplayText(name, -1);
         }
-        return name + " " + suffix.trim();
+        suffix = suffix.trim();
+        if (this.suffixLowercaseEnabled != null && this.suffixLowercaseEnabled.getValue()) {
+            suffix = suffix.toLowerCase(Locale.ROOT);
+        }
+        return new DisplayText(name + " " + suffix, name.length() + 1);
     }
 
     @Override
@@ -435,7 +478,7 @@ public class ModuleListHud extends HudElement {
         }
         drawContext.save();
         drawContext.clipRoundedRect(this.textClipBounds(layout, bounds, broken), true);
-        this.drawModuleName(layout.row.name, layout.x, layout.y, layout.width, layout.fullHeight,
+        this.drawModuleName(layout.row.name, layout.row.suffixStart, layout.x, layout.y, layout.width, layout.fullHeight,
                 layout.rowIndex, rows.size(), layout.progress, alignment);
         drawContext.restore();
     }
@@ -656,36 +699,41 @@ public class ModuleListHud extends HudElement {
         }
     }
 
-    private void drawModuleName(String text, float rowX, float rowY, float rowWidth, float rowHeight,
+    private void drawModuleName(String text, int suffixStart, float rowX, float rowY, float rowWidth, float rowHeight,
                                 int rowIndex, int rowCount, float alpha, Alignment alignment) {
-        float textWidth = GlHelper.getStringWidth(text, this.moduleFont);
+        FontRenderer font = this.moduleFont();
+        float textWidth = GlHelper.getStringWidth(text, font);
         float padding = this.settingFloat(this.paddingX);
         float lineReserve = this.sideLineEnabled.getValue() ? this.settingFloat(this.sideLineWidth) : 0.0f;
         float textX = alignment == Alignment.RIGHT
                 ? rowX + rowWidth - padding - textWidth - (this.resolveLineAlignment(alignment) == Alignment.RIGHT ? lineReserve : 0.0f)
                 : rowX + padding + (this.resolveLineAlignment(alignment) == Alignment.LEFT ? lineReserve : 0.0f);
-        float textY = rowY + (rowHeight - (float)GlHelper.getFontAscent(this.moduleFont)) / 2.0f
+        float textY = rowY + (rowHeight - (float)GlHelper.getFontAscent(font)) / 2.0f
                 + this.settingFloat(this.paddingY) * 0.25f;
-        this.drawColoredText(text, textX, textY, textWidth, rowIndex, rowCount, alpha);
+        this.drawColoredText(text, textX, textY, textWidth, suffixStart, rowIndex, rowCount, alpha, font);
     }
 
-    private void drawColoredText(String text, float x, float y, float textWidth, int rowIndex, int rowCount, float alpha) {
+    private void drawColoredText(String text, float x, float y, float textWidth, int suffixStart,
+                                 int rowIndex, int rowCount, float alpha, FontRenderer font) {
         if (text == null || text.isEmpty()) {
             return;
         }
         float cursorX = x;
         float safeTextWidth = Math.max(1.0f, textWidth);
+        boolean useSuffixGray = suffixStart >= 0 && !this.isSuffixColorEnabled();
         for (int i = 0; i < text.length(); i++) {
             String ch = String.valueOf(text.charAt(i));
-            float chWidth = GlHelper.getStringWidth(ch, this.moduleFont);
+            float chWidth = GlHelper.getStringWidth(ch, font);
             float charProgress = Mth.clamp((cursorX - x + chWidth * 0.5f) / safeTextWidth, 0.0f, 1.0f);
-            int color = this.colorForPosition(rowIndex, charProgress, Math.max(1, rowCount - 1));
-            this.drawGlyphWithGlow(ch, cursorX, y, Argb.withAlpha(color, alpha), alpha);
+            int color = useSuffixGray && i >= suffixStart
+                    ? DEFAULT_SUFFIX_GRAY
+                    : this.colorForPosition(rowIndex, charProgress, Math.max(1, rowCount - 1));
+            this.drawGlyphWithGlow(ch, cursorX, y, Argb.withAlpha(color, alpha), alpha, font);
             cursorX += chWidth;
         }
     }
 
-    private void drawGlyphWithGlow(String text, float x, float y, int color, float rowAlpha) {
+    private void drawGlyphWithGlow(String text, float x, float y, int color, float rowAlpha, FontRenderer font) {
         if (this.fontGlowEnabled.getValue()) {
             int glowAlphaValue = this.settingInt(this.fontGlowAlpha);
             float radius = this.settingFloat(this.fontGlowRadius);
@@ -696,11 +744,11 @@ public class ModuleListHud extends HudElement {
                     double angle = Math.PI * 2.0 * (double)i / (double)quality;
                     float ox = (float)Math.cos(angle) * radius;
                     float oy = (float)Math.sin(angle) * radius;
-                    GlHelper.drawText(text, x + ox, y + oy, this.moduleFont, Argb.withAlpha(color, animatedGlowAlpha / quality));
+                    GlHelper.drawText(text, x + ox, y + oy, font, Argb.withAlpha(color, animatedGlowAlpha / quality));
                 }
             }
         }
-        GlHelper.drawText(text, x, y, this.moduleFont, color);
+        GlHelper.drawText(text, x, y, font, color);
     }
 
     private int colorForPosition(int rowIndex, float charProgress, int maxRowIndex) {
@@ -785,6 +833,35 @@ public class ModuleListHud extends HudElement {
                 this.dynamicGradientEnabled.getValue(),
                 this.gradientAnimationEnabled.getValue(),
                 this.settingFloat(this.dynamicGradientSpeed));
+    }
+
+    private boolean isSuffixColorEnabled() {
+        return this.suffixColorEnabled == null || this.suffixColorEnabled.getValue();
+    }
+
+    private FontRenderer moduleFont() {
+        return Fonts.getRenderer(this.clientFontFile(), 16.0f);
+    }
+
+    private String clientFontFile() {
+        String font = this.clientFont == null ? DEFAULT_CLIENT_FONT : this.clientFont.getValue();
+        return switch (font) {
+            case "Product Sans" -> "product_sans_regular.ttf";
+            case "Poppins" -> "Poppins-Medium.ttf";
+            case "Asta Sans" -> "AstaSans-Medium.ttf";
+            case "Axiforma" -> "axiforma_regular.ttf";
+            case "Quicksand" -> "quicksand.ttf";
+            case "A Nice Day" -> "a_nice_day_2.ttf";
+            case "Aidian Signature" -> "AidianSignatureTi-Regular-2.ttf";
+            case "Crystal Light" -> "Crystal-Light-2.ttf";
+            case "Minecraft PE" -> "MINECRAFT-PE.ttf";
+            case "ZCOOL KuaiLe" -> "zcoolkuaile-regular.ttf";
+            case "FZ KaiTi SC" -> "FangZhengKaiTiJianTi-CN.ttf";
+            case "FZ KaiTi TC" -> "FangZhengKaiTiFanTi-CN.ttf";
+            case "YanZhenQing" -> "YanZhenQingDuoBaoTaBei-CN.ttf";
+            case "Microsoft" -> "Microsoft.ttf";
+            default -> "pingfang_sc_regular.ttf";
+        };
     }
 
     private boolean isValue(Value<String> value, String expected) {

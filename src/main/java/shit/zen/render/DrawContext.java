@@ -594,8 +594,11 @@ public class DrawContext {
         if (texture == null) {
             return;
         }
-        if (this.useBackend() && texture.getResourceLocation() != null && this.backend.canDrawResourceTexture(texture.getResourceLocation())) {
+        if (this.useBackend() && this.backend.canDrawTexture(texture)) {
             this.backend.drawTexture(this, texture, srcRect, dstRect, paint);
+            return;
+        }
+        if (texture.isFileTexture() || (texture.getResourceLocation() == null && texture.getGlId() <= 0)) {
             return;
         }
         if (this.useBackend()) {

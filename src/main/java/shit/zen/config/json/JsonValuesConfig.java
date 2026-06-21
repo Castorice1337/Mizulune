@@ -14,6 +14,7 @@ import org.apache.logging.log4j.Logger;
 import shit.zen.ZenClient;
 import shit.zen.config.Config;
 import shit.zen.hud.HudElement;
+import shit.zen.music.config.MusicConfigStore;
 import shit.zen.modules.Module;
 import shit.zen.value.ModeValueGroup;
 import shit.zen.value.ToggleValueGroup;
@@ -25,6 +26,7 @@ public class JsonValuesConfig extends Config {
     private static final Logger LOGGER = LogManager.getLogger(JsonValuesConfig.class);
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
     private static final int SCHEMA_VERSION = 1;
+    private JsonObject preservedRootFields = new JsonObject();
 
     public JsonValuesConfig() {
         super("settings.json");
@@ -38,6 +40,8 @@ public class JsonValuesConfig extends Config {
             return;
         }
         JsonObject root = parsed.getAsJsonObject();
+        this.preserveRootFields(root);
+        MusicConfigStore.read(root);
         JsonObject modules = object(root, "modules");
         if (modules == null) {
             LOGGER.warn("settings.json has no modules object, ignoring");
@@ -59,14 +63,33 @@ public class JsonValuesConfig extends Config {
 
     @Override
     public void save(BufferedWriter bufferedWriter) throws IOException {
-        JsonObject root = new JsonObject();
+        JsonObject root = this.copyPreservedRootFields();
         root.addProperty("schema", SCHEMA_VERSION);
         JsonObject modules = new JsonObject();
         for (Module module : ZenClient.getInstance().getModuleManager().getModules()) {
             modules.add(module.getId(), this.writeModule(module));
         }
         root.add("modules", modules);
+        MusicConfigStore.write(root);
         GSON.toJson(root, bufferedWriter);
+    }
+
+    private void preserveRootFields(JsonObject root) {
+        this.preservedRootFields = new JsonObject();
+        for (Map.Entry<String, JsonElement> entry : root.entrySet()) {
+            if ("schema".equals(entry.getKey()) || "modules".equals(entry.getKey()) || "music".equals(entry.getKey())) {
+                continue;
+            }
+            this.preservedRootFields.add(entry.getKey(), entry.getValue().deepCopy());
+        }
+    }
+
+    private JsonObject copyPreservedRootFields() {
+        JsonObject root = new JsonObject();
+        for (Map.Entry<String, JsonElement> entry : this.preservedRootFields.entrySet()) {
+            root.add(entry.getKey(), entry.getValue().deepCopy());
+        }
+        return root;
     }
 
     private void readModule(Module module, JsonObject object) {
