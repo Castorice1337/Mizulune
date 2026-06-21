@@ -16,6 +16,7 @@ import java.time.Duration;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.function.Supplier;
 import shit.zen.music.config.MusicConfig;
 import shit.zen.music.model.MusicLyricResult;
@@ -29,6 +30,7 @@ public class MusicApiClient {
 
     private final Supplier<MusicConfig> configSupplier;
     private final Executor executor;
+    private final ScheduledExecutorService scheduler;
     private final MusicRateLimiter rateLimiter;
     private final MusicSearchCache searchCache;
     private final HttpClient httpClient = HttpClient.newBuilder()
@@ -37,9 +39,10 @@ public class MusicApiClient {
             .build();
 
     public MusicApiClient(Supplier<MusicConfig> configSupplier, Executor executor,
-                          MusicRateLimiter rateLimiter, MusicSearchCache searchCache) {
+                          ScheduledExecutorService scheduler, MusicRateLimiter rateLimiter, MusicSearchCache searchCache) {
         this.configSupplier = configSupplier;
         this.executor = executor;
+        this.scheduler = scheduler;
         this.rateLimiter = rateLimiter;
         this.searchCache = searchCache;
     }
@@ -53,9 +56,8 @@ public class MusicApiClient {
         if (cached != null) {
             return CompletableFuture.completedFuture(cached);
         }
-        return CompletableFuture.supplyAsync(() -> {
-            MusicConfig config = this.configSupplier.get();
-            this.rateLimiter.awaitTurn(config);
+        MusicConfig config = this.configSupplier.get();
+        return this.rateLimiter.acquireAsync(config, this.scheduler).thenApplyAsync(ignored -> {
             String requestSource = normalizeSearchSource(source);
             String uri = buildUri(config.getApiBaseUrl(),
                     "types", "search",
@@ -66,10 +68,13 @@ public class MusicApiClient {
             String body = this.get(uri);
             JsonElement parsed = JsonParser.parseString(body);
             if (!parsed.isJsonArray()) {
-                return List.<MusicTrack>of();
+                throw new MusicApiException("Unexpected API search response.");
             }
             JsonArray array = parsed.getAsJsonArray();
             List<MusicTrack> tracks = GSON.fromJson(array, TRACK_LIST);
+            if (tracks == null) {
+                tracks = List.of();
+            }
             if (tracks.size() > count) {
                 tracks = tracks.subList(0, count);
             }
@@ -79,9 +84,8 @@ public class MusicApiClient {
     }
 
     public CompletableFuture<MusicUrlResult> getUrl(String source, String id, int br) {
-        return CompletableFuture.supplyAsync(() -> {
-            MusicConfig config = this.configSupplier.get();
-            this.rateLimiter.awaitTurn(config);
+        MusicConfig config = this.configSupplier.get();
+        return this.rateLimiter.acquireAsync(config, this.scheduler).thenApplyAsync(ignored -> {
             String body = this.get(buildUri(config.getApiBaseUrl(),
                     "types", "url",
                     "source", source,
@@ -96,9 +100,8 @@ public class MusicApiClient {
     }
 
     public CompletableFuture<MusicPicResult> getPic(String source, String picId, int size) {
-        return CompletableFuture.supplyAsync(() -> {
-            MusicConfig config = this.configSupplier.get();
-            this.rateLimiter.awaitTurn(config);
+        MusicConfig config = this.configSupplier.get();
+        return this.rateLimiter.acquireAsync(config, this.scheduler).thenApplyAsync(ignored -> {
             String body = this.get(buildUri(config.getApiBaseUrl(),
                     "types", "pic",
                     "source", source,
@@ -113,9 +116,8 @@ public class MusicApiClient {
     }
 
     public CompletableFuture<MusicLyricResult> getLyric(String source, String lyricId) {
-        return CompletableFuture.supplyAsync(() -> {
-            MusicConfig config = this.configSupplier.get();
-            this.rateLimiter.awaitTurn(config);
+        MusicConfig config = this.configSupplier.get();
+        return this.rateLimiter.acquireAsync(config, this.scheduler).thenApplyAsync(ignored -> {
             String body = this.get(buildUri(config.getApiBaseUrl(),
                     "types", "lyric",
                     "source", source,

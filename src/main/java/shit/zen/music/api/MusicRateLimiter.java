@@ -2,6 +2,9 @@ package shit.zen.music.api;
 
 import java.util.ArrayDeque;
 import java.util.Deque;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 import shit.zen.music.config.MusicConfig;
 
 public class MusicRateLimiter {
@@ -10,32 +13,27 @@ public class MusicRateLimiter {
     private final Deque<Long> requestTimes = new ArrayDeque<>();
     private long lastRequestAt;
 
-    public void awaitTurn(MusicConfig config) {
-        long interval = config == null ? 1000L : config.getRequestIntervalMs();
-        while (true) {
-            long waitMs;
-            synchronized (this) {
-                long now = System.currentTimeMillis();
-                while (!this.requestTimes.isEmpty() && now - this.requestTimes.peekFirst() >= WINDOW_MS) {
-                    this.requestTimes.removeFirst();
-                }
-                long intervalWait = Math.max(0L, this.lastRequestAt + interval - now);
-                long windowWait = this.requestTimes.size() >= WINDOW_LIMIT
-                        ? Math.max(0L, this.requestTimes.peekFirst() + WINDOW_MS - now)
-                        : 0L;
-                waitMs = Math.max(intervalWait, windowWait);
-                if (waitMs <= 0L) {
-                    this.lastRequestAt = now;
-                    this.requestTimes.addLast(now);
-                    return;
-                }
-            }
-            try {
-                Thread.sleep(Math.min(waitMs, 1000L));
-            } catch (InterruptedException interruptedException) {
-                Thread.currentThread().interrupt();
-                throw new MusicApiException("API rate limited. Please wait before searching again.", interruptedException);
-            }
+    public CompletableFuture<Void> acquireAsync(MusicConfig config, ScheduledExecutorService scheduler) {
+        long delayMs = this.reserveDelay(config);
+        if (delayMs <= 0L) {
+            return CompletableFuture.completedFuture(null);
         }
+        CompletableFuture<Void> future = new CompletableFuture<>();
+        scheduler.schedule(() -> future.complete(null), delayMs, TimeUnit.MILLISECONDS);
+        return future;
+    }
+
+    private synchronized long reserveDelay(MusicConfig config) {
+        long interval = config == null ? 1000L : config.getRequestIntervalMs();
+        long now = System.currentTimeMillis();
+        while (!this.requestTimes.isEmpty() && now - this.requestTimes.peekFirst() >= WINDOW_MS) {
+            this.requestTimes.removeFirst();
+        }
+        long intervalReadyAt = this.lastRequestAt + interval;
+        long windowReadyAt = this.requestTimes.size() >= WINDOW_LIMIT ? this.requestTimes.peekFirst() + WINDOW_MS : now;
+        long scheduledAt = Math.max(now, Math.max(intervalReadyAt, windowReadyAt));
+        this.lastRequestAt = scheduledAt;
+        this.requestTimes.addLast(scheduledAt);
+        return Math.max(0L, scheduledAt - now);
     }
 }

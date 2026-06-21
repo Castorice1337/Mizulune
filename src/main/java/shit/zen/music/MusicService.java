@@ -1,6 +1,5 @@
 package shit.zen.music;
 
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Locale;
@@ -10,6 +9,7 @@ import java.util.concurrent.CompletionException;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.apache.logging.log4j.LogManager;
@@ -33,9 +33,13 @@ public class MusicService {
     private static final Logger LOGGER = LogManager.getLogger(MusicService.class);
     private static final int COVER_SIZE = 300;
 
-    private final ExecutorService executor = Executors.newFixedThreadPool(3, new MusicThreadFactory());
+    private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor(new MusicThreadFactory("Mizulune-Music-Scheduler"));
+    private final ExecutorService apiExecutor = Executors.newFixedThreadPool(2, new MusicThreadFactory("Mizulune-Music-Api"));
+    private final ExecutorService downloadExecutor = Executors.newFixedThreadPool(3, new MusicThreadFactory("Mizulune-Music-Download"));
+    private final ExecutorService playbackExecutor = Executors.newSingleThreadExecutor(new MusicThreadFactory("Mizulune-Music-Playback"));
+    private final ExecutorService queueSaveExecutor = Executors.newSingleThreadExecutor(new MusicThreadFactory("Mizulune-Music-QueueSave"));
     private final MusicCacheManager cacheManager = new MusicCacheManager();
-    private final MusicQueueManager queueManager = new MusicQueueManager(this.cacheManager);
+    private final MusicQueueManager queueManager = new MusicQueueManager(this.cacheManager, this.queueSaveExecutor);
     private final JavaSoundMp3PlayerEngine engine = new JavaSoundMp3PlayerEngine();
     private final MusicApiClient apiClient;
     private final MusicPlaybackController playbackController;
@@ -47,9 +51,9 @@ public class MusicService {
     public MusicService() {
         MusicRateLimiter rateLimiter = new MusicRateLimiter();
         MusicSearchCache searchCache = new MusicSearchCache();
-        this.apiClient = new MusicApiClient(this::config, this.executor, rateLimiter, searchCache);
+        this.apiClient = new MusicApiClient(this::config, this.apiExecutor, this.scheduler, rateLimiter, searchCache);
         this.playbackController = new MusicPlaybackController(this.apiClient, this.cacheManager,
-                this.queueManager, this.engine, this::config, this.executor);
+                this.queueManager, this.engine, this::config, this.playbackExecutor, this.downloadExecutor);
         this.engine.setVolume(this.config.getVolume());
         this.engine.setErrorCallback(message -> {
             this.lastMessage = message == null ? "Unable to play this track." : message;
@@ -58,11 +62,15 @@ public class MusicService {
         this.engine.setFinishedCallback(() -> {
             if (this.queueManager.getPlayMode() == PlayMode.SINGLE) {
                 this.playbackController.replayCurrent();
-            } else {
+            } else if (this.playbackController.isCurrentFromQueue()) {
                 this.playbackController.next(false);
+            } else {
+                this.playbackController.finishCurrent("Finished");
             }
         });
-        this.queueManager.setPlayMode(this.config.getPlayMode());
+        if (this.queueManager.getPlayMode() != this.config.getPlayMode()) {
+            this.queueManager.setPlayMode(this.config.getPlayMode());
+        }
     }
 
     public MusicConfig config() {
@@ -155,14 +163,20 @@ public class MusicService {
     }
 
     public void setVolume(float volume) {
+        this.setVolume(volume, true);
+    }
+
+    public void setVolume(float volume, boolean save) {
         this.config.setVolume(volume);
         this.playbackController.setVolume(this.config.getVolume());
-        MusicConfigStore.update(this.config, true);
+        MusicConfigStore.update(this.config, save);
     }
 
     public void setPlayMode(PlayMode playMode) {
         this.config.setPlayMode(playMode);
-        this.queueManager.setPlayMode(this.config.getPlayMode());
+        if (this.queueManager.getPlayMode() != this.config.getPlayMode()) {
+            this.queueManager.setPlayMode(this.config.getPlayMode());
+        }
         MusicConfigStore.update(this.config, true);
     }
 
@@ -190,12 +204,17 @@ public class MusicService {
             return CompletableFuture.completedFuture(null);
         }
         Path cached = this.cacheManager.coverFile(track, COVER_SIZE);
-        if (Files.isRegularFile(cached)) {
+        if (this.cacheManager.isUsableImage(cached)) {
             return CompletableFuture.completedFuture(cached);
         }
         return this.coverTasks.computeIfAbsent(track.stableKey(), ignored ->
                 this.apiClient.getPic(normalizeSource(track.getSource()), track.getPicId(), COVER_SIZE)
-                        .thenApplyAsync(result -> this.cacheManager.downloadCover(track, result.getUrl(), COVER_SIZE), this.executor)
+                        .thenApplyAsync(result -> this.cacheManager.downloadCover(track, result.getUrl(), COVER_SIZE), this.downloadExecutor)
+                        .whenComplete((path, throwable) -> {
+                            if (throwable != null || path == null) {
+                                this.coverTasks.remove(track.stableKey());
+                            }
+                        })
                         .exceptionally(throwable -> {
                             LOGGER.debug("Failed to load cover for {}", track.stableKey(), throwable);
                             return null;
@@ -215,7 +234,12 @@ public class MusicService {
                         .thenApplyAsync(result -> {
                             this.cacheManager.writeLyric(track, result.getLyric());
                             return LyricParser.parse(result.getLyric());
-                        }, this.executor)
+                        }, this.downloadExecutor)
+                        .whenComplete((lines, throwable) -> {
+                            if (throwable != null || lines == null || lines.isEmpty()) {
+                                this.lyricTasks.remove(track.stableKey());
+                            }
+                        })
                         .exceptionally(throwable -> {
                             LOGGER.debug("Failed to load lyrics for {}", track.stableKey(), throwable);
                             return List.of();
@@ -234,7 +258,9 @@ public class MusicService {
     public void reloadFromConfig(MusicConfig config) {
         this.config = config == null ? MusicConfig.defaults() : config;
         this.cacheManager.refreshRoot();
-        this.queueManager.setPlayMode(this.config.getPlayMode());
+        if (this.queueManager.getPlayMode() != this.config.getPlayMode()) {
+            this.queueManager.setPlayMode(this.config.getPlayMode());
+        }
         this.engine.setVolume(this.config.getVolume());
     }
 
@@ -246,7 +272,11 @@ public class MusicService {
                 this.cacheManager.clearTemporaryCache();
             }
         } finally {
-            this.executor.shutdownNow();
+            this.scheduler.shutdownNow();
+            this.apiExecutor.shutdownNow();
+            this.downloadExecutor.shutdownNow();
+            this.playbackExecutor.shutdownNow();
+            this.queueSaveExecutor.shutdownNow();
         }
     }
 
@@ -295,11 +325,16 @@ public class MusicService {
     }
 
     private static final class MusicThreadFactory implements ThreadFactory {
+        private final String prefix;
         private final AtomicInteger counter = new AtomicInteger();
+
+        private MusicThreadFactory(String prefix) {
+            this.prefix = prefix;
+        }
 
         @Override
         public Thread newThread(Runnable runnable) {
-            Thread thread = new Thread(runnable, "Mizulune-Music-" + this.counter.getAndIncrement());
+            Thread thread = new Thread(runnable, this.prefix + "-" + this.counter.getAndIncrement());
             thread.setDaemon(true);
             return thread;
         }

@@ -1,10 +1,10 @@
 package shit.zen.music.playback;
 
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.Executor;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Supplier;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -24,8 +24,11 @@ public class MusicPlaybackController {
     private final MusicQueueManager queueManager;
     private final MusicPlayerEngine engine;
     private final Supplier<MusicConfig> configSupplier;
-    private final Executor executor;
+    private final Executor playbackExecutor;
+    private final Executor downloadExecutor;
+    private final AtomicLong requestSequence = new AtomicLong();
     private volatile MusicTrack currentTrack;
+    private volatile boolean currentFromQueue;
     private volatile boolean loading;
     private volatile boolean cached;
     private volatile String status = "No track playing";
@@ -33,21 +36,22 @@ public class MusicPlaybackController {
 
     public MusicPlaybackController(MusicApiClient apiClient, MusicCacheManager cacheManager,
                                    MusicQueueManager queueManager, MusicPlayerEngine engine,
-                                   Supplier<MusicConfig> configSupplier, Executor executor) {
+                                   Supplier<MusicConfig> configSupplier, Executor playbackExecutor,
+                                   Executor downloadExecutor) {
         this.apiClient = apiClient;
         this.cacheManager = cacheManager;
         this.queueManager = queueManager;
         this.engine = engine;
         this.configSupplier = configSupplier;
-        this.executor = executor;
+        this.playbackExecutor = playbackExecutor;
+        this.downloadExecutor = downloadExecutor;
     }
 
     public CompletableFuture<Void> playTrack(MusicTrack track, boolean persistent) {
         if (track == null) {
             return CompletableFuture.completedFuture(null);
         }
-        this.queueManager.addOrSelect(track);
-        return this.prepareAndPlay(track, persistent);
+        return this.prepareAndPlay(track, persistent, false);
     }
 
     public CompletableFuture<Void> playQueueIndex(int index) {
@@ -55,27 +59,24 @@ public class MusicPlaybackController {
         if (track == null) {
             return CompletableFuture.completedFuture(null);
         }
-        return this.prepareAndPlay(track, this.cacheManager.isCached(track));
+        return this.prepareAndPlay(track, this.cacheManager.isCached(track), true);
     }
 
     public CompletableFuture<Void> replayCurrent() {
-        MusicTrack track = this.queueManager.current();
-        if (track == null) {
-            track = this.currentTrack;
-        }
+        MusicTrack track = this.currentFromQueue ? this.queueManager.current() : this.currentTrack;
         if (track == null) {
             return CompletableFuture.completedFuture(null);
         }
-        return this.prepareAndPlay(track, this.cacheManager.isCached(track));
+        return this.prepareAndPlay(track, this.cacheManager.isCached(track), this.currentFromQueue);
     }
 
     public CompletableFuture<Void> next(boolean manual) {
         MusicTrack next = this.queueManager.next(manual);
         if (next == null) {
-            this.stopAtQueueEnd();
+            this.finishCurrent("Queue ended");
             return CompletableFuture.completedFuture(null);
         }
-        return this.prepareAndPlay(next, this.cacheManager.isCached(next));
+        return this.prepareAndPlay(next, this.cacheManager.isCached(next), true);
     }
 
     public CompletableFuture<Void> previous() {
@@ -83,7 +84,7 @@ public class MusicPlaybackController {
         if (previous == null) {
             return CompletableFuture.completedFuture(null);
         }
-        return this.prepareAndPlay(previous, this.cacheManager.isCached(previous));
+        return this.prepareAndPlay(previous, this.cacheManager.isCached(previous), true);
     }
 
     public void togglePlay() {
@@ -111,20 +112,43 @@ public class MusicPlaybackController {
     }
 
     public void stop() {
+        this.requestSequence.incrementAndGet();
         this.engine.stop();
+        this.currentTrack = null;
+        this.currentFromQueue = false;
         this.loading = false;
+        this.cached = false;
         this.status = "Stopped";
+        this.error = "";
     }
 
     public void markEngineError(String message) {
+        this.currentTrack = null;
+        this.currentFromQueue = false;
         this.loading = false;
+        this.cached = false;
         this.status = "Playback failed";
         this.error = message == null || message.isBlank() ? "Unable to play this track." : message;
     }
 
+    public boolean isCurrentFromQueue() {
+        return this.currentFromQueue;
+    }
+
+    public void finishCurrent(String status) {
+        this.requestSequence.incrementAndGet();
+        this.engine.stop();
+        this.currentTrack = null;
+        this.currentFromQueue = false;
+        this.loading = false;
+        this.cached = false;
+        this.status = status == null || status.isBlank() ? "Stopped" : status;
+        this.error = "";
+    }
+
     public MusicPlaybackState snapshot() {
         MusicConfig config = this.configSupplier.get();
-        MusicTrack track = this.currentTrack != null ? this.currentTrack.copy() : this.queueManager.current();
+        MusicTrack track = this.currentTrack != null ? this.currentTrack.copy() : null;
         long duration = this.engine.getDurationMs();
         if (duration <= 0L && track != null && track.getDurationMs() > 0L) {
             duration = track.getDurationMs();
@@ -141,52 +165,67 @@ public class MusicPlaybackController {
                 this.error);
     }
 
-    private CompletableFuture<Void> prepareAndPlay(MusicTrack track, boolean persistent) {
+    private CompletableFuture<Void> prepareAndPlay(MusicTrack track, boolean persistent, boolean fromQueue) {
+        long requestId = this.requestSequence.incrementAndGet();
         this.currentTrack = track.copy();
+        this.currentFromQueue = fromQueue;
         this.loading = true;
         this.cached = this.cacheManager.isCached(track);
         this.status = persistent ? "Caching track..." : "Preparing track...";
         this.error = "";
-        return CompletableFuture.runAsync(() -> {
-            try {
-                Path audioFile = this.resolveAudioFile(track, persistent);
-                this.currentTrack = track.copy();
-                this.cached = this.cacheManager.isCached(track);
-                this.status = "Playing";
-                this.error = "";
-                this.engine.play(audioFile, track);
-            } catch (Exception exception) {
-                LOGGER.warn("Failed to play track {}", track.stableKey(), exception);
-                this.error = userMessage(exception);
-                this.status = "Playback failed";
-                this.engine.stop();
-            } finally {
-                this.loading = false;
-            }
-        }, this.executor);
+        return this.resolveAudioFile(track, persistent)
+                .thenAcceptAsync(audioFile -> {
+                    if (!this.isActive(requestId)) {
+                        return;
+                    }
+                    this.currentTrack = track.copy();
+                    this.currentFromQueue = fromQueue;
+                    this.cached = this.cacheManager.isCached(track);
+                    this.status = "Playing";
+                    this.error = "";
+                    this.engine.play(audioFile, track);
+                }, this.playbackExecutor)
+                .whenComplete((ignored, throwable) -> {
+                    if (!this.isActive(requestId)) {
+                        return;
+                    }
+                    this.loading = false;
+                    if (throwable != null) {
+                        LOGGER.warn("Failed to play track {}", track.stableKey(), throwable);
+                        this.currentTrack = null;
+                        this.currentFromQueue = false;
+                        this.cached = false;
+                        this.error = userMessage(throwable);
+                        this.status = "Playback failed";
+                        this.engine.stop();
+                    }
+                });
     }
 
-    private Path resolveAudioFile(MusicTrack track, boolean persistent) {
+    private CompletableFuture<Path> resolveAudioFile(MusicTrack track, boolean requestedPersistent) {
         Path cachedFile = this.cacheManager.cachedAudio(track);
-        if (Files.isRegularFile(cachedFile)) {
-            return cachedFile;
+        if (this.cacheManager.isUsableAudio(cachedFile)) {
+            return CompletableFuture.completedFuture(cachedFile);
         }
         Path tempFile = this.cacheManager.tempAudio(track);
-        if (!persistent && Files.isRegularFile(tempFile)) {
-            return tempFile;
-        }
         MusicConfig config = this.configSupplier.get();
-        String url = this.apiClient.getUrl(sourceForPlayback(track), track.getUrlId(), config.getPreferredBitrate()).join().getUrl();
-        return this.cacheManager.downloadAudio(track, url, persistent, config.getPreferredBitrate());
+        boolean persistent = requestedPersistent && config.isCacheEnabled();
+        if (!persistent && config.isTemporaryCacheEnabled() && this.cacheManager.isUsableAudio(tempFile)) {
+            return CompletableFuture.completedFuture(tempFile);
+        }
+        boolean targetPersistent = persistent;
+        return this.apiClient.getUrl(sourceForPlayback(track), track.getUrlId(), config.getPreferredBitrate())
+                .thenApplyAsync(result -> {
+                    Path file = this.cacheManager.downloadAudio(track, result.getUrl(), targetPersistent, config.getPreferredBitrate());
+                    if (targetPersistent) {
+                        this.cacheManager.enforcePersistentCacheLimit(config.getMaxCacheSizeMb());
+                    }
+                    return file;
+                }, this.downloadExecutor);
     }
 
-    private void stopAtQueueEnd() {
-        this.engine.stop();
-        this.currentTrack = null;
-        this.loading = false;
-        this.cached = false;
-        this.status = "Queue ended";
-        this.error = "";
+    private boolean isActive(long requestId) {
+        return this.requestSequence.get() == requestId;
     }
 
     private static String userMessage(Throwable throwable) {
