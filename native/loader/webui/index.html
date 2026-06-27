@@ -3,6 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self'; connect-src 'none'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'" />
   <title>Mizulune Launcher</title>
   <link rel="stylesheet" href="./styles.css" />
 </head>
@@ -97,14 +98,59 @@
               <span class="heading-icon">▶</span>
               <h1>启动</h1>
             </div>
-            <p class="muted">选择正在运行的 Minecraft 窗口并注入 Mizulune Client。</p>
-            <div class="instances" id="instances"></div>
-            <p class="status-line" id="launch-state">正在扫描 Minecraft 实例...</p>
+            <div class="mode-switch">
+              <button class="mode-button active" data-launch-mode="proxy">SDK Proxy</button>
+              <button class="mode-button" data-launch-mode="inject">Inject</button>
+            </div>
+
+            <div class="launch-pane active" id="launch-proxy">
+              <p class="muted">使用 OpenSDK 登录并启动本地代理。Minecraft 1.20.1 必须通过 ViaForge 选择 1.20.5/1.20.6（协议 766）。</p>
+              <div class="form-grid auth-grid">
+                <label class="field compact"><span>登录方式</span>
+                  <select id="auth-provider">
+                    <option value="4399">4399 账号</option>
+                    <option value="email">网易邮箱</option>
+                    <option value="sms">网易短信</option>
+                  </select>
+                </label>
+                <label class="field compact auth-field" data-auth="4399"><span>用户名</span><input id="auth-username" autocomplete="off" /></label>
+                <label class="field compact auth-field" data-auth="email"><span>邮箱</span><input id="auth-email" autocomplete="off" /></label>
+                <label class="field compact auth-field" data-auth="sms"><span>手机号</span><input id="auth-phone" autocomplete="off" /></label>
+                <label class="field compact auth-field" data-auth="4399,email"><span>密码</span><input id="auth-password" type="password" autocomplete="off" /></label>
+                <label class="field compact auth-field" data-auth="sms"><span>短信验证码</span><input id="auth-code" autocomplete="off" /></label>
+              </div>
+              <div class="actions compact-actions">
+                <button class="secondary" id="sms-send">发送验证码</button>
+                <button class="primary" id="auth-submit">登录</button>
+                <button class="secondary" id="auth-logout" disabled>退出账号</button>
+              </div>
+              <p class="status-line" id="auth-state">OpenSDK 未连接。</p>
+
+              <div class="form-grid proxy-grid">
+                <label class="field compact"><span>预设</span><select id="proxy-preset"></select></label>
+                <label class="field compact"><span>角色名</span><input id="proxy-role" maxlength="16" /></label>
+                <label class="field compact"><span>服务器</span><input id="proxy-host" value="pc.bjdmc.net" /></label>
+                <label class="field compact"><span>远端端口</span><input id="proxy-port" type="number" value="25565" /></label>
+                <label class="field compact"><span>本地端口</span><input id="proxy-local-port" type="number" value="6445" /></label>
+              </div>
+              <div class="actions compact-actions">
+                <button class="primary" id="proxy-start" disabled>启动代理</button>
+                <button class="secondary" id="proxy-stop" disabled>停止代理</button>
+              </div>
+              <p class="status-line" id="proxy-state">代理未启动。</p>
+            </div>
+
+            <div class="launch-pane" id="launch-inject">
+              <p class="muted">选择正在运行的 Minecraft 窗口并注入 Mizulune Client；已登录 OpenSDK 时会先刷新 phase41 snapshot。</p>
+              <div class="instances" id="instances"></div>
+              <p class="status-line" id="launch-state">正在扫描 Minecraft 实例...</p>
+            </div>
           </article>
           <aside class="glass-card side-card">
             <img src="./res/logo.png" alt="Mizulune" class="logo-icon" />
             <h2>Mizulune</h2>
             <div class="pill" id="instance-count">0 instance</div>
+            <div class="pill" id="sdk-pill">SDK offline</div>
             <button class="secondary wide" id="rescan">重新扫描</button>
           </aside>
         </section>

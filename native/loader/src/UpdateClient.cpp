@@ -24,7 +24,7 @@ namespace loader {
 namespace {
 QString loaderRevisionFromAsset(const QString& name) {
     static const QRegularExpression re(
-        QStringLiteral("^OpenZenLoader-([A-Za-z0-9._-]+)\\.exe$"));
+        QStringLiteral("^(?:MizuluneLoaderSDK|OpenZenLoader)-([A-Za-z0-9._-]+)\\.(?:zip|exe)$"));
     const QRegularExpressionMatch match = re.match(name);
     return match.hasMatch() ? match.captured(1) : QString();
 }
@@ -305,7 +305,7 @@ void UpdateClient::downloadLatestLoader() {
 
     if (!latest_.hasLoaderAsset || latest_.assetDownloadUrl.isEmpty()) {
         setDownloadInFlight(false);
-        emit downloadFailed(QStringLiteral("Latest release does not contain a loader exe asset."));
+        emit downloadFailed(QStringLiteral("Latest release does not contain a loader package asset."));
         return;
     }
 

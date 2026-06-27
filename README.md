@@ -103,7 +103,7 @@ Use the dedicated Gradle task:
 - Profile config: `loader-profile.properties`
 - Local update/cache directory: `updates\`
 
-The loader opens the WebUI, exchanges events through WebView2 JSON messages, scans running Minecraft JVM windows, manages profile/update state, and starts the local injection path when the user selects a target instance.
+The loader opens the WebUI, exchanges events through WebView2 JSON messages, and provides two independent launch paths: the existing in-memory JVM injection path and an OpenSDK network-proxy path hosted in an isolated .NET sidecar.
 
 The native build stages the Java jar, embeds the DLL into the loader executable, packages WebUI assets, and writes the distributable loader into `build/dist`.
 
@@ -130,6 +130,7 @@ This is an engineering isolation mechanism, not a security guarantee. Because re
 - **Minecraft / Forge**: Minecraft `1.20.1`, Forge `47.4.20`
 - **Native toolchain**: CMake, MSVC from Visual Studio 2022 or newer, and `vcpkg`
 - **Native dependencies**: Qt6 Widgets and Microsoft Edge WebView2 SDK through vcpkg
+- **OpenSDK build**: .NET SDK 10 (the packaged sidecar is self-contained)
 - **Runtime dependency**: Microsoft Edge WebView2 Runtime installed on Windows
 - **vcpkg discovery**: `VCPKG_ROOT`, `C:/vcpkg`, `D:/vcpkg`, or `%USERPROFILE%/vcpkg`
 
@@ -158,6 +159,16 @@ This task stages the obfuscated Java jar, runs CMake, resolves native dependenci
 ```text
 build/dist/MizuluneLoader.exe
 ```
+
+### 4. Build the Dual-mode Loader with OpenSDK
+
+```powershell
+.\gradlew.bat dllWithSDK
+```
+
+The directory distribution is written to `build/dist-sdk`. Keep the directory intact: `MizuluneLoader.exe` launches `sdk/Mizulune.SdkHost.exe` and loads the staged `Codexus.Protocol` plugin from `sdk/Mods`.
+
+The BJD proxy preset requires a Minecraft 1.20.1 client with ViaForge configured to advertise the Minecraft 1.20.5/1.20.6 wire protocol (`766`). The proxy binds only to loopback and displays the selected local port in the launcher.
 
 ---
 

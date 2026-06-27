@@ -14,6 +14,7 @@ class QResizeEvent;
 namespace loader {
 
 class UpdateClient;
+class SdkProcessBridge;
 
 class MainWindow : public QMainWindow {
     Q_OBJECT
@@ -41,6 +42,7 @@ private:
     void saveProfile(const QJsonObject& payload);
     void sendInstances();
     void startInjection(const QJsonObject& payload);
+    void performInjection(unsigned long pid, const QString& title);
     void sendReleaseInfo();
     void setDwmFrame();
     QString webUiIndexPath() const;
@@ -51,8 +53,11 @@ private:
     Microsoft::WRL::ComPtr<ICoreWebView2Controller> webController_;
     Microsoft::WRL::ComPtr<ICoreWebView2> webView_;
     EventRegistrationToken messageToken_{};
+    EventRegistrationToken navigationToken_{};
+    EventRegistrationToken newWindowToken_{};
 
     UpdateClient* updateClient_ = nullptr;
+    SdkProcessBridge* sdkBridge_ = nullptr;
     bool webReady_ = false;
     bool injectionInFlight_ = false;
     bool exiting_ = false;

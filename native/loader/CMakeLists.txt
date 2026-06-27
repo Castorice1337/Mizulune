@@ -24,6 +24,8 @@ qt_add_executable(MizuluneLoader WIN32
     src/MainWindow.h
     src/ProfileStore.cpp
     src/ProfileStore.h
+    src/SdkProcessBridge.cpp
+    src/SdkProcessBridge.h
     src/UpdateClient.cpp
     src/UpdateClient.h
     src/process_list.cpp

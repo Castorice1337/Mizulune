@@ -146,6 +146,7 @@ body.intro-complete::before {
 }
 
 .notice-card, .launch-card, .settings-card, .version-detail { flex: 1; min-width: 0; }
+.launch-card { overflow: auto; }
 .side-card { width: 290px; display: flex; flex-direction: column; align-items: center; gap: 16px; }
 .version-list { width: 310px; padding: 18px; display: flex; flex-direction: column; gap: 12px; }
 
@@ -212,6 +213,37 @@ button:disabled { opacity: .45; cursor: default; }
 .progress span { display: block; height: 100%; width: 0%; background: var(--mint); transition: width .18s ease; }
 .hidden { display: none; }
 
+.mode-switch {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  padding: 5px;
+  margin-bottom: 14px;
+  border-radius: 14px;
+  background: rgba(0,0,0,.14);
+}
+.mode-button {
+  min-height: 42px;
+  border: 0;
+  border-radius: 10px;
+  color: var(--text);
+  background: transparent;
+  font-weight: 850;
+  cursor: pointer;
+}
+.mode-button.active { background: rgba(188,248,222,.86); color: rgba(5,18,15,.96); }
+.launch-pane { display: none; }
+.launch-pane.active { display: block; }
+.form-grid { display: grid; gap: 10px 14px; }
+.auth-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.proxy-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); margin-top: 12px; }
+.field.compact { margin: 4px 0; gap: 5px; }
+.field.compact span { font-size: 13px; color: var(--muted); }
+.field.compact input, .field.compact select { height: 39px; }
+.compact-actions { margin: 12px 0; }
+.compact-actions button { min-height: 40px; padding: 0 18px; font-size: 14px; }
+.auth-field.hidden { display: none; }
+
 .instances { margin: 18px 0; display: flex; flex-direction: column; gap: 10px; max-height: calc(100vh - 280px); overflow: auto; }
 .instance {
   border: 1px solid rgba(255,255,255,.24);
@@ -227,7 +259,7 @@ button:disabled { opacity: .45; cursor: default; }
 .title { font-weight: 800; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .field { display: flex; flex-direction: column; gap: 8px; font-weight: 800; margin: 22px 0; }
-input[type="text"], .field input {
+input[type="text"], .field input, .field select {
   height: 46px;
   border: 1px solid rgba(255,255,255,.28);
   border-radius: 13px;
@@ -237,6 +269,7 @@ input[type="text"], .field input {
   color: var(--text);
   font: inherit;
 }
+.field select option { color: #101915; }
 .check-row { display: flex; align-items: center; gap: 12px; font-weight: 800; margin: 14px 0 24px; }
 .check-row input { width: 22px; height: 22px; accent-color: var(--mint); }
 .save { width: 160px; }

@@ -43,9 +43,6 @@ AGENTS.md
 src.zip
 native/dll.zip
 
-# Temporarily keep GitHub Actions workflow local until gh has workflow scope
-.github/workflows/build-loader.yml
-
 # Test Server for development testing
 /test-server/
 
@@ -62,6 +59,12 @@ native/dll.zip
 # Research folder
 /research/
 /test-server.zip
-/Codexus.OpenSDK/
+/Codexus.OpenSDK/.dotnet/
+/Codexus.OpenSDK/**/bin/
+/Codexus.OpenSDK/**/obj/
+/Codexus.OpenSDK/**/TestResults/
+/Codexus.OpenSDK/**/dist/
+/Codexus.OpenSDK/ModCache/
+/Codexus.OpenSDK.zip
 
 

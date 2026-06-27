@@ -327,6 +327,8 @@ tasks.withType(JavaCompile).configureEach {
 //
 def nativeDir = file('native')
 def nativeBuildDir = file("$nativeDir/build")
+def openSdkDir = file('Codexus.OpenSDK')
+def openSdkBuildDir = file("$buildDir/opensdk")
 
 ext.findCmake = {
     // 1. cmake already on PATH?
@@ -373,6 +375,26 @@ ext.findCmake = {
     }
     return null
 }
+
+ext.findDotnet = {
+    def bundled = file("$openSdkDir/.dotnet/dotnet.exe")
+    if (bundled.isFile()) return bundled.absolutePath
+    try {
+        def p = ['cmd', '/c', 'where', 'dotnet'].execute()
+        def out = new StringBuilder()
+        p.consumeProcessOutput(out, new StringBuilder())
+        p.waitForOrKill(3000)
+        if (p.exitValue() == 0) {
+            def first = out.toString().readLines().find { it?.trim() }
+            if (first) return first.trim()
+        }
+    } catch (Exception ignored) {}
+    return null
+}
+
+def dotnetMissingMessage =
+        '.NET SDK 10 was not found. Install .NET SDK 10 or place the project-local runtime at ' +
+        'Codexus.OpenSDK/.dotnet/dotnet.exe.'
 
 def cmakeMissingMessage =
         'CMake not found. Install one of:\n' +
@@ -575,6 +597,110 @@ tasks.register('dll') {
     group = 'openzen'
     description = 'Build the injectable DLL and GUI Loader (final dist artifacts).'
     dependsOn 'packageDist'
+}
+
+tasks.register('buildOpenSdkProtocol', Exec) {
+    group = 'openzen'
+    description = 'Build the Codexus.Protocol OpenSDK plugin for the SDK distribution.'
+    workingDir projectDir
+    doFirst {
+        def dotnet = findDotnet()
+        if (!dotnet) throw new GradleException(dotnetMissingMessage)
+        commandLine dotnet, 'build',
+                file("$openSdkDir/Codexus.Protocol/Codexus.Protocol.csproj").absolutePath,
+                '--configuration', 'Release'
+    }
+}
+
+tasks.register('publishOpenSdkHost', Exec) {
+    group = 'openzen'
+    description = 'Publish the self-contained Windows x64 Mizulune OpenSDK sidecar.'
+    workingDir projectDir
+    inputs.files(fileTree(openSdkDir) {
+        include '**/*.cs', '**/*.csproj', 'Codexus.OpenSDK.slnx', 'Mizulune.SdkHost/profiles/*.json'
+        exclude '**/bin/**', '**/obj/**', '**/.dotnet/**'
+    })
+    outputs.file(file("$openSdkBuildDir/host/Mizulune.SdkHost.exe"))
+    doFirst {
+        def dotnet = findDotnet()
+        if (!dotnet) throw new GradleException(dotnetMissingMessage)
+        commandLine dotnet, 'publish',
+                file("$openSdkDir/Mizulune.SdkHost/Mizulune.SdkHost.csproj").absolutePath,
+                '--configuration', 'Release',
+                '--runtime', 'win-x64',
+                '--self-contained', 'true',
+                '-p:PublishSingleFile=true',
+                '-p:IncludeNativeLibrariesForSelfExtract=true',
+                '-p:DebugType=None',
+                '-p:DebugSymbols=false',
+                '--output', file("$openSdkBuildDir/host").absolutePath
+    }
+    doLast {
+        def host = file("$openSdkBuildDir/host/Mizulune.SdkHost.exe")
+        if (!host.isFile()) throw new GradleException("OpenSDK host publish did not produce ${host}")
+        exec { commandLine host.absolutePath, '--health' }
+    }
+}
+
+tasks.register('stageOpenSdkPlugins', Sync) {
+    group = 'openzen'
+    description = 'Stage only the OpenSDK plugin entry DLL and manifest.'
+    dependsOn 'buildOpenSdkProtocol'
+    into file("$openSdkBuildDir/plugins/mizulune.protocol")
+    from(file("$openSdkDir/Codexus.Protocol/bin/Release/net10.0")) {
+        include 'Codexus.Protocol.dll'
+    }
+    from(file("$openSdkDir/Codexus.Protocol/manifest.json"))
+}
+
+tasks.register('packageSdkDist', Sync) {
+    group = 'openzen'
+    description = 'Assemble the directory-based dual-mode Loader + OpenSDK distribution.'
+    dependsOn 'packageDist', 'publishOpenSdkHost', 'stageOpenSdkPlugins'
+    into file("$buildDir/dist-sdk")
+    from(file("$buildDir/dist"))
+    from(file("$openSdkBuildDir/host/Mizulune.SdkHost.exe")) {
+        into 'sdk'
+    }
+    from(file("$openSdkBuildDir/plugins")) {
+        into 'sdk/Mods'
+    }
+    from(file("$openSdkDir/Mizulune.SdkHost/profiles")) {
+        into 'sdk/profiles'
+        include '*.json'
+    }
+    doLast {
+        def required = [
+                file("$buildDir/dist-sdk/MizuluneLoader.exe"),
+                file("$buildDir/dist-sdk/sdk/Mizulune.SdkHost.exe"),
+                file("$buildDir/dist-sdk/sdk/Mods/mizulune.protocol/Codexus.Protocol.dll"),
+                file("$buildDir/dist-sdk/sdk/Mods/mizulune.protocol/manifest.json"),
+                file("$buildDir/dist-sdk/sdk/profiles/bjd-viaforge-1.20.6.json")
+        ]
+        required.each { if (!it.isFile()) throw new GradleException("Missing SDK dist artifact: ${it}") }
+    }
+}
+
+tasks.register('dllWithSDK') {
+    group = 'openzen'
+    description = 'Build the dual-mode Loader distribution with the self-contained Codexus OpenSDK host.'
+    dependsOn 'packageSdkDist'
+}
+
+tasks.register('upxCompressSdk') {
+    group = 'openzen'
+    description = 'Compress the Loader executable inside build/dist-sdk; SDK host remains untouched.'
+    dependsOn 'dllWithSDK'
+    doLast {
+        def exe = file("$buildDir/dist-sdk/MizuluneLoader.exe")
+        if (!exe.isFile()) throw new GradleException("dllWithSDK did not produce ${exe}")
+        def upx = findUpx()
+        if (!upx) {
+            logger.warn('upx not on PATH; skipping SDK Loader compression.')
+            return
+        }
+        exec { commandLine upx, '--best', '--lzma', exe.absolutePath }
+    }
 }
 
 // Gradle's stock 'clean' only wipes the project build/ directory, so the

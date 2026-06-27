@@ -1,6 +1,7 @@
 #include "MainWindow.h"
 
 #include "ProfileStore.h"
+#include "SdkProcessBridge.h"
 #include "UpdateClient.h"
 #include "loader.h"
 
@@ -15,6 +16,7 @@
 #include <QMetaObject>
 #include <QMouseEvent>
 #include <QPropertyAnimation>
+#include <QSet>
 #include <QResizeEvent>
 #include <QUrl>
 #include <QWindow>
@@ -82,7 +84,8 @@ QString sourceWebUiDir() {
 
 MainWindow::MainWindow(QWidget* parent)
         : QMainWindow(parent),
-          updateClient_(new UpdateClient(this)) {
+          updateClient_(new UpdateClient(this)),
+          sdkBridge_(new SdkProcessBridge(this)) {
     setWindowFlags(Qt::FramelessWindowHint | Qt::Window);
     setAttribute(Qt::WA_NativeWindow);
     setAttribute(Qt::WA_NoSystemBackground);
@@ -112,12 +115,27 @@ MainWindow::MainWindow(QWidget* parent)
     connect(updateClient_, &UpdateClient::downloadFailed, this, [this](const QString& error) {
         postEvent(QStringLiteral("update.downloadFailed"), {{"error", error}});
     });
+    connect(sdkBridge_, &SdkProcessBridge::responseReady, this, [this](const QJsonObject& response) {
+        postEvent(QStringLiteral("sdk.response"), response);
+    });
+    connect(sdkBridge_, &SdkProcessBridge::eventReady, this, [this](const QJsonObject& event) {
+        postEvent(QStringLiteral("sdk.event"), event);
+    });
+    connect(sdkBridge_, &SdkProcessBridge::hostUnavailable, this, [this](const QString& error) {
+        postEvent(QStringLiteral("sdk.event"), {
+            {QStringLiteral("event"), QStringLiteral("host.unavailable")},
+            {QStringLiteral("data"), QJsonObject{{QStringLiteral("message"), error}}}
+        });
+    });
 }
 
 MainWindow::~MainWindow() {
     if (webView_) {
         webView_->remove_WebMessageReceived(messageToken_);
+        webView_->remove_NavigationStarting(navigationToken_);
+        webView_->remove_NewWindowRequested(newWindowToken_);
     }
+    sdkBridge_->shutdown();
 }
 
 void MainWindow::initializeWebView() {
@@ -163,13 +181,24 @@ void MainWindow::initializeWebView() {
 
                             Microsoft::WRL::ComPtr<ICoreWebView2Settings> settings;
                             if (SUCCEEDED(webView_->get_Settings(&settings)) && settings) {
+#ifdef NDEBUG
+                                settings->put_AreDevToolsEnabled(FALSE);
+#else
                                 settings->put_AreDevToolsEnabled(TRUE);
+#endif
                                 settings->put_IsStatusBarEnabled(FALSE);
                             }
 
                             webView_->add_WebMessageReceived(
                                 Callback<ICoreWebView2WebMessageReceivedEventHandler>(
                                     [this](ICoreWebView2*, ICoreWebView2WebMessageReceivedEventArgs* args) -> HRESULT {
+                                        LPWSTR source = nullptr;
+                                        const bool trusted = SUCCEEDED(args->get_Source(&source)) && source
+                                                && QString::fromWCharArray(source).startsWith(
+                                                    QStringLiteral("https://app.mizulune.local/"),
+                                                    Qt::CaseInsensitive);
+                                        if (source) CoTaskMemFree(source);
+                                        if (!trusted) return S_OK;
                                         LPWSTR raw = nullptr;
                                         if (SUCCEEDED(args->get_WebMessageAsJson(&raw)) && raw) {
                                             handleWebMessage(QString::fromWCharArray(raw));
@@ -178,6 +207,28 @@ void MainWindow::initializeWebView() {
                                         return S_OK;
                                     }).Get(),
                                 &messageToken_);
+
+                            webView_->add_NavigationStarting(
+                                Callback<ICoreWebView2NavigationStartingEventHandler>(
+                                    [](ICoreWebView2*, ICoreWebView2NavigationStartingEventArgs* args) -> HRESULT {
+                                        LPWSTR uri = nullptr;
+                                        const bool trusted = SUCCEEDED(args->get_Uri(&uri)) && uri
+                                                && QString::fromWCharArray(uri).startsWith(
+                                                    QStringLiteral("https://app.mizulune.local/"),
+                                                    Qt::CaseInsensitive);
+                                        if (uri) CoTaskMemFree(uri);
+                                        if (!trusted) args->put_Cancel(TRUE);
+                                        return S_OK;
+                                    }).Get(),
+                                &navigationToken_);
+
+                            webView_->add_NewWindowRequested(
+                                Callback<ICoreWebView2NewWindowRequestedEventHandler>(
+                                    [](ICoreWebView2*, ICoreWebView2NewWindowRequestedEventArgs* args) -> HRESULT {
+                                        args->put_Handled(TRUE);
+                                        return S_OK;
+                                    }).Get(),
+                                &newWindowToken_);
 
                             navigateToWebUi();
                             return S_OK;
@@ -195,10 +246,23 @@ void MainWindow::initializeWebView() {
 void MainWindow::navigateToWebUi() {
     if (!webView_) return;
     const QString index = webUiIndexPath();
-    const QString url = QFileInfo(index).isFile()
-            ? QUrl::fromLocalFile(index).toString(QUrl::FullyEncoded)
-            : QStringLiteral("data:text/html,<h1>Mizulune webui missing</h1>");
-    webView_->Navigate(toWide(url).c_str());
+    if (!QFileInfo(index).isFile()) return;
+    Microsoft::WRL::ComPtr<ICoreWebView2_3> webView3;
+    if (FAILED(webView_->QueryInterface(IID_PPV_ARGS(&webView3))) || !webView3) {
+        QMessageBox::critical(this, QStringLiteral("WebView2"),
+            QStringLiteral("WebView2 Runtime does not support secure virtual host mapping."));
+        return;
+    }
+    const QString root = QFileInfo(index).absolutePath();
+    if (FAILED(webView3->SetVirtualHostNameToFolderMapping(
+            L"app.mizulune.local",
+            toWide(root).c_str(),
+            COREWEBVIEW2_HOST_RESOURCE_ACCESS_KIND_DENY_CORS))) {
+        QMessageBox::critical(this, QStringLiteral("WebView2"),
+            QStringLiteral("Failed to map the local WebUI origin."));
+        return;
+    }
+    webView_->Navigate(L"https://app.mizulune.local/index.html");
 }
 
 namespace {
@@ -284,6 +348,35 @@ void MainWindow::handleWebMessage(const QString& jsonText) {
         sendInstances();
     } else if (type == QStringLiteral("inject")) {
         startInjection(payload);
+    } else if (type == QStringLiteral("sdk.request")) {
+        static const QSet<QString> allowed{
+            QStringLiteral("sdk.status"),
+            QStringLiteral("profiles.list"),
+            QStringLiteral("auth.4399.password"),
+            QStringLiteral("auth.netease.email"),
+            QStringLiteral("auth.netease.sms.send"),
+            QStringLiteral("auth.netease.sms.complete"),
+            QStringLiteral("auth.logout"),
+            QStringLiteral("session.prepare"),
+            QStringLiteral("proxy.start"),
+            QStringLiteral("proxy.stop"),
+            QStringLiteral("proxy.status")
+        };
+        const QString id = payload.value(QStringLiteral("id")).toString();
+        const QString method = payload.value(QStringLiteral("method")).toString();
+        if (id.isEmpty() || !allowed.contains(method)) {
+            postEvent(QStringLiteral("sdk.response"), {
+                {QStringLiteral("id"), id},
+                {QStringLiteral("ok"), false},
+                {QStringLiteral("error"), QJsonObject{
+                    {QStringLiteral("code"), QStringLiteral("method_not_allowed")},
+                    {QStringLiteral("message"), QStringLiteral("Invalid SDK request.")}
+                }}
+            });
+            return;
+        }
+        sdkBridge_->request(method,
+            payload.value(QStringLiteral("params")).toObject(), {}, id);
     } else if (type == QStringLiteral("update.check")) {
         updateClient_->checkLatestRelease();
     } else if (type == QStringLiteral("update.download")) {
@@ -359,6 +452,49 @@ void MainWindow::startInjection(const QJsonObject& payload) {
     injectionInFlight_ = true;
     postEvent(QStringLiteral("inject.started"), {{"pid", QString::number(pid)}, {"title", title}});
 
+    if (!sdkBridge_->isRunning()) {
+        performInjection(pid, title);
+        return;
+    }
+
+    const QJsonObject session = payload.value(QStringLiteral("session")).toObject();
+    sdkBridge_->request(QStringLiteral("sdk.status"), {},
+        [this, pid, title, session](const QJsonObject& response) {
+            if (!response.value(QStringLiteral("ok")).toBool()) {
+                injectionInFlight_ = false;
+                const QJsonObject error = response.value(QStringLiteral("error")).toObject();
+                postEvent(QStringLiteral("inject.finished"), {
+                    {QStringLiteral("ok"), false},
+                    {QStringLiteral("error"), error.value(QStringLiteral("message")).toString(
+                        QStringLiteral("Failed to query the OpenSDK session."))}
+                });
+                return;
+            }
+            const bool authenticated = response.value(QStringLiteral("result")).toObject()
+                    .value(QStringLiteral("authenticated")).toBool();
+            if (!authenticated) {
+                performInjection(pid, title);
+                return;
+            }
+            sdkBridge_->request(QStringLiteral("session.prepare"), session,
+                [this, pid, title](const QJsonObject& prepareResponse) {
+                    if (!prepareResponse.value(QStringLiteral("ok")).toBool()) {
+                        injectionInFlight_ = false;
+                        const QJsonObject error = prepareResponse.value(QStringLiteral("error")).toObject();
+                        postEvent(QStringLiteral("inject.finished"), {
+                            {QStringLiteral("ok"), false},
+                            {QStringLiteral("error"), error.value(QStringLiteral("message")).toString(
+                                QStringLiteral("Failed to prepare the OpenSDK session."))}
+                        });
+                        return;
+                    }
+                    performInjection(pid, title);
+                });
+        });
+}
+
+void MainWindow::performInjection(unsigned long pid, const QString& title) {
+    Q_UNUSED(title);
     std::thread([this, pid]() {
         const std::wstring error = inject(static_cast<DWORD>(pid));
         const QString qError = fromW(error);
