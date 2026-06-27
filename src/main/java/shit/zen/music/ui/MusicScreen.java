@@ -23,26 +23,28 @@ import shit.zen.music.model.MusicPlaybackState;
 import shit.zen.music.model.MusicTrack;
 import shit.zen.music.model.PlayMode;
 import shit.zen.render.DrawContext;
-import shit.zen.render.FontFormat;
 import shit.zen.render.FontPresets;
 import shit.zen.render.FontRenderer;
-import shit.zen.render.Fonts;
 import shit.zen.render.LiquidGlassStyle;
 import shit.zen.render.Paint;
 import shit.zen.render.Rectangle;
 import shit.zen.render.Renderer;
 import shit.zen.render.RoundedRectangle;
 import shit.zen.render.Texture;
+import shit.zen.utils.animation.SmoothAnimationTimer;
+import shit.zen.utils.math.Easings;
+import shit.zen.utils.render.Argb;
 
 public class MusicScreen extends Screen {
     private static final ResourceLocation LOGO = ResourceLocation.tryParse("mizulune:textures/gui/mizulune_logo.png");
-    private static final FontRenderer TITLE = Fonts.getRenderer("pingfang_sc_regular.ttf", 34.0f, FontFormat.TTF);
-    private static final FontRenderer H1 = Fonts.getRenderer("pingfang_sc_regular.ttf", 26.0f, FontFormat.TTF);
-    private static final FontRenderer BODY = Fonts.getRenderer("pingfang_sc_regular.ttf", 19.0f, FontFormat.TTF);
-    private static final FontRenderer SMALL = Fonts.getRenderer("pingfang_sc_regular.ttf", 16.0f, FontFormat.TTF);
-    private static final FontRenderer ICON = FontPresets.materialIcons(22.0f);
-    private static final FontRenderer ICON_SMALL = FontPresets.materialIcons(18.0f);
-    private static final FontRenderer ICON_LARGE = FontPresets.materialIcons(28.0f);
+    private static final FontRenderer TITLE = FontPresets.pingfang(24.0f);
+    private static final FontRenderer H1 = FontPresets.pingfang(20.0f);
+    private static final FontRenderer BODY = FontPresets.pingfang(15.0f);
+    private static final FontRenderer SMALL = FontPresets.pingfang(13.0f);
+    private static final FontRenderer ICON = FontPresets.materialIcons(18.0f);
+    private static final FontRenderer ICON_SMALL = FontPresets.materialIcons(15.0f);
+    private static final FontRenderer ICON_LARGE = FontPresets.materialIcons(22.0f);
+
     private static final String ICON_PLAYER = "\uE405";
     private static final String ICON_SEARCH = "\uE8B6";
     private static final String ICON_QUEUE = "\uE03D";
@@ -56,7 +58,6 @@ public class MusicScreen extends Screen {
     private static final String ICON_CLOSE = "\uE5CD";
     private static final String ICON_REPEAT = "\uE040";
     private static final String ICON_SHUFFLE = "\uE043";
-    private static final String ICON_ONE_LOOP = "\uE040";
     private static final String ICON_VOLUME = "\uE050";
     private static final String ICON_FOLDER = "\uE2C7";
     private static final String ICON_CHECK = "\uE5CA";
@@ -64,16 +65,20 @@ public class MusicScreen extends Screen {
     private static final String ICON_PERSON = "\uE7FD";
     private static final String ICON_LAB = "\uEA4B";
     private static final String ICON_RULES = "\uE894";
+
     private static final int WHITE = 0xFFF2F2F2;
-    private static final int MUTED = 0xFFB6B6B6;
-    private static final int DIM = 0xFF737373;
-    private static final int LINE = 0x44FFFFFF;
-    private static final int LINE_STRONG = 0x99FFFFFF;
-    private static final int PANEL = 0xD60A0A0A;
-    private static final int PANEL_SOFT = 0xA6121212;
-    private static final int ROW = 0x661A1A1A;
-    private static final int ROW_HOVER = 0x88232323;
-    private static final int INPUT = 0x991C1C1C;
+    private static final int MUTED = 0xFFB5B5B5;
+    private static final int DIM = 0xFF777777;
+    private static final int LINE = 0x22FFFFFF;
+    private static final int LINE_HOVER = 0x44FFFFFF;
+    private static final int LINE_ACTIVE = 0x99FFFFFF;
+    private static final int OUTER_GLASS = 0xA8000000;
+    private static final int SIDEBAR_GLASS = 0xD8060606;
+    private static final int CONTENT_GLASS = 0x96141414;
+    private static final int BOTTOM_GLASS = 0xAA101010;
+    private static final int ROW_BASE = 0x30161616;
+    private static final int ROW_HOVER = 0x50232323;
+    private static final int INPUT = 0x66181818;
 
     private final MusicService service;
     private final MizuluneMusic module;
@@ -83,7 +88,13 @@ public class MusicScreen extends Screen {
     private final Map<String, Texture> coverTextures = new ConcurrentHashMap<>();
     private final Map<String, List<LyricLine>> lyrics = new ConcurrentHashMap<>();
     private final Map<String, Boolean> lyricRequested = new ConcurrentHashMap<>();
+    private final Map<String, SmoothAnimationTimer> hoverTimers = new ConcurrentHashMap<>();
+    private final SmoothAnimationTimer openTimer = new SmoothAnimationTimer();
+    private final SmoothAnimationTimer pageTimer = new SmoothAnimationTimer();
+    private final SmoothAnimationTimer searchScrollTimer = new SmoothAnimationTimer();
+    private final SmoothAnimationTimer queueScrollTimer = new SmoothAnimationTimer();
     private final AtomicLong searchRequestSequence = new AtomicLong();
+
     private Page page = Page.SEARCH;
     private String searchText = "";
     private String selectedSource;
@@ -95,8 +106,8 @@ public class MusicScreen extends Screen {
     private boolean searchSelectAll;
     private boolean agreementChecked;
     private long lastSearchEditMs;
-    private float searchScroll;
-    private float queueScroll;
+    private float searchScrollTarget;
+    private float queueScrollTarget;
     private float maxSearchScroll;
     private float maxQueueScroll;
     private float lyricScroll;
@@ -105,12 +116,17 @@ public class MusicScreen extends Screen {
     private Rectangle lastVolumeRect;
     private long pendingSeekMs = -1L;
     private float pendingVolume = -1.0f;
+    private float alpha = 1.0f;
 
     public MusicScreen(MusicService service, MizuluneMusic module) {
         super(Component.literal("Mizulune Music"));
         this.service = service;
         this.module = module;
         this.selectedSource = service.config().getDefaultSource();
+        this.openTimer.setCurrentValue(0.0);
+        this.openTimer.setToValue(0.0);
+        this.pageTimer.setCurrentValue(1.0);
+        this.pageTimer.setToValue(1.0);
     }
 
     @Override
@@ -124,200 +140,235 @@ public class MusicScreen extends Screen {
     @Override
     public void render(@NotNull GuiGraphics guiGraphics, int mouseX, int mouseY, float partialTicks) {
         this.clickAreas.clear();
+        this.openTimer.animate(1.0, 0.28, Easings.BACK_OUT);
+        this.openTimer.tick();
+        float open = clamp(this.openTimer.getValueF(), 0.0f, 1.0f);
+        this.alpha = open;
         Renderer.render(guiGraphics, context -> {
+            context.save();
+            float scale = 0.965f + 0.035f * open;
+            context.translate(this.width * 0.5f, this.height * 0.5f);
+            context.scale(scale, scale);
+            context.translate(-this.width * 0.5f, -this.height * 0.5f);
             if (!this.service.config().isDisclaimerAccepted()) {
                 this.renderAgreement(context, mouseX, mouseY);
             } else {
                 this.renderMain(context, mouseX, mouseY);
             }
+            context.restore();
         });
+        this.alpha = 1.0f;
     }
 
     private void renderAgreement(DrawContext context, int mouseX, int mouseY) {
-        float panelW = Math.min(620.0f, this.width - 36.0f);
-        float panelH = Math.min(500.0f, this.height - 36.0f);
+        float panelW = Math.min(this.width - 28.0f, 560.0f);
+        float panelH = Math.min(this.height - 28.0f, 430.0f);
         float x = (this.width - panelW) * 0.5f;
         float y = (this.height - panelH) * 0.5f;
-        this.drawPanel(context, x, y, panelW, panelH, 12.0f, true);
+        this.drawGlass(context, x, y, panelW, panelH, 13.0f, OUTER_GLASS, true);
         if (LOGO != null) {
             context.drawTexture(new Texture(LOGO, 200, 200), Rectangle.ofXYWH(0, 0, 200, 200),
-                    Rectangle.ofXYWH(x + panelW * 0.5f - 26.0f, y + 20.0f, 52.0f, 52.0f), paint(0xFFFFFFFF));
+                    Rectangle.ofXYWH(x + panelW * 0.5f - 22.0f, y + 18.0f, 44.0f, 44.0f), paint(0xFFFFFFFF));
         }
-        this.text(context, "Mizulune Music Usage Notice", x + panelW * 0.5f, y + 86.0f, TITLE, WHITE, Align.CENTER);
-        this.text(context, "Please read before continuing", x + panelW * 0.5f, y + 116.0f, BODY, MUTED, Align.CENTER);
+        this.text(context, "Mizulune Music Usage Notice", x + panelW * 0.5f, y + 76.0f, TITLE, WHITE, Align.CENTER);
+        this.text(context, "Please read before continuing", x + panelW * 0.5f, y + 104.0f, BODY, MUTED, Align.CENTER);
 
-        float boxX = x + 28.0f;
-        float boxY = y + 150.0f;
-        float boxW = panelW - 56.0f;
-        float boxH = Math.max(230.0f, panelH - 252.0f);
-        this.rounded(context, boxX, boxY, boxW, boxH, 9.0f, 0x52141414);
-        this.stroke(context, boxX, boxY, boxW, boxH, 9.0f, LINE, 1.0f);
+        float boxX = x + 26.0f;
+        float boxY = y + 132.0f;
+        float boxW = panelW - 52.0f;
+        float boxH = panelH - 236.0f;
+        this.rounded(context, boxX, boxY, boxW, boxH, 8.0f, 0x42141414);
         float itemX = boxX + 34.0f;
-        float itemY = boxY + 24.0f;
+        float itemY = boxY + 20.0f;
         this.noticeLine(context, itemX, itemY, ICON_LAB, "Experimental Platform",
                 "Features may change, be incomplete, or behave unexpectedly.");
-        this.noticeLine(context, itemX, itemY + 44.0f, ICON_PLAYER, "Acknowledgement of GD\u97f3\u4e50\u53f0 Functionality",
-                "Mizulune Music provides access to GD\u97f3\u4e50\u53f0 (music.gdstudio.xyz) for search and playback.");
-        this.noticeLine(context, itemX, itemY + 88.0f, ICON_INFO, "Not a Distributor",
+        this.noticeLine(context, itemX, itemY + 39.0f, ICON_PLAYER, "Acknowledgement of GD\u97f3\u4e50\u53f0",
+                "Access to GD\u97f3\u4e50\u53f0 (music.gdstudio.xyz) for search and playback.");
+        this.noticeLine(context, itemX, itemY + 78.0f, ICON_INFO, "Not a Distributor",
                 "The client does not upload, host, or distribute music content.");
-        this.noticeLine(context, itemX, itemY + 132.0f, ICON_PERSON, "Personal Learning and Testing Only",
-                "This software is intended for personal learning, research, and testing only.");
-        this.noticeLine(context, itemX, itemY + 176.0f, ICON_RULES, "Comply with Third-Party Rules",
-                "You agree to comply with GD\u97f3\u4e50\u53f0 and third-party source rules.");
+        this.noticeLine(context, itemX, itemY + 117.0f, ICON_PERSON, "Personal Learning and Testing Only",
+                "Do not use it for commercial purposes or redistribution.");
+        this.noticeLine(context, itemX, itemY + 156.0f, ICON_RULES, "Comply with Third-Party Rules",
+                "Comply with GD\u97f3\u4e50\u53f0 and third-party source rules.");
 
-        float checkY = y + panelH - 112.0f;
-        boolean checkHover = contains(mouseX, mouseY, x + 32.0f, checkY, panelW - 64.0f, 34.0f);
-        this.rounded(context, x + 32.0f, checkY, panelW - 64.0f, 34.0f, 7.0f, checkHover ? 0x66303030 : 0x44181818);
-        this.stroke(context, x + 32.0f, checkY, panelW - 64.0f, 34.0f, 7.0f, checkHover ? LINE_STRONG : LINE, 1.0f);
-        this.rounded(context, x + 48.0f, checkY + 8.0f, 18.0f, 18.0f, 4.0f, this.agreementChecked ? 0xFFEAEAEA : 0x221A1A1A);
-        this.stroke(context, x + 48.0f, checkY + 8.0f, 18.0f, 18.0f, 4.0f, LINE_STRONG, 1.0f);
+        float checkY = y + panelH - 94.0f;
+        boolean checkHover = contains(mouseX, mouseY, x + 26.0f, checkY, panelW - 52.0f, 30.0f);
+        float checkAnim = this.hover("agree", checkHover);
+        this.rounded(context, x + 26.0f, checkY, panelW - 52.0f, 30.0f, 7.0f,
+                Argb.interpolate(0x32161616, 0x55262626, checkAnim));
+        this.stroke(context, x + 26.0f, checkY, panelW - 52.0f, 30.0f, 7.0f,
+                Argb.interpolate(LINE, LINE_HOVER, checkAnim), 1.0f);
+        this.rounded(context, x + 40.0f, checkY + 7.0f, 16.0f, 16.0f, 4.0f,
+                this.agreementChecked ? 0xFFEAEAEA : 0x101A1A1A);
+        this.stroke(context, x + 40.0f, checkY + 7.0f, 16.0f, 16.0f, 4.0f, LINE_ACTIVE, 1.0f);
         if (this.agreementChecked) {
-            this.icon(context, ICON_CHECK, x + 57.0f, checkY + 7.0f, ICON_SMALL, 0xFF101010, Align.CENTER);
+            this.iconCenterY(context, ICON_CHECK, x + 48.0f, checkY + 15.0f, ICON_SMALL, 0xFF101010, Align.CENTER);
         }
-        this.text(context, "I have read and agree to the usage notice", x + 78.0f, checkY + 8.0f, SMALL, WHITE, Align.LEFT);
-        this.clickAreas.add(new ClickArea(x + 32.0f, checkY, panelW - 64.0f, 34.0f,
+        this.textCenterY(context, "I have read and agree to the usage notice", x + 66.0f,
+                checkY + 15.0f, SMALL, WHITE, Align.LEFT);
+        this.clickAreas.add(new ClickArea(x + 26.0f, checkY, panelW - 52.0f, 30.0f,
                 () -> this.agreementChecked = !this.agreementChecked));
 
-        this.drawButton(context, x + 32.0f, y + panelH - 60.0f, panelW * 0.5f - 40.0f, 36.0f,
-                "Exit", mouseX, mouseY, false, this::onClose);
-        this.drawButton(context, x + panelW * 0.5f + 8.0f, y + panelH - 60.0f, panelW * 0.5f - 40.0f, 36.0f,
-                "Continue", mouseX, mouseY, !this.agreementChecked, () -> {
+        this.pillButton(context, "agree-exit", x + 26.0f, y + panelH - 50.0f,
+                panelW * 0.5f - 34.0f, 30.0f, "Exit", mouseX, mouseY, false, this::onClose);
+        this.pillButton(context, "agree-continue", x + panelW * 0.5f + 8.0f, y + panelH - 50.0f,
+                panelW * 0.5f - 34.0f, 30.0f, "Continue", mouseX, mouseY, !this.agreementChecked, () -> {
                     this.service.acceptDisclaimer();
                     ConfigManager.requestSaveIfReady();
                 });
     }
 
     private void noticeLine(DrawContext context, float x, float y, String icon, String title, String body) {
-        this.icon(context, icon, x, y + 4.0f, ICON, MUTED, Align.CENTER);
-        this.text(context, title, x + 34.0f, y, BODY, WHITE, Align.LEFT);
-        this.text(context, ellipsize(body, 82), x + 34.0f, y + 22.0f, SMALL, MUTED, Align.LEFT);
+        this.iconCenterY(context, icon, x, y + 8.0f, ICON, MUTED, Align.CENTER);
+        this.textCenterY(context, title, x + 28.0f, y + 6.5f, BODY, WHITE, Align.LEFT);
+        this.textCenterY(context, ellipsize(body, 76), x + 28.0f, y + 24.0f, SMALL, MUTED, Align.LEFT);
     }
 
     private void renderMain(DrawContext context, int mouseX, int mouseY) {
-        float outerW = Math.max(320.0f, Math.min(this.width - 36.0f, 960.0f));
-        float outerH = Math.max(260.0f, Math.min(this.height - 34.0f, 540.0f));
+        float outerW = Math.min(this.width - 24.0f, clamp(this.width * 0.72f, 620.0f, 820.0f));
+        float outerH = Math.min(this.height - 24.0f, clamp(this.height * 0.68f, 360.0f, 455.0f));
+        outerW = Math.max(340.0f, outerW);
+        outerH = Math.max(260.0f, outerH);
         float x = (this.width - outerW) * 0.5f;
         float y = (this.height - outerH) * 0.5f;
-        float sidebarW = Math.min(170.0f, Math.max(136.0f, outerW * 0.21f));
-        float bottomH = 66.0f;
-        this.drawPanel(context, x, y, outerW, outerH, 12.0f, true);
-        this.renderSidebar(context, x, y, sidebarW, outerH - bottomH, mouseX, mouseY);
+        float sidebarW = Math.min(142.0f, Math.max(118.0f, outerW * 0.23f));
+        float bottomH = 54.0f;
         float contentX = x + sidebarW;
-        float contentY = y;
         float contentW = outerW - sidebarW;
         float contentH = outerH - bottomH;
-        this.line(context, contentX, y, contentX, y + outerH, LINE);
-        this.line(context, x, y + contentH, x + outerW, y + contentH, LINE);
+
+        this.drawChrome(context, x, y, outerW, outerH, sidebarW, bottomH);
+        this.renderSidebar(context, x, y, sidebarW, contentH, mouseX, mouseY);
+
+        this.pageTimer.animate(1.0, 0.2, Easings.EASE_OUT_POW2);
+        this.pageTimer.tick();
+        float pageProgress = clamp(this.pageTimer.getValueF(), 0.0f, 1.0f);
+        context.save();
+        context.translate((1.0f - pageProgress) * 8.0f, 0.0f);
         switch (this.page) {
-            case PLAYER -> this.renderPlayer(context, contentX, contentY, contentW, contentH, mouseX, mouseY);
-            case SEARCH -> this.renderSearch(context, contentX, contentY, contentW, contentH, mouseX, mouseY);
-            case QUEUE -> this.renderQueue(context, contentX, contentY, contentW, contentH, mouseX, mouseY);
-            case ABOUT -> this.renderAbout(context, contentX, contentY, contentW, contentH);
+            case PLAYER -> this.renderPlayer(context, contentX, y, contentW, contentH, mouseX, mouseY);
+            case SEARCH -> this.renderSearch(context, contentX, y, contentW, contentH, mouseX, mouseY);
+            case QUEUE -> this.renderQueue(context, contentX, y, contentW, contentH, mouseX, mouseY);
+            case ABOUT -> this.renderAbout(context, contentX, y, contentW, contentH);
         }
+        context.restore();
         this.renderBottomBar(context, x, y + contentH, outerW, bottomH, mouseX, mouseY);
+    }
+
+    private void drawChrome(DrawContext context, float x, float y, float outerW, float outerH, float sidebarW, float bottomH) {
+        float radius = 13.0f;
+        this.drawGlass(context, x, y, outerW, outerH, radius, OUTER_GLASS, true);
+        this.rounded(context, x, y, sidebarW, outerH, radius, SIDEBAR_GLASS);
+        this.rounded(context, x + sidebarW, y, outerW - sidebarW, outerH, radius, CONTENT_GLASS);
+        this.rounded(context, x, y + outerH - bottomH, outerW, bottomH, radius, BOTTOM_GLASS);
+        this.line(context, x + sidebarW, y + 8.0f, x + sidebarW, y + outerH - 8.0f, LINE);
+        this.line(context, x + 8.0f, y + outerH - bottomH, x + outerW - 8.0f, y + outerH - bottomH, LINE);
     }
 
     private void renderSidebar(DrawContext context, float x, float y, float width, float height, int mouseX, int mouseY) {
         if (LOGO != null) {
             context.drawTexture(new Texture(LOGO, 200, 200), Rectangle.ofXYWH(0, 0, 200, 200),
-                    Rectangle.ofXYWH(x + 20.0f, y + 24.0f, 46.0f, 46.0f), paint(0xFFFFFFFF));
+                    Rectangle.ofXYWH(x + 23.0f, y + 24.0f, 38.0f, 38.0f), paint(0xFFFFFFFF));
         }
-        this.text(context, "Mizulune", x + 72.0f, y + 32.0f, BODY, WHITE, Align.LEFT);
-        this.text(context, "Music", x + 72.0f, y + 54.0f, SMALL, MUTED, Align.LEFT);
-        float navY = y + 112.0f;
-        this.navItem(context, x + 14.0f, navY, width - 28.0f, Page.PLAYER, ICON_PLAYER, "Player", mouseX, mouseY);
-        this.navItem(context, x + 14.0f, navY + 46.0f, width - 28.0f, Page.SEARCH, ICON_SEARCH, "Search", mouseX, mouseY);
-        this.navItem(context, x + 14.0f, navY + 92.0f, width - 28.0f, Page.QUEUE, ICON_QUEUE, "Queue", mouseX, mouseY);
-        this.navItem(context, x + 14.0f, navY + 138.0f, width - 28.0f, Page.ABOUT, ICON_INFO, "About", mouseX, mouseY);
+        this.text(context, "Mizulune", x + 70.0f, y + 27.0f, BODY, WHITE, Align.LEFT);
+        this.text(context, "Music", x + 70.0f, y + 48.0f, SMALL, MUTED, Align.LEFT);
+
+        float navX = x + 12.0f;
+        float navY = y + 104.0f;
+        float navW = width - 24.0f;
+        this.navItem(context, navX, navY, navW, Page.PLAYER, ICON_PLAYER, "Player", mouseX, mouseY);
+        this.navItem(context, navX, navY + 42.0f, navW, Page.SEARCH, ICON_SEARCH, "Search", mouseX, mouseY);
+        this.navItem(context, navX, navY + 84.0f, navW, Page.QUEUE, ICON_QUEUE, "Queue", mouseX, mouseY);
+        this.navItem(context, navX, navY + 126.0f, navW, Page.ABOUT, ICON_INFO, "About", mouseX, mouseY);
         this.text(context, this.module.useLiquidGlass() ? "Liquid Glass" : "Frosted Glass",
-                x + 24.0f, y + height - 28.0f, SMALL, DIM, Align.LEFT);
+                x + 18.0f, y + height - 26.0f, SMALL, DIM, Align.LEFT);
     }
 
     private void navItem(DrawContext context, float x, float y, float width, Page target, String icon, String title,
                          int mouseX, int mouseY) {
         boolean active = this.page == target;
-        boolean hover = contains(mouseX, mouseY, x, y, width, 36.0f);
-        int fill = active ? 0x882A2A2A : hover ? 0x4F242424 : 0x16181818;
-        this.rounded(context, x, y, width, 36.0f, 7.0f, fill);
+        boolean hovered = contains(mouseX, mouseY, x, y, width, 30.0f);
+        float hover = this.hover("nav:" + target.name(), hovered || active);
+        int fill = active ? 0x5A2B2B2B : Argb.interpolate(0x00181818, 0x38252525, hover);
+        this.rounded(context, x, y, width, 30.0f, 7.0f, fill);
         if (active) {
-            this.stroke(context, x, y, width, 36.0f, 7.0f, LINE_STRONG, 1.0f);
+            this.rounded(context, x + 2.0f, y + 7.0f, 2.0f, 16.0f, 1.0f, 0xCCFFFFFF);
         }
-        this.icon(context, icon, x + 22.0f, y + 8.0f, ICON, active ? WHITE : MUTED, Align.CENTER);
-        this.text(context, title, x + 48.0f, y + 8.0f, BODY, active ? WHITE : MUTED, Align.LEFT);
-        this.clickAreas.add(new ClickArea(x, y, width, 36.0f, () -> this.page = target));
+        this.iconCenterY(context, icon, x + 23.0f, y + 15.0f, ICON, active ? WHITE : MUTED, Align.CENTER);
+        this.textCenterY(context, title, x + 45.0f, y + 15.0f, BODY, active ? WHITE : MUTED, Align.LEFT);
+        this.clickAreas.add(new ClickArea(x, y, width, 30.0f, () -> this.setPage(target)));
     }
 
     private void renderSearch(DrawContext context, float x, float y, float width, float height, int mouseX, int mouseY) {
-        this.text(context, "Music Player", x + 28.0f, y + 28.0f, H1, WHITE, Align.LEFT);
-        float inputX = x + 28.0f;
-        float inputY = y + 64.0f;
-        float buttonW = 88.0f;
-        float inputW = width - 56.0f;
-        this.rounded(context, inputX, inputY, inputW, 34.0f, 7.0f, INPUT);
-        this.stroke(context, inputX, inputY, inputW, 34.0f, 7.0f, this.searchFocused ? LINE_STRONG : LINE, 1.0f);
-        this.icon(context, ICON_SEARCH, inputX + 21.0f, inputY + 6.0f, ICON, MUTED, Align.CENTER);
+        float pad = 22.0f;
+        this.text(context, "Music Player", x + pad, y + 22.0f, H1, WHITE, Align.LEFT);
+        float inputX = x + pad;
+        float inputY = y + 56.0f;
+        float inputW = width - pad * 2.0f;
+        float buttonW = 70.0f;
+        this.rounded(context, inputX, inputY, inputW, 28.0f, 7.0f, INPUT);
+        this.stroke(context, inputX, inputY, inputW, 28.0f, 7.0f, this.searchFocused ? LINE_ACTIVE : LINE, 1.0f);
+        this.iconCenterY(context, ICON_SEARCH, inputX + 17.0f, inputY + 14.0f, ICON, MUTED, Align.CENTER);
         String value = this.searchText.isEmpty() && !this.searchFocused ? "Search music" : this.searchText;
-        if (this.searchFocused) {
-            float cursorX = Math.min(inputX + inputW - buttonW - 14.0f, inputX + 42.0f + this.measure(value, BODY) + 3.0f);
-            if (this.searchSelectAll && !this.searchText.isEmpty()) {
-                float selectedW = Math.min(inputW - buttonW - 58.0f, this.measure(this.searchText, BODY) + 6.0f);
-                this.rounded(context, inputX + 39.0f, inputY + 7.0f, selectedW, 20.0f, 4.0f, 0x44FFFFFF);
-            } else {
-                this.line(context, cursorX, inputY + 9.0f, cursorX, inputY + 25.0f, 0xCCFFFFFF);
-            }
+        if (this.searchFocused && this.searchSelectAll && !this.searchText.isEmpty()) {
+            float selectedW = Math.min(inputW - buttonW - 50.0f, this.measure(this.searchText, BODY) + 6.0f);
+            this.rounded(context, inputX + 34.0f, inputY + 6.0f, selectedW, 16.0f, 4.0f, 0x38FFFFFF);
         }
-        this.text(context, ellipsize(value, 48), inputX + 42.0f, inputY + 7.0f, BODY,
+        this.textCenterY(context, ellipsize(value, 48), inputX + 36.0f, inputY + 14.0f, BODY,
                 this.searchText.isEmpty() && !this.searchFocused ? DIM : WHITE, Align.LEFT);
-        this.clickAreas.add(new ClickArea(inputX, inputY, inputW - buttonW, 34.0f, () -> {
+        if (this.searchFocused && !this.searchSelectAll) {
+            float cursorX = Math.min(inputX + inputW - buttonW - 10.0f, inputX + 36.0f + this.measure(value, BODY) + 3.0f);
+            this.line(context, cursorX, inputY + 7.0f, cursorX, inputY + 21.0f, 0xCCFFFFFF);
+        }
+        this.clickAreas.add(new ClickArea(inputX, inputY, inputW - buttonW, 28.0f, () -> {
             this.searchFocused = true;
             this.searchSelectAll = false;
         }));
-        this.drawButton(context, inputX + inputW - buttonW + 3.0f, inputY + 3.0f, buttonW - 6.0f, 28.0f,
-                this.searching ? "Searching" : "Search", mouseX, mouseY, false, this::startSearch);
+        this.pillButton(context, "search:submit", inputX + inputW - buttonW + 3.0f, inputY + 3.0f,
+                buttonW - 6.0f, 22.0f, this.searching ? "..." : "Search", mouseX, mouseY, false, this::startSearch);
 
         float chipX = inputX;
-        float chipY = inputY + 46.0f;
-        for (MusicService.SearchType type : supportedSearchTypes()) {
-            float chipW = Math.max(58.0f, this.measure(type.displayName(), SMALL) + 22.0f);
-            this.drawChip(context, chipX, chipY, chipW, type.displayName(),
-                    this.searchType == type, mouseX, mouseY, false, () -> {
-                        this.searchType = type;
-                        this.startSearch();
+        float chipY = inputY + 38.0f;
+        for (MusicService.SearchType type : searchChips()) {
+            float chipW = Math.max(50.0f, this.measure(type.displayName(), SMALL) + 18.0f);
+            boolean disabled = !type.isSupported();
+            this.drawChip(context, "type:" + type.name(), chipX, chipY, chipW, 22.0f, type.displayName(),
+                    this.searchType == type, disabled, mouseX, mouseY, () -> {
+                        if (type.isSupported()) {
+                            this.searchType = type;
+                            this.startSearch();
+                        }
                     });
-            chipX += chipW + 8.0f;
-        }
-        float sourceX = inputX + inputW;
-        List<String> sources = this.service.config().getEnabledSources();
-        for (int i = sources.size() - 1; i >= 0; i--) {
-            String source = sources.get(i);
-            float chipW = Math.max(52.0f, this.measure(source, SMALL) + 18.0f);
-            sourceX -= chipW;
-            this.drawChip(context, sourceX, chipY, chipW, source, source.equals(this.selectedSource), mouseX, mouseY,
-                    false, () -> {
-                        this.selectedSource = source;
-                        this.startSearch();
-                    });
-            sourceX -= 6.0f;
+            chipX += chipW + 6.0f;
         }
 
+        String sourceLabel = this.selectedSource == null ? "source" : this.selectedSource;
+        float sourceW = Math.max(54.0f, this.measure(sourceLabel, SMALL) + 16.0f);
+        this.drawChip(context, "src:cycle", inputX + inputW - sourceW, chipY, sourceW, 22.0f, sourceLabel,
+                true, false, mouseX, mouseY, this::cycleSource);
+
         float listX = inputX;
-        float listY = chipY + 42.0f;
-        float rowH = 50.0f;
-        float listW = width - 56.0f;
+        float listY = chipY + 34.0f;
+        float rowH = 46.0f;
+        float listW = inputW;
         float listH = height - (listY - y) - 12.0f;
-        this.maxSearchScroll = Math.max(0.0f, this.searchResults.size() * (rowH + 5.0f) - 5.0f - listH);
-        this.searchScroll = clamp(this.searchScroll, 0.0f, this.maxSearchScroll);
+        this.maxSearchScroll = Math.max(0.0f, this.searchResults.size() * (rowH + 4.0f) - 4.0f - listH);
+        this.searchScrollTarget = clamp(this.searchScrollTarget, 0.0f, this.maxSearchScroll);
+        this.searchScrollTimer.animate(this.searchScrollTarget, 0.22, Easings.EASE_OUT_POW2);
+        this.searchScrollTimer.tick();
+        float scroll = this.searchScrollTimer.getValueF();
+
         context.save();
         context.clip(Rectangle.ofXYWH(listX, listY, listW, listH));
-        float yy = listY - this.searchScroll;
         if (this.searchResults.isEmpty()) {
             String message = this.searching ? "Searching GD Music API..." :
                     this.service.lastMessage().isBlank() ? "Type a keyword and search." : this.service.lastMessage();
-            this.text(context, message, listX + 8.0f, listY + 18.0f, BODY, MUTED, Align.LEFT);
+            this.textCenterY(context, message, listX + 4.0f, listY + 20.0f, BODY, MUTED, Align.LEFT);
         } else {
-            for (MusicTrack track : this.searchResults) {
-                this.renderTrackRow(context, track, -1, listX, yy, listW, rowH, mouseX, mouseY, true);
-                yy += rowH + 5.0f;
+            float yy = listY - scroll;
+            for (int i = 0; i < this.searchResults.size(); i++) {
+                this.renderTrackRow(context, this.searchResults.get(i), i, -1, listX, yy, listW, rowH, mouseX, mouseY, true);
+                yy += rowH + 4.0f;
             }
         }
         context.restore();
@@ -326,30 +377,30 @@ public class MusicScreen extends Screen {
     private void renderPlayer(DrawContext context, float x, float y, float width, float height, int mouseX, int mouseY) {
         MusicPlaybackState state = this.service.playbackState();
         MusicTrack track = state.getCurrentTrack();
-        this.text(context, "Now Playing", x + 28.0f, y + 28.0f, H1, WHITE, Align.LEFT);
-        float coverSize = Math.min(178.0f, Math.max(118.0f, width * 0.26f));
-        float coverX = x + 28.0f;
-        float coverY = y + 74.0f;
+        float pad = 22.0f;
+        this.text(context, "Now Playing", x + pad, y + 22.0f, H1, WHITE, Align.LEFT);
+        float coverSize = Math.min(136.0f, Math.max(108.0f, width * 0.25f));
+        float coverX = x + pad;
+        float coverY = y + 62.0f;
         this.drawCover(context, track, coverX, coverY, coverSize);
         if (track == null) {
-            this.text(context, "No track playing", coverX, coverY + coverSize + 28.0f, H1, WHITE, Align.LEFT);
-            this.text(context, "Search a track or pick one from Queue.", coverX, coverY + coverSize + 58.0f, BODY, MUTED, Align.LEFT);
+            this.text(context, "No track playing", coverX, coverY + coverSize + 22.0f, H1, WHITE, Align.LEFT);
+            this.text(context, "Search a track or pick one from Queue.", coverX, coverY + coverSize + 45.0f, SMALL, MUTED, Align.LEFT);
         } else {
-            this.text(context, ellipsize(track.getName(), 26), coverX, coverY + coverSize + 26.0f, H1, WHITE, Align.LEFT);
-            this.text(context, ellipsize(track.artistsText(), 32), coverX, coverY + coverSize + 54.0f, BODY, MUTED, Align.LEFT);
-            this.text(context, "Source: " + MusicService.normalizeSource(track.getSource()), coverX, coverY + coverSize + 84.0f, SMALL, DIM, Align.LEFT);
-            this.icon(context, ICON_FOLDER, coverX + 10.0f, coverY + coverSize + 108.0f, ICON_SMALL, DIM, Align.CENTER);
-            this.text(context, state.isCached() ? "Cached in .mizulune/music" : "Temporary cache while playing",
-                    coverX + 26.0f, coverY + coverSize + 104.0f, SMALL, DIM, Align.LEFT);
+            this.text(context, ellipsize(track.getName(), 24), coverX, coverY + coverSize + 20.0f, H1, WHITE, Align.LEFT);
+            this.text(context, ellipsize(track.artistsText(), 30), coverX, coverY + coverSize + 43.0f, BODY, MUTED, Align.LEFT);
+            this.text(context, "Source: " + MusicService.normalizeSource(track.getSource()), coverX, coverY + coverSize + 68.0f, SMALL, DIM, Align.LEFT);
+            this.iconCenterY(context, ICON_FOLDER, coverX + 8.0f, coverY + coverSize + 92.0f, ICON_SMALL, DIM, Align.CENTER);
+            this.textCenterY(context, state.isCached() ? "Cached in .mizulune/music" : "Temporary cache",
+                    coverX + 22.0f, coverY + coverSize + 92.0f, SMALL, DIM, Align.LEFT);
         }
 
-        float lyricsX = coverX + coverSize + 28.0f;
-        float lyricsY = y + 74.0f;
-        float lyricsW = width - (lyricsX - x) - 28.0f;
-        float lyricsH = height - 104.0f;
-        this.rounded(context, lyricsX, lyricsY, lyricsW, lyricsH, 10.0f, 0x66131313);
-        this.stroke(context, lyricsX, lyricsY, lyricsW, lyricsH, 10.0f, LINE, 1.0f);
-        this.renderLyrics(context, track, state, lyricsX + 22.0f, lyricsY + 18.0f, lyricsW - 44.0f, lyricsH - 36.0f);
+        float lyricsX = coverX + coverSize + 24.0f;
+        float lyricsY = coverY;
+        float lyricsW = width - (lyricsX - x) - pad;
+        float lyricsH = height - 86.0f;
+        this.rounded(context, lyricsX, lyricsY, lyricsW, lyricsH, 8.0f, 0x30151515);
+        this.renderLyrics(context, track, state, lyricsX + 16.0f, lyricsY + 14.0f, lyricsW - 32.0f, lyricsH - 28.0f);
     }
 
     private void renderLyrics(DrawContext context, MusicTrack track, MusicPlaybackState state,
@@ -364,7 +415,7 @@ public class MusicScreen extends Screen {
             return;
         }
         int current = shit.zen.music.lyrics.LyricParser.currentLineIndex(lines, state.getPositionMs());
-        float lineH = 32.0f;
+        float lineH = 25.0f;
         float targetScroll = Math.max(0.0f, current * lineH - height * 0.42f);
         this.lyricScroll += (targetScroll - this.lyricScroll) * 0.18f;
         context.save();
@@ -375,7 +426,8 @@ public class MusicScreen extends Screen {
             if (yy > y - lineH && yy < y + height + lineH) {
                 boolean active = i == current;
                 String text = timestamp(line.timeMs()) + "   " + line.text();
-                this.text(context, ellipsize(text, 72), x, yy, active ? BODY : SMALL, active ? WHITE : MUTED, Align.LEFT);
+                this.textCenterY(context, ellipsize(text, 64), x, yy + lineH * 0.5f,
+                        active ? BODY : SMALL, active ? WHITE : MUTED, Align.LEFT);
             }
             yy += lineH;
         }
@@ -383,154 +435,196 @@ public class MusicScreen extends Screen {
     }
 
     private void renderQueue(DrawContext context, float x, float y, float width, float height, int mouseX, int mouseY) {
-        this.text(context, "Playback Queue", x + 28.0f, y + 28.0f, H1, WHITE, Align.LEFT);
-        this.text(context, "Current list", x + 28.0f, y + 58.0f, BODY, MUTED, Align.LEFT);
-        this.drawButton(context, x + width - 238.0f, y + 28.0f, 104.0f, 30.0f,
-                "Clear Queue", mouseX, mouseY, false, this.service::clearQueue);
-        this.drawButton(context, x + width - 124.0f, y + 28.0f, 96.0f, 30.0f,
+        float pad = 22.0f;
+        this.text(context, "Playback Queue", x + pad, y + 22.0f, H1, WHITE, Align.LEFT);
+        this.text(context, "Current list", x + pad, y + 46.0f, BODY, MUTED, Align.LEFT);
+        this.pillButton(context, "queue:clear", x + width - 172.0f, y + 24.0f, 70.0f, 24.0f,
+                "Clear", mouseX, mouseY, false, this.service::clearQueue);
+        this.pillButton(context, "queue:mode", x + width - 94.0f, y + 24.0f, 72.0f, 24.0f,
                 modeLabel(this.service.playbackState().getPlayMode()), mouseX, mouseY, false, this.service::cyclePlayMode);
+
         List<MusicTrack> queue = this.service.queueSnapshot();
-        float listX = x + 28.0f;
-        float listY = y + 86.0f;
-        float listW = width - 56.0f;
-        float listH = height - 108.0f;
-        float rowH = 54.0f;
+        float listX = x + pad;
+        float listY = y + 74.0f;
+        float listW = width - pad * 2.0f;
+        float listH = height - 100.0f;
+        float rowH = 46.0f;
         this.maxQueueScroll = Math.max(0.0f, queue.size() * (rowH + 6.0f) - 6.0f - listH);
-        this.queueScroll = clamp(this.queueScroll, 0.0f, this.maxQueueScroll);
+        this.queueScrollTarget = clamp(this.queueScrollTarget, 0.0f, this.maxQueueScroll);
+        this.queueScrollTimer.animate(this.queueScrollTarget, 0.22, Easings.EASE_OUT_POW2);
+        this.queueScrollTimer.tick();
+        float scroll = this.queueScrollTimer.getValueF();
+
         context.save();
         context.clip(Rectangle.ofXYWH(listX, listY, listW, listH));
         if (queue.isEmpty()) {
-            this.text(context, "Queue is empty.", listX, listY + 18.0f, BODY, MUTED, Align.LEFT);
+            this.textCenterY(context, "Queue is empty.", listX + 4.0f, listY + 20.0f, BODY, MUTED, Align.LEFT);
         } else {
-            float yy = listY - this.queueScroll;
+            float yy = listY - scroll;
             for (int i = 0; i < queue.size(); i++) {
-                this.renderTrackRow(context, queue.get(i), i, listX, yy, listW, rowH, mouseX, mouseY, false);
+                this.renderTrackRow(context, queue.get(i), i, i, listX, yy, listW, rowH, mouseX, mouseY, false);
                 yy += rowH + 6.0f;
             }
         }
         context.restore();
-        this.text(context, queue.size() + " tracks", x + width * 0.5f, y + height - 24.0f, SMALL, DIM, Align.CENTER);
+        this.text(context, queue.size() + " tracks", x + width * 0.5f, y + height - 22.0f, SMALL, DIM, Align.CENTER);
     }
 
     private void renderAbout(DrawContext context, float x, float y, float width, float height) {
-        this.text(context, "About Mizulune Music", x + 28.0f, y + 32.0f, H1, WHITE, Align.LEFT);
-        float cardY = y + 78.0f;
-        float half = (width - 74.0f) * 0.5f;
-        this.aboutBlock(context, x + 28.0f, cardY, half, 132.0f, ICON_HEART, "Special Thanks",
-                "Thanks to GD-Studio.\nBilibili creator / GD\u97f3\u4e50\u53f0 (music.gdstudio.xyz).\nMusic resources make this module possible.");
-        this.aboutBlock(context, x + 46.0f + half, cardY, half, 132.0f, ICON_LAB, "Project",
-                "An experimental music player module for the Mizulune client.\nSearch, cache, queue, and play music inside Minecraft.");
-        this.aboutBlock(context, x + 28.0f, cardY + 154.0f, width - 56.0f, 82.0f, ICON_PERSON, "Author",
+        float pad = 22.0f;
+        this.text(context, "About Mizulune Music", x + pad, y + 24.0f, H1, WHITE, Align.LEFT);
+        float cardY = y + 66.0f;
+        float half = (width - pad * 2.0f - 14.0f) * 0.5f;
+        this.aboutBlock(context, x + pad, cardY, half, 112.0f, ICON_HEART, "Special Thanks",
+                "GD-Studio\nBilibili creator / GD\u97f3\u4e50\u53f0\nmusic.gdstudio.xyz");
+        this.aboutBlock(context, x + pad + half + 14.0f, cardY, half, 112.0f, ICON_LAB, "Project",
+                "Experimental music player module.\nSearch, cache, queue, and play\ninside Minecraft.");
+        this.aboutBlock(context, x + pad, cardY + 132.0f, width - pad * 2.0f, 70.0f, ICON_PERSON, "Author",
                 "GitHub: Castorice1337\nMizulune client experimental platform.");
-        this.aboutBlock(context, x + 28.0f, cardY + 258.0f, width - 56.0f, 82.0f, ICON_INFO, "Notice",
-                "For personal learning and testing only.\nThe client is not a music distributor and does not host music content.");
+        this.aboutBlock(context, x + pad, cardY + 218.0f, width - pad * 2.0f, 70.0f, ICON_INFO, "Notice",
+                "For personal learning and testing only.\nThe client is not a music distributor.");
     }
 
     private void aboutBlock(DrawContext context, float x, float y, float width, float height, String icon, String title, String body) {
-        this.rounded(context, x, y, width, height, 9.0f, 0x66151515);
-        this.stroke(context, x, y, width, height, 9.0f, LINE, 1.0f);
-        this.icon(context, icon, x + 24.0f, y + 17.0f, ICON, MUTED, Align.CENTER);
-        this.text(context, title, x + 48.0f, y + 18.0f, BODY, WHITE, Align.LEFT);
+        this.rounded(context, x, y, width, height, 8.0f, 0x30151515);
+        this.iconCenterY(context, icon, x + 18.0f, y + 22.0f, ICON, MUTED, Align.CENTER);
+        this.textCenterY(context, title, x + 38.0f, y + 22.0f, BODY, WHITE, Align.LEFT);
         String[] lines = body.split("\\n");
-        float yy = y + 52.0f;
+        float yy = y + 50.0f;
         for (String line : lines) {
-            this.text(context, ellipsize(line, width > 400.0f ? 92 : 44), x + 24.0f, yy, SMALL, MUTED, Align.LEFT);
-            yy += 23.0f;
+            this.text(context, ellipsize(line, width > 360.0f ? 82 : 38), x + 18.0f, yy, SMALL, MUTED, Align.LEFT);
+            yy += 17.0f;
         }
     }
 
-    private void renderTrackRow(DrawContext context, MusicTrack track, int index, float x, float y, float width,
+    private void renderTrackRow(DrawContext context, MusicTrack track, int visualIndex, int queueIndex, float x, float y, float width,
                                 float height, int mouseX, int mouseY, boolean searchResult) {
         if (y + height < 0.0f || y > this.height) {
             return;
         }
-        boolean current = !searchResult && index == this.service.currentQueueIndex();
-        boolean hover = contains(mouseX, mouseY, x, y, width, height);
-        this.rounded(context, x, y, width, height, 8.0f, current ? 0x88262626 : hover ? ROW_HOVER : ROW);
-        this.stroke(context, x, y, width, height, 8.0f, current ? LINE_STRONG : LINE, 1.0f);
-        float cover = height - 16.0f;
-        float coverX = searchResult ? x + 8.0f : x + 44.0f;
+        MusicTrack playing = this.service.playbackState().getCurrentTrack();
+        boolean current = !searchResult && playing != null && playing.stableKey().equals(track.stableKey());
+        boolean hovered = contains(mouseX, mouseY, x, y, width, height);
+        float hover = this.hover((searchResult ? "search:" : "queue:") + visualIndex + ":" + track.stableKey(), hovered || current);
+        this.rounded(context, x, y, width, height, 8.0f, Argb.interpolate(ROW_BASE, ROW_HOVER, hover));
+        if (current) {
+            this.rounded(context, x + 2.0f, y + 8.0f, 2.0f, height - 16.0f, 1.0f, 0xCCFFFFFF);
+        }
+        if (hovered && !current) {
+            this.stroke(context, x, y, width, height, 8.0f, LINE_HOVER, 1.0f);
+        }
+
+        float cover = 34.0f;
+        float coverX = searchResult ? x + 8.0f : x + 42.0f;
         if (!searchResult) {
             if (current) {
-                this.icon(context, ICON_VOLUME, x + 22.0f, y + 16.0f, ICON_SMALL, WHITE, Align.CENTER);
+                this.iconCenterY(context, ICON_VOLUME, x + 22.0f, y + height * 0.5f, ICON_SMALL, WHITE, Align.CENTER);
             } else {
-                this.text(context, Integer.toString(index + 1), x + 22.0f, y + 17.0f, SMALL, DIM, Align.CENTER);
+                this.textCenterY(context, String.format(Locale.ROOT, "%02d", visualIndex + 1), x + 22.0f,
+                        y + height * 0.5f, SMALL, DIM, Align.CENTER);
             }
         }
-        this.drawCover(context, track, coverX, y + 8.0f, cover);
-        float textX = coverX + cover + 14.0f;
-        int titleChars = searchResult ? 42 : 34;
-        this.text(context, ellipsize(track.getName(), titleChars), textX, y + 8.0f, BODY, WHITE, Align.LEFT);
-        this.text(context, ellipsize(track.artistsText(), titleChars + 10), textX, y + 30.0f, SMALL, MUTED, Align.LEFT);
+        this.drawCover(context, track, coverX, y + (height - cover) * 0.5f, cover);
+        float textX = coverX + cover + 12.0f;
+        float actionW = searchResult ? 98.0f : 74.0f;
+        float textW = width - (textX - x) - actionW - 18.0f;
+        float rowCenter = y + height * 0.5f;
+        this.textCenterY(context, ellipsize(track.getName(), Math.max(12, (int)(textW / 7.0f))),
+                textX, rowCenter - 8.0f, BODY, WHITE, Align.LEFT);
+        this.textCenterY(context, ellipsize(track.artistsText(), Math.max(14, (int)(textW / 6.0f))),
+                textX, rowCenter + 9.0f, SMALL, MUTED, Align.LEFT);
         if (!searchResult) {
-            this.text(context, timestamp(track.getDurationMs()), x + width - 118.0f, y + 18.0f, SMALL, DIM, Align.RIGHT);
+            this.textCenterY(context, timestamp(track.getDurationMs()), x + width - 100.0f, y + height * 0.5f, SMALL, DIM, Align.RIGHT);
         }
-        float bx = x + width - (searchResult ? 122.0f : 72.0f);
-        this.iconButton(context, bx, y + 11.0f, ICON_PLAY, mouseX, mouseY, () -> {
-            if (searchResult) {
-                this.service.playTrack(track);
-            } else {
-                this.service.playQueueIndex(index);
-            }
-        });
+
+        float bx = x + width - (searchResult ? 96.0f : 60.0f);
+        this.iconButton(context, "row-play:" + visualIndex + ":" + track.stableKey(), bx, y + 10.0f, 26.0f,
+                ICON_PLAY, mouseX, mouseY, () -> {
+                    if (searchResult) {
+                        this.service.playTrack(track);
+                    } else {
+                        this.service.playQueueIndex(queueIndex);
+                    }
+                });
         if (searchResult) {
-            this.iconButton(context, bx + 40.0f, y + 11.0f, ICON_DOWNLOAD, mouseX, mouseY, () -> this.service.cacheAndPlayTrack(track));
-            this.iconButton(context, bx + 80.0f, y + 11.0f, ICON_ADD, mouseX, mouseY, () -> this.service.addToQueue(track));
+            this.iconButton(context, "row-cache:" + visualIndex + ":" + track.stableKey(), bx + 32.0f, y + 10.0f, 26.0f,
+                    ICON_DOWNLOAD, mouseX, mouseY, () -> this.service.cacheAndPlayTrack(track));
+            this.iconButton(context, "row-add:" + visualIndex + ":" + track.stableKey(), bx + 64.0f, y + 10.0f, 26.0f,
+                    ICON_ADD, mouseX, mouseY, () -> this.service.addToQueue(track));
         } else {
-            this.iconButton(context, bx + 40.0f, y + 11.0f, ICON_CLOSE, mouseX, mouseY, () -> this.service.removeQueueIndex(index));
+            this.iconButton(context, "row-remove:" + visualIndex + ":" + track.stableKey(), bx + 32.0f, y + 10.0f, 26.0f,
+                    ICON_CLOSE, mouseX, mouseY, () -> this.service.removeQueueIndex(queueIndex));
         }
     }
 
     private void renderBottomBar(DrawContext context, float x, float y, float width, float height, int mouseX, int mouseY) {
         MusicPlaybackState state = this.service.playbackState();
         MusicTrack track = state.getCurrentTrack();
-        float cover = 42.0f;
-        this.drawCover(context, track, x + 18.0f, y + 12.0f, cover);
-        this.text(context, track == null ? "No track" : ellipsize(track.getName(), 20), x + 72.0f, y + 13.0f, BODY, WHITE, Align.LEFT);
-        this.text(context, track == null ? "Mizulune Music" : ellipsize(track.artistsText(), 24), x + 72.0f, y + 36.0f, SMALL, MUTED, Align.LEFT);
+        float infoX = x + 14.0f;
+        float infoW = width < 700.0f ? 150.0f : 190.0f;
+        float cover = 36.0f;
+        this.drawCover(context, track, infoX, y + 9.0f, cover);
+        float infoCenter = y + height * 0.5f;
+        this.textCenterY(context, track == null ? "No track" : ellipsize(track.getName(), width < 700.0f ? 14 : 20),
+                infoX + 46.0f, infoCenter - 8.0f, BODY, WHITE, Align.LEFT);
+        this.textCenterY(context, track == null ? "Mizulune Music" : ellipsize(track.artistsText(), width < 700.0f ? 16 : 24),
+                infoX + 46.0f, infoCenter + 9.0f, SMALL, MUTED, Align.LEFT);
 
+        boolean compact = width < 740.0f;
+        float rightW = compact ? 70.0f : 126.0f;
+        float controlsW = 96.0f;
+        float rightX = x + width - rightW - 14.0f;
+        float controlsX = rightX - controlsW - 16.0f;
+        float progressX = infoX + infoW + 14.0f;
+        float progressW = Math.max(64.0f, controlsX - progressX - 16.0f);
+        float sliderY = y + 33.0f;
         long displayPosition = this.dragTarget == DragTarget.PROGRESS && this.pendingSeekMs >= 0L
                 ? this.pendingSeekMs
                 : state.getPositionMs();
-        float progressX = x + Math.min(270.0f, width * 0.29f);
-        float progressW = Math.max(170.0f, width * 0.28f);
-        float barY = y + 34.0f;
-        this.text(context, timestamp(displayPosition), progressX - 50.0f, barY - 8.0f, SMALL, MUTED, Align.LEFT);
-        this.drawSlider(context, progressX, barY, progressW,
+        this.textCenterY(context, timestamp(displayPosition), progressX - 38.0f, sliderY + 2.0f, SMALL, MUTED, Align.LEFT);
+        this.drawSlider(context, progressX, sliderY, progressW,
                 state.getDurationMs() <= 0L ? 0.0f : (float) displayPosition / state.getDurationMs());
-        this.text(context, timestamp(state.getDurationMs()), progressX + progressW + 14.0f, barY - 8.0f, SMALL, MUTED, Align.LEFT);
-        this.lastProgressRect = Rectangle.ofXYWH(progressX, barY - 10.0f, progressW, 22.0f);
-        this.clickAreas.add(new ClickArea(progressX, barY - 10.0f, progressW, 22.0f, () -> this.dragTarget = DragTarget.PROGRESS));
+        this.textCenterY(context, timestamp(state.getDurationMs()), progressX + progressW + 10.0f, sliderY + 2.0f, SMALL, MUTED, Align.LEFT);
+        this.lastProgressRect = Rectangle.ofXYWH(progressX, sliderY - 8.0f, progressW, 18.0f);
+        this.clickAreas.add(new ClickArea(progressX, sliderY - 8.0f, progressW, 18.0f, () -> this.dragTarget = DragTarget.PROGRESS));
 
-        float controlsX = x + width * 0.58f;
-        this.iconButton(context, controlsX - 66.0f, y + 18.0f, ICON_PREVIOUS, mouseX, mouseY, this.service::previous);
-        this.iconButton(context, controlsX - 20.0f, y + 12.0f, state.isPlaying() ? ICON_PAUSE : ICON_PLAY, mouseX, mouseY, this.service::togglePlay, 40.0f);
-        this.iconButton(context, controlsX + 36.0f, y + 18.0f, ICON_NEXT, mouseX, mouseY, this.service::next);
-        this.iconTextButton(context, controlsX + 84.0f, y + 16.0f, 98.0f, 34.0f, modeIcon(state.getPlayMode()), modeLabel(state.getPlayMode()),
-                mouseX, mouseY, false, this.service::cyclePlayMode);
+        this.iconButton(context, "bottom-prev", controlsX, y + 14.0f, 26.0f, ICON_PREVIOUS, mouseX, mouseY, this.service::previous);
+        this.iconButton(context, "bottom-play", controlsX + 35.0f, y + 10.0f, 34.0f,
+                state.isPlaying() ? ICON_PAUSE : ICON_PLAY, mouseX, mouseY, this.service::togglePlay);
+        this.iconButton(context, "bottom-next", controlsX + 78.0f, y + 14.0f, 26.0f, ICON_NEXT, mouseX, mouseY, this.service::next);
 
-        float volumeX = x + width - 136.0f;
-        float volumeValue = this.dragTarget == DragTarget.VOLUME && this.pendingVolume >= 0.0f
-                ? this.pendingVolume
-                : state.getVolume();
-        this.icon(context, ICON_VOLUME, volumeX - 26.0f, barY - 12.0f, ICON, MUTED, Align.CENTER);
-        this.drawSlider(context, volumeX, barY, 100.0f, volumeValue);
-        this.lastVolumeRect = Rectangle.ofXYWH(volumeX, barY - 10.0f, 100.0f, 22.0f);
-        this.clickAreas.add(new ClickArea(volumeX, barY - 10.0f, 100.0f, 22.0f, () -> this.dragTarget = DragTarget.VOLUME));
+        this.iconButton(context, "bottom-mode", rightX, y + 14.0f, 26.0f,
+                modeIcon(state.getPlayMode()), mouseX, mouseY, this.service::cyclePlayMode);
+        if (!compact) {
+            float volumeValue = this.dragTarget == DragTarget.VOLUME && this.pendingVolume >= 0.0f
+                    ? this.pendingVolume
+                    : state.getVolume();
+            this.iconCenterY(context, ICON_VOLUME, rightX + 36.0f, y + 27.0f, ICON_SMALL, MUTED, Align.CENTER);
+            this.drawSlider(context, rightX + 50.0f, sliderY, 66.0f, volumeValue);
+            this.lastVolumeRect = Rectangle.ofXYWH(rightX + 50.0f, sliderY - 8.0f, 66.0f, 18.0f);
+            this.clickAreas.add(new ClickArea(rightX + 50.0f, sliderY - 8.0f, 66.0f, 18.0f,
+                    () -> this.dragTarget = DragTarget.VOLUME));
+        } else {
+            this.iconButton(context, "bottom-volume", rightX + 34.0f, y + 14.0f, 26.0f,
+                    ICON_VOLUME, mouseX, mouseY, () -> {
+                    });
+            this.lastVolumeRect = null;
+        }
+
         if (!state.getError().isBlank()) {
-            this.text(context, ellipsize(state.getError(), 48), x + width * 0.5f, y + height - 18.0f, SMALL, MUTED, Align.CENTER);
+            this.text(context, ellipsize(state.getError(), 42), x + width * 0.5f, y + height - 12.0f, SMALL, MUTED, Align.CENTER);
         } else if (state.isLoading()) {
-            this.text(context, "Loading...", x + width * 0.5f, y + height - 18.0f, SMALL, MUTED, Align.CENTER);
+            this.text(context, "Loading...", x + width * 0.5f, y + height - 12.0f, SMALL, MUTED, Align.CENTER);
         }
     }
 
     private void drawCover(DrawContext context, MusicTrack track, float x, float y, float size) {
-        this.rounded(context, x, y, size, size, 8.0f, 0x88222222);
+        this.rounded(context, x, y, size, size, Math.min(7.0f, size * 0.18f), 0x66202020);
         if (track != null) {
             Path file = this.coverFor(track);
             if (file != null) {
                 context.save();
-                context.clipRoundedRect(RoundedRectangle.ofXYWHR(x, y, size, size, 8.0f), true);
+                context.clipRoundedRect(RoundedRectangle.ofXYWHR(x, y, size, size, Math.min(7.0f, size * 0.18f)), true);
                 Texture texture = this.coverTextures.computeIfAbsent(file.toAbsolutePath().normalize().toString(),
                         ignored -> new Texture(file, 300, 300));
                 context.drawTexture(texture, Rectangle.ofXYWH(0, 0, 300, 300),
@@ -539,9 +633,8 @@ public class MusicScreen extends Screen {
                 return;
             }
         }
-        this.stroke(context, x, y, size, size, 8.0f, LINE, 1.0f);
-        this.icon(context, ICON_PLAYER, x + size * 0.5f, y + size * 0.5f - 12.0f,
-                size > 70.0f ? ICON_LARGE : ICON, MUTED, Align.CENTER);
+        this.iconCenterY(context, ICON_PLAYER, x + size * 0.5f, y + size * 0.5f,
+                size > 42.0f ? ICON_LARGE : ICON, MUTED, Align.CENTER);
     }
 
     private Path coverFor(MusicTrack track) {
@@ -556,9 +649,7 @@ public class MusicScreen extends Screen {
                     this.coverRequested.remove(key);
                     return;
                 }
-                if (path != null) {
-                    this.coverFiles.put(key, path);
-                }
+                this.coverFiles.put(key, path);
             });
         }
         return null;
@@ -589,6 +680,7 @@ public class MusicScreen extends Screen {
         if (query.isEmpty()) {
             this.searchResults = List.of();
             this.searching = false;
+            this.searchScrollTarget = 0.0f;
             return;
         }
         this.searching = true;
@@ -599,85 +691,95 @@ public class MusicScreen extends Screen {
             }
             this.searchResults = results == null ? List.of() : results;
             this.searching = false;
-            this.searchScroll = 0.0f;
+            this.searchScrollTarget = 0.0f;
         });
     }
 
-    private void drawButton(DrawContext context, float x, float y, float width, float height, String label,
+    private void setPage(Page target) {
+        if (this.page == target) {
+            return;
+        }
+        this.page = target;
+        this.pageTimer.setCurrentValue(0.0);
+        this.pageTimer.setFromValue(0.0);
+        this.pageTimer.setToValue(0.0);
+        this.searchFocused = false;
+        this.searchSelectAll = false;
+    }
+
+    private void cycleSource() {
+        List<String> sources = this.service.config().getEnabledSources();
+        if (sources.isEmpty()) {
+            return;
+        }
+        int index = sources.indexOf(this.selectedSource);
+        this.selectedSource = sources.get((index + 1 + sources.size()) % sources.size());
+        this.startSearch();
+    }
+
+    private void pillButton(DrawContext context, String key, float x, float y, float width, float height, String label,
                             int mouseX, int mouseY, boolean disabled, Runnable action) {
-        boolean hover = !disabled && contains(mouseX, mouseY, x, y, width, height);
-        this.rounded(context, x, y, width, height, 7.0f, disabled ? 0x33161616 : hover ? 0x88303030 : 0x661D1D1D);
-        this.stroke(context, x, y, width, height, 7.0f, disabled ? 0x22FFFFFF : hover ? LINE_STRONG : LINE, 1.0f);
-        this.text(context, label, x + width * 0.5f, y + height * 0.5f - 8.0f, SMALL, disabled ? DIM : WHITE, Align.CENTER);
+        boolean hovered = !disabled && contains(mouseX, mouseY, x, y, width, height);
+        float hover = this.hover("btn:" + key, hovered);
+        int fill = disabled ? 0x22161616 : Argb.interpolate(0x3A1B1B1B, 0x662C2C2C, hover);
+        int border = disabled ? 0x16FFFFFF : Argb.interpolate(LINE, LINE_HOVER, hover);
+        this.rounded(context, x, y, width, height, 7.0f, fill);
+        this.stroke(context, x, y, width, height, 7.0f, border, 1.0f);
+        this.textCenterY(context, label, x + width * 0.5f, y + height * 0.5f, SMALL, disabled ? DIM : WHITE, Align.CENTER);
         if (!disabled) {
             this.clickAreas.add(new ClickArea(x, y, width, height, action));
         }
     }
 
-    private void iconTextButton(DrawContext context, float x, float y, float width, float height, String icon, String label,
-                                int mouseX, int mouseY, boolean disabled, Runnable action) {
-        boolean hover = !disabled && contains(mouseX, mouseY, x, y, width, height);
-        this.rounded(context, x, y, width, height, 7.0f, disabled ? 0x33161616 : hover ? 0x88303030 : 0x661D1D1D);
-        this.stroke(context, x, y, width, height, 7.0f, disabled ? 0x22FFFFFF : hover ? LINE_STRONG : LINE, 1.0f);
-        float contentW = this.measure(label, SMALL) + 22.0f;
-        float startX = x + (width - contentW) * 0.5f;
-        this.icon(context, icon, startX + 8.0f, y + height * 0.5f - 10.0f, ICON_SMALL, disabled ? DIM : MUTED, Align.CENTER);
-        this.text(context, label, startX + 22.0f, y + height * 0.5f - 8.0f, SMALL, disabled ? DIM : WHITE, Align.LEFT);
+    private void drawChip(DrawContext context, String key, float x, float y, float width, float height, String label,
+                          boolean active, boolean disabled, int mouseX, int mouseY, Runnable action) {
+        boolean hovered = !disabled && contains(mouseX, mouseY, x, y, width, height);
+        float hover = this.hover("chip:" + key, hovered || active);
+        int fill = active ? 0x662C2C2C : Argb.interpolate(0x26171717, 0x4A282828, hover);
+        int border = active ? LINE_ACTIVE : Argb.interpolate(0x12FFFFFF, LINE_HOVER, hover);
+        this.rounded(context, x, y, width, height, height * 0.5f, fill);
+        if (active || hovered) {
+            this.stroke(context, x, y, width, height, height * 0.5f, border, 1.0f);
+        }
+        this.textCenterY(context, label, x + width * 0.5f, y + height * 0.5f, SMALL,
+                disabled ? DIM : active ? WHITE : MUTED, Align.CENTER);
         if (!disabled) {
             this.clickAreas.add(new ClickArea(x, y, width, height, action));
         }
     }
 
-    private void drawChip(DrawContext context, float x, float y, float width, String label, boolean active,
-                          int mouseX, int mouseY, Runnable action) {
-        this.drawChip(context, x, y, width, label, active, mouseX, mouseY, false, action);
-    }
-
-    private void drawChip(DrawContext context, float x, float y, float width, String label, boolean active,
-                          int mouseX, int mouseY, boolean disabled, Runnable action) {
-        boolean hover = !disabled && contains(mouseX, mouseY, x, y, width, 28.0f);
-        this.rounded(context, x, y, width, 28.0f, 8.0f, active ? 0x99303030 : hover ? 0x66303030 : 0x441A1A1A);
-        this.stroke(context, x, y, width, 28.0f, 8.0f, active ? LINE_STRONG : LINE, 1.0f);
-        this.text(context, label, x + width * 0.5f, y + 7.0f, SMALL, disabled ? DIM : active ? WHITE : MUTED, Align.CENTER);
-        if (!disabled) {
-            this.clickAreas.add(new ClickArea(x, y, width, 28.0f, action));
-        }
-    }
-
-    private void iconButton(DrawContext context, float x, float y, String icon, int mouseX, int mouseY, Runnable action) {
-        this.iconButton(context, x, y, icon, mouseX, mouseY, action, 32.0f);
-    }
-
-    private void iconButton(DrawContext context, float x, float y, String icon, int mouseX, int mouseY, Runnable action, float size) {
-        boolean hover = contains(mouseX, mouseY, x, y, size, size);
-        this.rounded(context, x, y, size, size, size * 0.5f, hover ? 0x88404040 : 0x00111111);
-        this.icon(context, icon, x + size * 0.5f, y + size * 0.5f - 10.0f,
-                size >= 38.0f ? ICON_LARGE : ICON, hover ? WHITE : MUTED, Align.CENTER);
+    private void iconButton(DrawContext context, String key, float x, float y, float size, String icon,
+                            int mouseX, int mouseY, Runnable action) {
+        boolean hovered = contains(mouseX, mouseY, x, y, size, size);
+        float hover = this.hover("icon:" + key, hovered);
+        this.rounded(context, x, y, size, size, size * 0.5f, Argb.interpolate(0x00181818, 0x552D2D2D, hover));
+        this.iconCenterY(context, icon, x + size * 0.5f, y + size * 0.5f,
+                size > 30.0f ? ICON_LARGE : ICON, hovered ? WHITE : MUTED, Align.CENTER);
         this.clickAreas.add(new ClickArea(x, y, size, size, action));
     }
 
     private void drawSlider(DrawContext context, float x, float y, float width, float value) {
-        float progress = Math.max(0.0f, Math.min(1.0f, value));
-        this.rounded(context, x, y, width, 5.0f, 2.5f, 0x66383838);
-        this.rounded(context, x, y, width * progress, 5.0f, 2.5f, 0xFFE1E1E1);
-        this.rounded(context, x + width * progress - 5.0f, y - 3.0f, 10.0f, 10.0f, 5.0f, 0xFFFFFFFF);
+        float progress = clamp(value, 0.0f, 1.0f);
+        this.rounded(context, x, y, width, 4.0f, 2.0f, 0x55353535);
+        this.rounded(context, x, y, width * progress, 4.0f, 2.0f, 0xFFE5E5E5);
+        this.rounded(context, x + width * progress - 4.0f, y - 3.0f, 10.0f, 10.0f, 5.0f, 0xFFFFFFFF);
     }
 
-    private void drawPanel(DrawContext context, float x, float y, float width, float height, float radius, boolean strong) {
+    private void drawGlass(DrawContext context, float x, float y, float width, float height, float radius, int tint, boolean strong) {
         RoundedRectangle rect = RoundedRectangle.ofXYWHR(x, y, width, height, radius);
         if (this.module.useLiquidGlass()) {
             LiquidGlassStyle style = LiquidGlassStyle.builder()
-                    .blurRadius(18.0f)
-                    .opacity(strong ? 0.88f : 0.72f)
-                    .tint(0xAA000000, 0.34f)
-                    .darkness(0.32f)
+                    .blurRadius(16.0f)
+                    .opacity(strong ? 0.78f : 0.62f)
+                    .tint(Argb.scaleAlpha(tint, 1.0f), 0.42f)
+                    .darkness(0.30f)
                     .chromaStrength(0.0f)
                     .build();
             context.drawLiquidGlassPanel(rect, style);
         } else {
-            context.drawBackdropBlurredRoundedRect(rect, 18.0f, strong ? 0.92f : 0.78f, strong ? PANEL : PANEL_SOFT);
+            context.drawBackdropBlurredRoundedRect(rect, 16.0f, strong ? 0.78f : 0.58f, color(tint));
         }
-        this.stroke(context, x, y, width, height, radius, LINE, 1.0f);
+        this.stroke(context, x, y, width, height, radius, LINE_HOVER, 1.0f);
     }
 
     private void rounded(DrawContext context, float x, float y, float width, float height, float radius, int color) {
@@ -702,8 +804,25 @@ public class MusicScreen extends Screen {
         context.drawString(text, drawX, y, font, paint(color));
     }
 
-    private void icon(DrawContext context, String icon, float x, float y, FontRenderer font, int color, Align align) {
-        this.text(context, icon, x, y, font, color, align);
+    private void textCenterY(DrawContext context, String value, float x, float centerY,
+                             FontRenderer font, int color, Align align) {
+        Rectangle bounds = font.getBounds(value);
+        float drawY = centerY - bounds.getHeight() * 0.5f;
+        this.text(context, value, x, drawY, font, color, align);
+    }
+
+    private void iconCenterY(DrawContext context, String icon, float x, float centerY,
+                             FontRenderer font, int color, Align align) {
+        Rectangle bounds = font.getBounds(icon);
+        float drawY = centerY - bounds.getHeight() * 0.5f;
+        this.text(context, icon, x, drawY, font, color, align);
+    }
+
+    private float hover(String key, boolean hovered) {
+        SmoothAnimationTimer timer = this.hoverTimers.computeIfAbsent(key, ignored -> new SmoothAnimationTimer());
+        timer.animate(hovered ? 1.0 : 0.0, 0.16, Easings.EASE_OUT_POW2);
+        timer.tick();
+        return clamp(timer.getValueF(), 0.0f, 1.0f);
     }
 
     private float measure(String text, FontRenderer font) {
@@ -712,6 +831,10 @@ public class MusicScreen extends Screen {
 
     private static Paint paint(int color) {
         return new Paint().setColor(color);
+    }
+
+    private int color(int color) {
+        return Argb.scaleAlpha(color, this.alpha);
     }
 
     private static boolean contains(double mx, double my, float x, float y, float width, float height) {
@@ -735,7 +858,7 @@ public class MusicScreen extends Screen {
         return switch (mode) {
             case ORDER -> "Order";
             case SHUFFLE -> "Shuffle";
-            case SINGLE -> "One Loop";
+            case SINGLE -> "Loop";
         };
     }
 
@@ -743,14 +866,16 @@ public class MusicScreen extends Screen {
         return switch (mode) {
             case ORDER -> ICON_REPEAT;
             case SHUFFLE -> ICON_SHUFFLE;
-            case SINGLE -> ICON_ONE_LOOP;
+            case SINGLE -> ICON_REPEAT;
         };
     }
 
-    private static MusicService.SearchType[] supportedSearchTypes() {
+    private static MusicService.SearchType[] searchChips() {
         return new MusicService.SearchType[] {
                 MusicService.SearchType.ALL,
                 MusicService.SearchType.SINGLE,
+                MusicService.SearchType.PLAYLIST,
+                MusicService.SearchType.ARTIST,
                 MusicService.SearchType.ALBUM
         };
     }
@@ -812,11 +937,11 @@ public class MusicScreen extends Screen {
     @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double scrollDelta) {
         if (this.page == Page.SEARCH) {
-            this.searchScroll = clamp(this.searchScroll - (float) scrollDelta * 28.0f, 0.0f, this.maxSearchScroll);
+            this.searchScrollTarget = clamp(this.searchScrollTarget - (float) scrollDelta * 26.0f, 0.0f, this.maxSearchScroll);
             return true;
         }
         if (this.page == Page.QUEUE) {
-            this.queueScroll = clamp(this.queueScroll - (float) scrollDelta * 28.0f, 0.0f, this.maxQueueScroll);
+            this.queueScrollTarget = clamp(this.queueScrollTarget - (float) scrollDelta * 26.0f, 0.0f, this.maxQueueScroll);
             return true;
         }
         return super.mouseScrolled(mouseX, mouseY, scrollDelta);
@@ -876,6 +1001,7 @@ public class MusicScreen extends Screen {
             }
             if (keyCode == GLFW.GLFW_KEY_ESCAPE) {
                 this.searchFocused = false;
+                this.searchSelectAll = false;
                 return true;
             }
         }
