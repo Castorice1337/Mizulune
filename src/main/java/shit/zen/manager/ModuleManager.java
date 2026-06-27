@@ -80,6 +80,7 @@ import shit.zen.modules.impl.world.AutoTools;
 import shit.zen.modules.impl.world.BlockIn;
 import shit.zen.modules.impl.world.Debugger;
 import shit.zen.modules.impl.world.MizuluneMusic;
+import shit.zen.modules.impl.world.Protocol;
 import shit.zen.modules.impl.world.Teams;
 import shit.zen.modules.impl.world.WebUI;
 import shit.zen.event.EventTarget;
@@ -168,6 +169,7 @@ public class ModuleManager extends ClientBase {
         this.register(new BlockIn());
         this.register(new Debugger());
         this.register(new MizuluneMusic());
+        this.register(new Protocol());
         this.register(new Teams());
         this.register(new WebUI());
     }
