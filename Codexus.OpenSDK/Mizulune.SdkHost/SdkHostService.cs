@@ -108,6 +108,18 @@ internal sealed class SdkHostService : IAsyncDisposable
             throw new HostCommandException("verification_required",
                 "4399 requires captcha verification, which the current OpenSDK cannot complete.");
         }
+        catch (HttpRequestException error)
+        {
+            throw MapAuthenticationError(error);
+        }
+        catch (InvalidOperationException error)
+        {
+            throw new HostCommandException("authentication_failed", error.Message);
+        }
+        catch (Exception error)
+        {
+            throw MapAuthenticationError(error);
+        }
     }
 
     private async Task<object> LoginEmailAsync(JsonElement parameters)
@@ -353,6 +365,22 @@ internal sealed class SdkHostService : IAsyncDisposable
     private static X19SAuthJson ParseSAuthJson(X19SAuthJsonWrapper wrapper) =>
         JsonSerializer.Deserialize<X19SAuthJson>(wrapper.Json)
         ?? throw new HostCommandException("authentication_failed", "The SDK returned malformed session metadata.");
+
+    private static HostCommandException MapAuthenticationError(Exception error)
+    {
+        var message = error.Message ?? string.Empty;
+        if (message.Contains("aid login limit", StringComparison.OrdinalIgnoreCase))
+            return new HostCommandException("authentication_limited",
+                "The account hit the upstream login limit. Retry later or switch account/device.");
+        if (message.Contains("Parameter not found", StringComparison.OrdinalIgnoreCase))
+            return new HostCommandException("authentication_response_invalid",
+                "The 4399 login response is missing required fields for sAuth generation.");
+        if (message.Contains("Authentication failed", StringComparison.OrdinalIgnoreCase))
+            return new HostCommandException("authentication_failed", message);
+        if (message.Contains("Failed to parse SDK response JSON", StringComparison.OrdinalIgnoreCase))
+            return new HostCommandException("authentication_failed", message);
+        return new HostCommandException("authentication_failed", message);
+    }
 
     private static string RequiredString(JsonElement parameters, string name)
     {

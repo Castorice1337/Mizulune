@@ -1,5 +1,6 @@
 ﻿using System.Net;
 using System.Text.Json;
+using System.Text.RegularExpressions;
 using Codexus.OpenSDK.Entities.C4399;
 using Codexus.OpenSDK.Exceptions;
 using Codexus.OpenSDK.Generator;
@@ -46,11 +47,9 @@ public class C4399 : IDisposable
 
         if (sessionId == null && captcha == null)
         {
-            var verifyResponse = await _login.PostAsync("/ptlogin/loginFrame.do?v=1", parameters.BuildQueryString(),
-                "application/x-www-form-urlencoded");
-            var html = await verifyResponse.Content.ReadAsStringAsync();
-            if (html.Contains("账号异常，请输入验证码"))
-                throw new VerifyException("Captcha required");
+            var challenge = await GetVerificationChallengeAsync(username);
+            if (challenge != null)
+                throw new VerifyException("Captcha required", challenge);
         }
 
         if (sessionId != null && captcha != null) parameters.Add("sessionId", sessionId).Add("inputCaptcha", captcha);
@@ -62,6 +61,35 @@ public class C4399 : IDisposable
             throw new Exception("Login failed.");
 
         return await GenerateSAuthAsync();
+    }
+
+    public async Task<C4399VerificationChallenge?> GetVerificationChallengeAsync(string username)
+    {
+        var query = new QueryBuilder()
+            .Add("username", username)
+            .Add("appId", AppId)
+            .Add("t", DateTimeOffset.UtcNow.ToUnixTimeMilliseconds())
+            .Add("inputWidth", "iptw2")
+            .BuildQueryString();
+        var response = await _login.GetAsync($"/ptlogin/verify.do?{query}");
+        response.EnsureSuccessStatusCode();
+        var fragment = (await response.Content.ReadAsStringAsync()).Trim();
+        if (fragment == "0") return null;
+
+        var sessionMatch = Regex.Match(fragment, "captchaId=([^'\"&<>\\s]+)", RegexOptions.IgnoreCase);
+        var imageMatch = Regex.Match(fragment, "<img[^>]+src\\s*=\\s*['\"]([^'\"]+)['\"]",
+            RegexOptions.IgnoreCase);
+        if (!sessionMatch.Success || !imageMatch.Success)
+            throw new FormatException("4399 returned an unrecognized captcha challenge.");
+
+        var session = WebUtility.HtmlDecode(sessionMatch.Groups[1].Value);
+        var imageSource = WebUtility.HtmlDecode(imageMatch.Groups[1].Value);
+        var imageUrl = new Uri(new Uri("https://ptlogin.4399.com"), imageSource);
+        using var imageResponse = await _login.Client.GetAsync(imageUrl);
+        imageResponse.EnsureSuccessStatusCode();
+        var bytes = await imageResponse.Content.ReadAsByteArrayAsync();
+        var contentType = imageResponse.Content.Headers.ContentType?.MediaType ?? "application/octet-stream";
+        return new C4399VerificationChallenge(session, imageUrl, bytes, contentType);
     }
 
     private async Task<string> GenerateSAuthAsync()
@@ -88,6 +116,14 @@ public class C4399 : IDisposable
         var url = response.RequestMessage.RequestUri.ToString();
         var queryStr = url[(url.LastIndexOf('?') + 1)..];
         var parameters = await GetUniAuthAsync(queryStr);
+
+        var required = new[] { "username", "uid", "token", "time" };
+        var missing = required.Where(key =>
+                !parameters.Contains(key) || string.IsNullOrWhiteSpace(parameters.GetOrDefault(key, string.Empty)))
+            .ToArray();
+        if (missing.Length > 0)
+            throw new InvalidOperationException(
+                $"4399 authentication response is incomplete. Missing fields: {string.Join(", ", missing)}.");
 
         return _mgbSdk.GenerateSAuth(
             parameters.Get("username"),
@@ -117,7 +153,27 @@ public class C4399 : IDisposable
         var entity = JsonSerializer.Deserialize<C4399UniAuth>(content)
                      ?? throw new Exception("Failed to parse UniAuth JSON.");
 
+        if (entity.Code != 0)
+            throw new InvalidOperationException(
+                $"4399 authentication failed: {CleanServerMessage(entity.Msg, "unknown upstream error")}");
+        if (string.IsNullOrWhiteSpace(entity.Data.SdkLoginData))
+        {
+            var detail = !string.IsNullOrWhiteSpace(entity.Data.LoginTip)
+                ? entity.Data.LoginTip
+                : entity.Msg;
+            throw new InvalidOperationException(
+                $"4399 authentication failed: {CleanServerMessage(detail, "no session data returned")}");
+        }
+
         return new QueryBuilder(entity.Data.SdkLoginData);
+    }
+
+    private static string CleanServerMessage(string value, string fallback)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return fallback;
+        var text = Regex.Replace(WebUtility.HtmlDecode(value), "<[^>]+>", " ");
+        text = Regex.Replace(text, "\\s+", " ").Trim();
+        return text.Length <= 200 ? text : text[..200];
     }
 
     private static string TrimCallbackWrapper(string content, string callback)

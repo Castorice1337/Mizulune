@@ -3,6 +3,7 @@ package shit.zen.modules.impl.render;
 import java.awt.Color;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import net.minecraft.client.gui.screens.inventory.ContainerScreen;
 import net.minecraft.client.multiplayer.PlayerInfo;
 import net.minecraft.resources.ResourceLocation;
@@ -17,6 +18,12 @@ import shit.zen.modules.Module;
 import shit.zen.modules.impl.movement.GodBridgeAssist;
 import shit.zen.modules.impl.movement.Scaffold;
 import shit.zen.modules.impl.player.ChestStealer;
+import shit.zen.modules.impl.world.MizuluneMusic;
+import shit.zen.music.MusicService;
+import shit.zen.music.lyrics.LyricParser;
+import shit.zen.music.model.LyricLine;
+import shit.zen.music.model.MusicPlaybackState;
+import shit.zen.music.model.MusicTrack;
 import shit.zen.render.DrawContext;
 import shit.zen.render.FontPresets;
 import shit.zen.render.FontRenderer;
@@ -44,12 +51,20 @@ public class DynamicIsland extends Module {
     private static final float PANEL_RADIUS = 8.0f;
     private static final float STACK_GAP = 6.0f;
     private static final float BRIDGE_COUNTER_HEIGHT = 48.0f;
+    private static final float MUSIC_HEIGHT = 48.0f;
+    private static final float MUSIC_MIN_WIDTH = 260.0f;
+    private static final float MUSIC_MAX_WIDTH = 390.0f;
+    private static final float MUSIC_MARQUEE_GAP = 30.0f;
+    private static final long MUSIC_LYRIC_FADE_OUT_MS = 70L;
+    private static final long MUSIC_LYRIC_FADE_IN_MS = 110L;
 
     public final ModeValue ModeValue = new ModeValue("Mode", "Old", "Liquid Glass").withDefault("Liquid Glass");
 
     private final shit.zen.hud.DynamicIsland oldIsland = new shit.zen.hud.DynamicIsland();
     private final FontRenderer nameFont = FontPresets.poppinsBold(17.0f);
     private final FontRenderer infoFont = FontPresets.poppinsMedium(11.0f);
+    private final FontRenderer musicTitleFont = FontPresets.pingfang(10.0f);
+    private final FontRenderer musicLyricFont = FontPresets.pingfang(14.0f);
     private final FontRenderer notificationFont = FontPresets.poppinsMedium(13.0f);
     private final FontRenderer notificationStatusFont = FontPresets.poppinsBold(11.0f);
     private final FontRenderer scaffoldTitleFont = FontPresets.poppinsBold(14.0f);
@@ -64,6 +79,14 @@ public class DynamicIsland extends Module {
     private long lastFrameTimestamp;
     private long lastScaffoldProgressTimestamp;
     private String activeContentKey = "";
+    private volatile String musicLyricTrackKey = "";
+    private volatile List<LyricLine> musicLyricLines = List.of();
+    private volatile long musicLyricRequestSequence;
+    private String displayedMusicLyric = "";
+    private String previousMusicLyric = "";
+    private long musicLyricTransitionStartedAt;
+    private String marqueeLyric = "";
+    private long marqueeLyricChangedAt;
 
     public DynamicIsland() {
         super("Dynamic Island", Category.RENDER);
@@ -148,6 +171,9 @@ public class DynamicIsland extends Module {
             drawContext.clipRoundedRect(bounds, true);
             if (content.type == ContentType.DEFAULT) {
                 this.drawDefaultContent(drawContext, islandX, islandY, islandWidth, islandHeight, alpha);
+            } else if (content.type == ContentType.MUSIC) {
+                this.drawMusicContent(drawContext, content.music, islandX, islandY,
+                        islandWidth, islandHeight, now, alpha);
             } else {
                 this.drawPayloadStack(drawContext, content, islandX, islandY, islandWidth, now, alpha);
             }
@@ -174,6 +200,10 @@ public class DynamicIsland extends Module {
         List<Notification.IslandNotification> notifications = Notification.visibleNotifications(now);
 
         if (!hasBridgeCounter && chestMenu == null && notifications.isEmpty()) {
+            MusicIslandContent music = this.getMusicIslandContent();
+            if (music != null) {
+                return ContentSnapshot.music(this.measureMusicWidth(music), MUSIC_HEIGHT, music);
+            }
             return ContentSnapshot.defaults(this.measureDefaultWidth(), DEFAULT_HEIGHT);
         }
 
@@ -226,6 +256,63 @@ public class DynamicIsland extends Module {
         float nameWidth = GlHelper.getStringWidth("MiZuLune", this.nameFont);
         float infoWidth = GlHelper.getStringWidth(this.getInfoText(), this.infoFont);
         return Math.max(MIN_WIDTH, 28.0f + logoSize + 8.0f + nameWidth + 18.0f + infoWidth + 24.0f);
+    }
+
+    private MusicIslandContent getMusicIslandContent() {
+        if (MizuluneMusic.INSTANCE == null || !MizuluneMusic.INSTANCE.shouldPlayOnIsland()) {
+            return null;
+        }
+        try {
+            MusicService service = ZenClient.getInstance().getMusicService();
+            MusicPlaybackState state = service.playbackState();
+            MusicTrack track = state.getCurrentTrack();
+            if (track == null) {
+                return null;
+            }
+            this.ensureMusicLyrics(service, track);
+            String lyric = this.currentMusicLyric(track, state.getPositionMs());
+            return new MusicIslandContent(track.stableKey(), track.getName(), lyric,
+                    state.getPositionMs(), state.getDurationMs());
+        } catch (Exception ignored) {
+            return null;
+        }
+    }
+
+    private void ensureMusicLyrics(MusicService service, MusicTrack track) {
+        String trackKey = track.stableKey();
+        if (trackKey.equals(this.musicLyricTrackKey)) {
+            return;
+        }
+        this.musicLyricTrackKey = trackKey;
+        this.musicLyricLines = List.of();
+        long requestId = ++this.musicLyricRequestSequence;
+        service.lyrics(track).whenComplete((lines, throwable) -> {
+            if (requestId != this.musicLyricRequestSequence || !trackKey.equals(this.musicLyricTrackKey)) {
+                return;
+            }
+            this.musicLyricLines = throwable == null && lines != null ? List.copyOf(lines) : List.of();
+        });
+    }
+
+    private String currentMusicLyric(MusicTrack track, long positionMs) {
+        List<LyricLine> lines = this.musicLyricLines;
+        int index = LyricParser.currentLineIndex(lines, positionMs);
+        if (index >= 0 && index < lines.size()) {
+            String lyric = lines.get(index).text();
+            if (lyric != null && !lyric.isBlank() && !"...".equals(lyric)) {
+                return lyric;
+            }
+        }
+        return track.getName().isBlank() ? "Mizulune Music" : track.getName();
+    }
+
+    private float measureMusicWidth(MusicIslandContent music) {
+        float logoGroupWidth = 14.0f + 20.0f + 10.0f;
+        float titleWidth = GlHelper.getStringWidth("Music Player : " + music.trackName, this.musicTitleFont);
+        float timeWidth = GlHelper.getStringWidth(formatMusicTime(music.positionMs, music.durationMs), this.infoFont);
+        float lyricWidth = Math.min(250.0f, GlHelper.getStringWidth(music.lyric, this.musicLyricFont));
+        float contentWidth = Math.max(titleWidth + 12.0f + timeWidth, lyricWidth);
+        return Mth.clamp(logoGroupWidth + contentWidth + 14.0f, MUSIC_MIN_WIDTH, MUSIC_MAX_WIDTH);
     }
 
     private float measureBridgeCounterWidth(BridgeCounterSource source) {
@@ -324,6 +411,137 @@ public class DynamicIsland extends Module {
             paint.setColor(Argb.scaleAlpha(0x30FFFFFF, alpha));
             drawContext.drawRectXYWH(infoX - 9.0f, y + 10.0f, 1.0f, height - 20.0f, paint);
         }
+    }
+
+    private void drawMusicContent(DrawContext drawContext, MusicIslandContent music, float x, float y,
+                                  float width, float height, long now, float alpha) {
+        if (music == null) {
+            this.drawDefaultContent(drawContext, x, y, width, height, alpha);
+            return;
+        }
+        float logoSize = 22.0f;
+        float logoX = x + 14.0f;
+        float logoY = y + 8.0f;
+        try (Paint paint = new Paint()) {
+            paint.setColor(Argb.scaleAlpha(0xFFFFFFFF, alpha));
+            if (LOGO != null) {
+                drawContext.drawTexture(new Texture(LOGO, 200, 200),
+                        Rectangle.ofXYWH(0.0f, 0.0f, 200.0f, 200.0f),
+                        Rectangle.ofXYWH(logoX, logoY, logoSize, logoSize), paint);
+            }
+        }
+
+        float textX = x + 46.0f;
+        float textRight = x + width - 14.0f;
+        String time = formatMusicTime(music.positionMs, music.durationMs);
+        float timeWidth = GlHelper.getStringWidth(time, this.infoFont);
+        float timeX = textRight - timeWidth;
+        String title = "Music Player : " + music.trackName;
+        GlHelper.drawText(this.fitText(title, this.musicTitleFont, timeX - textX - 10.0f), textX, y + 6.0f,
+                this.musicTitleFont, Argb.scaleAlpha(0xCFEAF4F8, alpha));
+        GlHelper.drawText(time, timeX, y + 6.0f, this.infoFont, Argb.scaleAlpha(0xDDECF4F8, alpha));
+
+        float barX = x + 14.0f;
+        float barY = y + height - 7.0f;
+        float lyricWidth = Math.max(24.0f, textRight - textX);
+        MusicLyricFrame lyricFrame = this.resolveMusicLyricFrame(music.lyric, now);
+        drawContext.save();
+        drawContext.clip(Rectangle.ofXYWH(textX, y + 18.0f, lyricWidth, barY - y - 20.0f));
+        this.drawMusicLyricMarquee(lyricFrame.text(), textX, y + 20.0f + lyricFrame.offsetY(),
+                lyricWidth, now, alpha * lyricFrame.alpha());
+        drawContext.restore();
+
+        float progress = music.durationMs <= 0L
+                ? 0.0f
+                : Mth.clamp((float)music.positionMs / (float)music.durationMs, 0.0f, 1.0f);
+        this.drawMusicProgressBar(drawContext, barX, barY, width - 28.0f, 3.0f, progress, alpha);
+    }
+
+    private MusicLyricFrame resolveMusicLyricFrame(String lyric, long now) {
+        String target = lyric == null || lyric.isBlank() ? "Mizulune Music" : lyric;
+        if (this.displayedMusicLyric.isEmpty()) {
+            this.displayedMusicLyric = target;
+            this.previousMusicLyric = target;
+            this.musicLyricTransitionStartedAt = now - MUSIC_LYRIC_FADE_OUT_MS - MUSIC_LYRIC_FADE_IN_MS;
+        } else if (!target.equals(this.displayedMusicLyric)) {
+            this.previousMusicLyric = this.displayedMusicLyric;
+            this.displayedMusicLyric = target;
+            this.musicLyricTransitionStartedAt = now;
+        }
+
+        long elapsed = Math.max(0L, now - this.musicLyricTransitionStartedAt);
+        if (elapsed < MUSIC_LYRIC_FADE_OUT_MS) {
+            float progress = easeOutCubic((float)elapsed / MUSIC_LYRIC_FADE_OUT_MS);
+            return new MusicLyricFrame(this.previousMusicLyric, 1.0f - progress, -progress * 1.5f);
+        }
+        long fadeInElapsed = elapsed - MUSIC_LYRIC_FADE_OUT_MS;
+        if (fadeInElapsed < MUSIC_LYRIC_FADE_IN_MS) {
+            float progress = easeOutCubic((float)fadeInElapsed / MUSIC_LYRIC_FADE_IN_MS);
+            return new MusicLyricFrame(this.displayedMusicLyric, progress, (1.0f - progress) * 1.5f);
+        }
+        return new MusicLyricFrame(this.displayedMusicLyric, 1.0f, 0.0f);
+    }
+
+    private void drawMusicLyricMarquee(String lyric, float x, float y, float availableWidth,
+                                       long now, float alpha) {
+        String text = lyric == null || lyric.isBlank() ? "Mizulune Music" : lyric;
+        if (!text.equals(this.marqueeLyric)) {
+            this.marqueeLyric = text;
+            this.marqueeLyricChangedAt = now;
+        }
+        float textWidth = GlHelper.getStringWidth(text, this.musicLyricFont);
+        int color = Argb.scaleAlpha(0xFFFFFFFF, alpha);
+        if (textWidth <= availableWidth) {
+            GlHelper.drawText(text, x, y, this.musicLyricFont, color);
+            return;
+        }
+        long elapsed = Math.max(0L, now - this.marqueeLyricChangedAt - 900L);
+        float cycleWidth = textWidth + MUSIC_MARQUEE_GAP;
+        float offset = elapsed <= 0L ? 0.0f : elapsed * 0.022f % cycleWidth;
+        GlHelper.drawText(text, x - offset, y, this.musicLyricFont, color);
+        GlHelper.drawText(text, x - offset + cycleWidth, y, this.musicLyricFont, color);
+    }
+
+    private void drawMusicProgressBar(DrawContext drawContext, float x, float y, float width, float height,
+                                      float progress, float alpha) {
+        try (Paint paint = new Paint()) {
+            paint.setColor(Argb.scaleAlpha(0x30FFFFFF, alpha));
+            drawContext.drawRoundedRect(RoundedRectangle.ofXYWHR(x, y, width, height, height * 0.5f), paint);
+            float filledWidth = width * Mth.clamp(progress, 0.0f, 1.0f);
+            if (filledWidth > 0.5f) {
+                paint.setColor(Argb.scaleAlpha(0xE8FFFFFF, alpha));
+                drawContext.drawRoundedRect(RoundedRectangle.ofXYWHR(
+                        x, y, filledWidth, height, height * 0.5f), paint);
+            }
+        }
+    }
+
+    private static float easeOutCubic(float value) {
+        float clamped = Mth.clamp(value, 0.0f, 1.0f);
+        float inverse = 1.0f - clamped;
+        return 1.0f - inverse * inverse * inverse;
+    }
+
+    private String fitText(String value, FontRenderer font, float maxWidth) {
+        String text = value == null ? "" : value;
+        if (GlHelper.getStringWidth(text, font) <= maxWidth) {
+            return text;
+        }
+        String suffix = "...";
+        int end = text.length();
+        while (end > 0 && GlHelper.getStringWidth(text.substring(0, end) + suffix, font) > maxWidth) {
+            end--;
+        }
+        return text.substring(0, end) + suffix;
+    }
+
+    private static String formatMusicTime(long positionMs, long durationMs) {
+        return formatTimestamp(positionMs) + " / " + formatTimestamp(durationMs);
+    }
+
+    private static String formatTimestamp(long millis) {
+        long seconds = Math.max(0L, millis) / 1000L;
+        return String.format(Locale.ROOT, "%02d:%02d", seconds / 60L, seconds % 60L);
     }
 
     private void drawClientName(float x, float y, float alpha) {
@@ -640,10 +858,18 @@ public class DynamicIsland extends Module {
 
     private enum ContentType {
         DEFAULT,
+        MUSIC,
         PAYLOADS
     }
 
     private record BridgeCounterSource(String key, String title, int blocks, ItemStack iconStack) {
+    }
+
+    private record MusicIslandContent(String trackKey, String trackName, String lyric,
+                                      long positionMs, long durationMs) {
+    }
+
+    private record MusicLyricFrame(String text, float alpha, float offsetY) {
     }
 
     private static final class ContentSnapshot {
@@ -651,6 +877,7 @@ public class DynamicIsland extends Module {
         private final String key;
         private final float width;
         private final float height;
+        private final MusicIslandContent music;
         private final boolean bridgeCounter;
         private final ChestMenu chestMenu;
         private final int chestRows;
@@ -658,13 +885,15 @@ public class DynamicIsland extends Module {
         private final List<Notification.IslandNotification> notifications;
         private final float notificationHeight;
 
-        private ContentSnapshot(ContentType type, String key, float width, float height, boolean bridgeCounter,
+        private ContentSnapshot(ContentType type, String key, float width, float height, MusicIslandContent music,
+                                boolean bridgeCounter,
                                 ChestMenu chestMenu, int chestRows, float chestHeight,
                                 List<Notification.IslandNotification> notifications, float notificationHeight) {
             this.type = type;
             this.key = key;
             this.width = width;
             this.height = height;
+            this.music = music;
             this.bridgeCounter = bridgeCounter;
             this.chestMenu = chestMenu;
             this.chestRows = chestRows;
@@ -674,8 +903,13 @@ public class DynamicIsland extends Module {
         }
 
         private static ContentSnapshot defaults(float width, float height) {
-            return new ContentSnapshot(ContentType.DEFAULT, "default", width, height, false,
+            return new ContentSnapshot(ContentType.DEFAULT, "default", width, height, null, false,
                     null, 0, 0.0f, List.of(), 0.0f);
+        }
+
+        private static ContentSnapshot music(float width, float height, MusicIslandContent music) {
+            return new ContentSnapshot(ContentType.MUSIC, "music:" + music.trackKey,
+                    width, height, music, false, null, 0, 0.0f, List.of(), 0.0f);
         }
 
         private static ContentSnapshot payloads(float width, float height, boolean bridgeCounter, String bridgeCounterKey,
@@ -688,7 +922,7 @@ public class DynamicIsland extends Module {
                     + ":rows=" + chestRows
                     + ":notifications=" + notifications.size()
                     + ":" + firstStarted;
-            return new ContentSnapshot(ContentType.PAYLOADS, key, width, height, bridgeCounter,
+            return new ContentSnapshot(ContentType.PAYLOADS, key, width, height, null, bridgeCounter,
                     chestMenu, chestRows, chestHeight, notifications, notificationHeight);
         }
     }

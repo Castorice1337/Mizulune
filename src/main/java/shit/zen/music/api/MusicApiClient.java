@@ -18,6 +18,8 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.function.Supplier;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import shit.zen.music.config.MusicConfig;
 import shit.zen.music.model.MusicLyricResult;
 import shit.zen.music.model.MusicPicResult;
@@ -25,6 +27,7 @@ import shit.zen.music.model.MusicTrack;
 import shit.zen.music.model.MusicUrlResult;
 
 public class MusicApiClient {
+    private static final Logger LOGGER = LogManager.getLogger(MusicApiClient.class);
     private static final Gson GSON = new Gson();
     private static final Type TRACK_LIST = new TypeToken<List<MusicTrack>>() { }.getType();
 
@@ -131,6 +134,7 @@ public class MusicApiClient {
     }
 
     private String get(String uri) {
+        long startedAt = System.nanoTime();
         try {
             HttpRequest request = HttpRequest.newBuilder(URI.create(uri))
                     .timeout(Duration.ofSeconds(25L))
@@ -139,6 +143,9 @@ public class MusicApiClient {
                     .build();
             HttpResponse<String> response = this.httpClient.send(request,
                     HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
+            LOGGER.info("[MizuluneMusic][api] response type={} status={} bytes={} endpoint={} elapsedMs={}",
+                    requestType(uri), response.statusCode(), response.body().getBytes(StandardCharsets.UTF_8).length,
+                    safeEndpoint(uri), (System.nanoTime() - startedAt) / 1_000_000L);
             if (response.statusCode() == 429) {
                 throw new MusicApiException("API rate limited. Please wait before searching again.");
             }
@@ -147,8 +154,13 @@ public class MusicApiClient {
             }
             return response.body();
         } catch (MusicApiException exception) {
+            LOGGER.warn("[MizuluneMusic][api] request failed type={} endpoint={} elapsedMs={} message={}",
+                    requestType(uri), safeEndpoint(uri), (System.nanoTime() - startedAt) / 1_000_000L,
+                    exception.getMessage());
             throw exception;
         } catch (Exception exception) {
+            LOGGER.warn("[MizuluneMusic][api] request failed type={} endpoint={} elapsedMs={}",
+                    requestType(uri), safeEndpoint(uri), (System.nanoTime() - startedAt) / 1_000_000L, exception);
             throw new MusicApiException("Network error. Please try again later.", exception);
         }
     }
@@ -171,5 +183,31 @@ public class MusicApiClient {
 
     private static String normalizeSearchSource(String source) {
         return source == null || source.isBlank() ? "netease" : source;
+    }
+
+    private static String requestType(String value) {
+        try {
+            String query = URI.create(value).getRawQuery();
+            if (query != null) {
+                for (String part : query.split("&")) {
+                    if (part.startsWith("types=")) {
+                        return part.substring("types=".length());
+                    }
+                }
+            }
+        } catch (Exception ignored) {
+        }
+        return "unknown";
+    }
+
+    private static String safeEndpoint(String value) {
+        try {
+            URI uri = URI.create(value);
+            String host = uri.getHost() == null ? "unknown-host" : uri.getHost();
+            String path = uri.getPath() == null ? "" : uri.getPath();
+            return uri.getScheme() + "://" + host + path;
+        } catch (Exception ignored) {
+            return "invalid-url";
+        }
     }
 }

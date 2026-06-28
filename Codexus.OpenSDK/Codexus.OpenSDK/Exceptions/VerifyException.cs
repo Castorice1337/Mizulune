@@ -1,5 +1,13 @@
-﻿namespace Codexus.OpenSDK.Exceptions;
+using Codexus.OpenSDK.Entities.C4399;
 
-public class VerifyException(string message) : Exception(message)
+namespace Codexus.OpenSDK.Exceptions;
+
+public class VerifyException : Exception
 {
+    public VerifyException(string message, C4399VerificationChallenge? challenge = null) : base(message)
+    {
+        Challenge = challenge;
+    }
+
+    public C4399VerificationChallenge? Challenge { get; }
 }

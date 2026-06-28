@@ -3,7 +3,11 @@ package shit.zen.music.engine;
 import java.io.BufferedInputStream;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.Map;
 import java.util.function.Consumer;
+import javazoom.spi.mpeg.sampled.convert.MpegFormatConversionProvider;
+import javazoom.spi.mpeg.sampled.file.MpegAudioFileReader;
+import javax.sound.sampled.AudioFileFormat;
 import javax.sound.sampled.AudioFormat;
 import javax.sound.sampled.AudioInputStream;
 import javax.sound.sampled.AudioSystem;
@@ -116,6 +120,8 @@ public class JavaSoundMp3PlayerEngine implements MusicPlayerEngine {
         this.positionMs = Math.max(0L, seekMs);
         this.paused = startPaused;
         this.stopRequested = false;
+        LOGGER.info("[MizuluneMusic][engine:{}] schedule file={} track={} seekMs={} paused={}",
+                runGeneration, file, track == null ? "unknown" : track.stableKey(), seekMs, startPaused);
         Thread thread = new Thread(() -> this.runPlayback(runGeneration, file, seekMs), "Mizulune-MusicPlayer");
         thread.setDaemon(true);
         thread.start();
@@ -143,17 +149,23 @@ public class JavaSoundMp3PlayerEngine implements MusicPlayerEngine {
     private void runPlayback(int runGeneration, Path file, long seekMs) {
         boolean finishedNaturally = false;
         long bytesWritten = 0L;
-        try (BufferedInputStream input = new BufferedInputStream(Files.newInputStream(file));
-             AudioInputStream source = AudioSystem.getAudioInputStream(input)) {
+        long startedAt = System.nanoTime();
+        try (AudioInputStream source = this.openMp3(file)) {
+            LOGGER.info("[MizuluneMusic][engine:{}] source format={} frameLength={} decoder={}",
+                    runGeneration, source.getFormat(), source.getFrameLength(), codeSource(MpegAudioFileReader.class));
             AudioFormat decodedFormat = this.decodedFormat(source.getFormat());
-            try (AudioInputStream decoded = AudioSystem.getAudioInputStream(decodedFormat, source)) {
-                this.durationMs = duration(decoded, decodedFormat);
+            try (AudioInputStream decoded = this.decodeMp3(decodedFormat, source)) {
+                this.durationMs = this.resolveDurationMs(file, source, decoded, decodedFormat);
+                LOGGER.info("[MizuluneMusic][engine:{}] PCM format={} durationMs={}",
+                        runGeneration, decodedFormat, this.durationMs);
                 long skippedBytes = this.skipTo(decoded, decodedFormat, seekMs);
                 bytesWritten = skippedBytes;
                 DataLine.Info info = new DataLine.Info(SourceDataLine.class, decodedFormat);
                 SourceDataLine line = (SourceDataLine) AudioSystem.getLine(info);
                 this.currentLine = line;
                 line.open(decodedFormat);
+                LOGGER.info("[MizuluneMusic][engine:{}] output line={} bufferBytes={}",
+                        runGeneration, line.getLineInfo(), line.getBufferSize());
                 this.applyVolume(line);
                 if (!this.paused) {
                     line.start();
@@ -186,7 +198,9 @@ public class JavaSoundMp3PlayerEngine implements MusicPlayerEngine {
             }
         } catch (Exception exception) {
             if (runGeneration == this.generation && !this.stopRequested) {
-                LOGGER.warn("Music playback failed for {}", file, exception);
+                LOGGER.warn("[MizuluneMusic][engine:{}] playback failed file={} elapsedMs={} decoder={} mixers={}",
+                        runGeneration, file, (System.nanoTime() - startedAt) / 1_000_000L,
+                        codeSource(MpegAudioFileReader.class), AudioSystem.getMixerInfo().length, exception);
                 this.errorCallback.accept(this.isUnsupported(exception) ? "Unsupported audio format." : "Unable to play this track.");
             }
         } finally {
@@ -194,9 +208,49 @@ public class JavaSoundMp3PlayerEngine implements MusicPlayerEngine {
                 this.playing = false;
                 this.currentLine = null;
                 if (finishedNaturally) {
+                    LOGGER.info("[MizuluneMusic][engine:{}] finished naturally positionMs={} elapsedMs={}",
+                            runGeneration, this.positionMs, (System.nanoTime() - startedAt) / 1_000_000L);
                     this.finishedCallback.run();
                 }
             }
+        }
+    }
+
+    private AudioInputStream openMp3(Path file) throws Exception {
+        try {
+            return new MpegAudioFileReader().getAudioInputStream(file.toFile());
+        } catch (Exception directFailure) {
+            LOGGER.warn("[MizuluneMusic][engine] direct MP3 reader failed; trying AudioSystem fallback file={}",
+                    file, directFailure);
+            BufferedInputStream input = new BufferedInputStream(Files.newInputStream(file));
+            try {
+                return AudioSystem.getAudioInputStream(input);
+            } catch (Exception fallbackFailure) {
+                try {
+                    input.close();
+                } catch (Exception ignored) {
+                }
+                fallbackFailure.addSuppressed(directFailure);
+                throw fallbackFailure;
+            }
+        }
+    }
+
+    private AudioInputStream decodeMp3(AudioFormat targetFormat, AudioInputStream source) throws Exception {
+        MpegFormatConversionProvider provider = new MpegFormatConversionProvider();
+        if (provider.isConversionSupported(targetFormat, source.getFormat())) {
+            return provider.getAudioInputStream(targetFormat, source);
+        }
+        LOGGER.warn("[MizuluneMusic][engine] direct MP3 conversion unavailable source={} target={}; trying AudioSystem",
+                source.getFormat(), targetFormat);
+        return AudioSystem.getAudioInputStream(targetFormat, source);
+    }
+
+    private static String codeSource(Class<?> type) {
+        try {
+            return type.getProtectionDomain().getCodeSource().getLocation().toString();
+        } catch (Exception ignored) {
+            return "unknown";
         }
     }
 
@@ -216,6 +270,64 @@ public class JavaSoundMp3PlayerEngine implements MusicPlayerEngine {
             return 0L;
         }
         return (long) (frames * 1000.0 / format.getFrameRate());
+    }
+
+    private long resolveDurationMs(Path file, AudioInputStream source, AudioInputStream decoded,
+                                   AudioFormat decodedFormat) {
+        long frameDuration = duration(decoded, decodedFormat);
+        if (frameDuration > 0L) {
+            return frameDuration;
+        }
+        try {
+            AudioFileFormat fileFormat = new MpegAudioFileReader().getAudioFileFormat(file.toFile());
+            long propertyDuration = durationPropertyMs(fileFormat.properties());
+            if (propertyDuration > 0L) {
+                return propertyDuration;
+            }
+            long bitrate = bitrateProperty(fileFormat.properties());
+            if (bitrate > 0L) {
+                return estimateDurationMs(Files.size(file), bitrate);
+            }
+        } catch (Exception exception) {
+            LOGGER.debug("[MizuluneMusic][engine] unable to read MP3 duration properties file={}", file, exception);
+        }
+        long sourceDuration = durationPropertyMs(source.getFormat().properties());
+        if (sourceDuration > 0L) {
+            return sourceDuration;
+        }
+        long sourceBitrate = bitrateProperty(source.getFormat().properties());
+        if (sourceBitrate > 0L) {
+            try {
+                return estimateDurationMs(Files.size(file), sourceBitrate);
+            } catch (Exception ignored) {
+            }
+        }
+        return 0L;
+    }
+
+    private static long durationPropertyMs(Map<String, Object> properties) {
+        Object value = properties == null ? null : properties.get("duration");
+        return value instanceof Number number ? Math.max(0L, number.longValue() / 1000L) : 0L;
+    }
+
+    private static long bitrateProperty(Map<String, Object> properties) {
+        if (properties == null || properties.isEmpty()) {
+            return 0L;
+        }
+        for (String key : new String[] {"mp3.bitrate.nominal.bps", "bitrate", "audio.bitrate"}) {
+            Object value = properties.get(key);
+            if (value instanceof Number number && number.longValue() > 0L) {
+                long bitrate = number.longValue();
+                return bitrate < 10_000L ? bitrate * 1000L : bitrate;
+            }
+        }
+        return 0L;
+    }
+
+    private static long estimateDurationMs(long bytes, long bitrateBitsPerSecond) {
+        return bytes <= 0L || bitrateBitsPerSecond <= 0L
+                ? 0L
+                : Math.max(1L, bytes * 8000L / bitrateBitsPerSecond);
     }
 
     private long skipTo(AudioInputStream decoded, AudioFormat format, long seekMs) throws Exception {

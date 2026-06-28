@@ -14,6 +14,7 @@ public class MizuluneMusic extends Module {
     public static MizuluneMusic INSTANCE;
 
     public final BooleanValue liquidGlass = new BooleanValue("Liquid Glass", false);
+    public final BooleanValue playOnIsland = new BooleanValue("Play on Island", false);
 
     public MizuluneMusic() {
         super("Mizulune Music", Category.WORLD);
@@ -24,9 +25,15 @@ public class MizuluneMusic extends Module {
         return Boolean.TRUE.equals(this.liquidGlass.getValue());
     }
 
+    public boolean shouldPlayOnIsland() {
+        return Boolean.TRUE.equals(this.playOnIsland.getValue());
+    }
+
     @Override
     protected void configureValueTree(ValueGroup root) {
-        root.group("visual", "Visual").add(this.liquidGlass);
+        ValueGroup visual = root.group("visual", "Visual");
+        visual.add(this.liquidGlass);
+        visual.add(this.playOnIsland);
     }
 
     @Override
