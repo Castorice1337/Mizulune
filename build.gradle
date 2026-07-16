@@ -212,6 +212,57 @@ tasks.named('test', Test).configure {
     useJUnitPlatform()
 }
 
+def privateComponentPaths = [
+        'src/main/java/shit/zen/protocol/heypixel',
+        'src/test/java/shit/zen/protocol/heypixel',
+        'src/main/java/shit/zen/modules/impl/world/Protocol.java',
+        'backends',
+        'Codexus.OpenSDK',
+        'mapping',
+        'fantnel',
+        'fantnel-pro'
+]
+
+def privateComponentMarkers = [
+        'MIZULUNE-PROTOCOL-PRIVATE',
+        'heypixel:s2cevent',
+        'HPAC5',
+        'ID114',
+        'PbeMd5DesId1Crypto',
+        'protocol-session.json',
+        'ProtocolSnapshotWriter'
+]
+
+tasks.register('verifyPublicSourceBoundary') {
+    group = 'verification'
+    description = 'Fail when private protocol components are present in the public source tree.'
+
+    doLast {
+        def pathViolations = privateComponentPaths.findAll { file(it).exists() }
+        def markerViolations = []
+        fileTree('src') {
+            include '**/*.java', '**/*.kt', '**/*.groovy'
+            include '**/*.json', '**/*.toml', '**/*.properties', '**/*.txt'
+        }.files.each { candidate ->
+            def content = candidate.getText('UTF-8')
+            privateComponentMarkers.each { marker ->
+                if (content.contains(marker)) {
+                    markerViolations.add(project.relativePath(candidate) + ' -> ' + marker)
+                }
+            }
+        }
+        if (!pathViolations.isEmpty() || !markerViolations.isEmpty()) {
+            throw new GradleException(
+                    'Private component boundary violation.\nPaths: ' + pathViolations
+                            + '\nMarkers: ' + markerViolations)
+        }
+    }
+}
+
+tasks.named('check').configure {
+    dependsOn tasks.named('verifyPublicSourceBoundary')
+}
+
 // This block of code expands all declared replace properties in the specified resource targets.
 // A missing property will result in an error. Properties are expanded using ${} Groovy notation.
 // When "copyIdeResources" is enabled, this will also run before the game launches in IDE environments.
