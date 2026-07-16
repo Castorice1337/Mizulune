@@ -8,6 +8,7 @@ import com.google.gson.JsonPrimitive;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import net.minecraft.util.Mth;
 import org.apache.logging.log4j.Logger;
 
@@ -110,6 +111,7 @@ public final class ValueJsonCodec {
 
     @SuppressWarnings("unchecked")
     private static String readEnum(Value<?> value, String raw) {
+        raw = resolveEnumAlias(value, raw);
         Object optionsObject = value.getMetadata().get("options");
         if (optionsObject instanceof List<?> options && !options.isEmpty()) {
             for (Object option : options) {
@@ -118,6 +120,21 @@ public final class ValueJsonCodec {
                 }
             }
             return String.valueOf(options.get(0));
+        }
+        return raw;
+    }
+
+    private static String resolveEnumAlias(Value<?> value, String raw) {
+        Object aliasesObject = value.getMetadata().get("optionAliases");
+        if (!(aliasesObject instanceof Map<?, ?> aliases) || aliases.isEmpty()) {
+            return raw;
+        }
+        String normalizedRaw = Value.normalizeId(raw);
+        for (Map.Entry<?, ?> entry : aliases.entrySet()) {
+            String alias = String.valueOf(entry.getKey());
+            if (alias.equalsIgnoreCase(raw) || Value.normalizeId(alias).equals(normalizedRaw)) {
+                return String.valueOf(entry.getValue());
+            }
         }
         return raw;
     }

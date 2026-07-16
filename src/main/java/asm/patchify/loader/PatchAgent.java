@@ -96,7 +96,7 @@ public final class PatchAgent {
                 inst.retransformClasses(target);
                 success++;
             } catch (Throwable t) {
-                LOGGER.error("Retransform failed for {}: {}", target.getName(), t.toString());
+                LOGGER.error("Retransform failed for {}", target.getName(), t);
             }
         }
         LOGGER.info("Retransformed {} / {} patch target(s)", success, retransform.size());

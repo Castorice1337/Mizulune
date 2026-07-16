@@ -37,6 +37,24 @@ public class MotionSimulator {
 
     public MotionSimulator(Player player) {
         this(player.getX(), player.getY(), player.getZ(), player.getDeltaMovement().x, player.getDeltaMovement().y, player.getDeltaMovement().z, player.getYRot(), player.xxa, player.zza);
+        this.captureJumpPower(player);
+    }
+
+    public MotionSimulator(Player player, float yaw, float strafeSpeed, float forwardSpeed) {
+        this(
+                player.getX(),
+                player.getY(),
+                player.getZ(),
+                player.getDeltaMovement().x,
+                player.getDeltaMovement().y,
+                player.getDeltaMovement().z,
+                yaw,
+                strafeSpeed,
+                forwardSpeed);
+        this.captureJumpPower(player);
+    }
+
+    private void captureJumpPower(Player player) {
         float jumpPower;
         float currentJumpFactor = player.level().getBlockState(player.blockPosition()).getBlock().getJumpFactor();
         float belowJumpFactor = player.level().getBlockState(player.getOnPos()).getBlock().getJumpFactor();

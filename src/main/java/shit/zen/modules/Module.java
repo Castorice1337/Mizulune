@@ -10,6 +10,7 @@ import lombok.Getter;
 import lombok.Generated;
 import shit.zen.ClientBase;
 import shit.zen.ZenClient;
+import shit.zen.manager.ConfigManager;
 import shit.zen.modules.impl.render.Notification;
 import shit.zen.value.Value;
 import shit.zen.value.ValueGroup;
@@ -33,16 +34,19 @@ extends ClientBase {
     private static final String REGISTER_FAIL_MSG = "Failed to register value for module ";
 
     protected Module(String name, Category category) {
-        this.id = Value.normalizeId(this.getClass().getSimpleName());
-        this.name = name;
-        this.category = category;
-        this.keyCode = 0;
-        this.bind = new KeyBind(this.keyCode);
-        this.valueTree = new ValueGroup(this.id, name);
+        this(name, category, 0);
     }
 
     protected Module(String name, Category category, int keyCode) {
-        this.id = Value.normalizeId(this.getClass().getSimpleName());
+        this(Value.normalizeId(name), name, category, keyCode);
+    }
+
+    protected Module(String id, String name, Category category) {
+        this(id, name, category, 0);
+    }
+
+    protected Module(String id, String name, Category category, int keyCode) {
+        this.id = Value.normalizeId(id);
         this.name = name;
         this.category = category;
         this.keyCode = keyCode;
@@ -153,6 +157,7 @@ extends ClientBase {
         }
         this.setEnabled(enabled);
         Notification.submitModuleToggle(this, enabled);
+        ConfigManager.requestSaveIfReady();
     }
 
     public void toggleFromUser() {
@@ -163,6 +168,13 @@ extends ClientBase {
     }
 
     protected void onDisable() {
+    }
+
+    public final void notifyConfigLoaded() {
+        this.onConfigLoaded();
+    }
+
+    protected void onConfigLoaded() {
     }
 
     @Generated

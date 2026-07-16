@@ -80,6 +80,13 @@ public class LivingEntityPatch {
         return event.getYaw();
     }
 
+    @Inject(method = "jumpFromGround", desc = "()V", at = @At(At.Type.TAIL))
+    public static void onAfterJump(LivingEntity entity, CallbackInfo callbackInfo) {
+        if (ZenClient.isReady() && entity == ClientBase.mc.player) {
+            ZenClient.getInstance().getEventBus().call(new PlayerAfterJumpEvent());
+        }
+    }
+
     @Inject(method = "travel", desc = "(Lnet/minecraft/world/phys/Vec3;)V", at = @At(At.Type.HEAD))
     public static void onTravel(LivingEntity entity, Vec3 movement, CallbackInfo callbackInfo) throws Exception {
         if (entity == null || entity != ClientBase.mc.player || !ZenClient.isReady()) return;

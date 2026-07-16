@@ -1,0 +1,64 @@
+# eclipse
+bin
+*.launch
+.settings
+.metadata
+.classpath
+.project
+
+# idea
+out
+*.ipr
+*.iws
+*.iml
+.idea
+
+# gradle
+build
+.gradle
+
+# The Gradle plugin package is named shit.zen.build; keep its source tracked.
+!/buildSrc/src/main/groovy/shit/zen/build/
+!/buildSrc/src/main/groovy/shit/zen/build/**
+
+# other
+eclipse
+run
+
+# Files from Forge MDK
+forge*changelog.txt
+
+# Native DLL build artifacts (CMake out-of-source build + staged jar)
+native/build/
+native/zen.jar
+
+# Generated at build time by ext.obfuscateJar (holds the obfuscated bridge FQCN)
+native/dll/src/generated_names.h
+
+# Local agent/workflow configuration
+AGENTS.md
+.columbina/
+.codex/
+.agents/
+.claude/
+.cursor/
+
+# Local source/archive dumps; source of truth is the working tree
+src.zip
+native/dll.zip
+
+# Test Server for development testing
+/test-server/
+
+# Python scripts
+*.py
+
+# Other clients reference source code
+/liquidSRC/
+/liquidSRC/src/
+
+# Research folder
+/research/
+/test-server.zip
+/logs/
+

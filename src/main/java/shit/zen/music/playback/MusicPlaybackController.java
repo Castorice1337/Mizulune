@@ -1,5 +1,7 @@
 package shit.zen.music.playback;
 
+import java.net.URI;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
@@ -167,15 +169,19 @@ public class MusicPlaybackController {
 
     private CompletableFuture<Void> prepareAndPlay(MusicTrack track, boolean persistent, boolean fromQueue) {
         long requestId = this.requestSequence.incrementAndGet();
+        long startedAt = System.nanoTime();
         this.currentTrack = track.copy();
         this.currentFromQueue = fromQueue;
         this.loading = true;
         this.cached = this.cacheManager.isCached(track);
         this.status = persistent ? "Caching track..." : "Preparing track...";
         this.error = "";
-        return this.resolveAudioFile(track, persistent)
+        LOGGER.info("[MizuluneMusic][playback:{}] start track={} name=\"{}\" source={} persistent={} fromQueue={}",
+                requestId, track.stableKey(), track.getName(), sourceForPlayback(track), persistent, fromQueue);
+        return this.resolveAudioFile(track, persistent, requestId)
                 .thenAcceptAsync(audioFile -> {
                     if (!this.isActive(requestId)) {
+                        LOGGER.info("[MizuluneMusic][playback:{}] cancelled before engine start", requestId);
                         return;
                     }
                     this.currentTrack = track.copy();
@@ -183,6 +189,8 @@ public class MusicPlaybackController {
                     this.cached = this.cacheManager.isCached(track);
                     this.status = "Playing";
                     this.error = "";
+                    LOGGER.info("[MizuluneMusic][playback:{}] engine start file={} bytes={} cached={}",
+                            requestId, audioFile, fileSize(audioFile), this.cached);
                     this.engine.play(audioFile, track);
                 }, this.playbackExecutor)
                 .whenComplete((ignored, throwable) -> {
@@ -191,32 +199,47 @@ public class MusicPlaybackController {
                     }
                     this.loading = false;
                     if (throwable != null) {
-                        LOGGER.warn("Failed to play track {}", track.stableKey(), throwable);
+                        LOGGER.warn("[MizuluneMusic][playback:{}] prepare failed track={} elapsedMs={}",
+                                requestId, track.stableKey(), elapsedMs(startedAt), throwable);
                         this.currentTrack = null;
                         this.currentFromQueue = false;
                         this.cached = false;
                         this.error = userMessage(throwable);
                         this.status = "Playback failed";
                         this.engine.stop();
+                    } else {
+                        LOGGER.info("[MizuluneMusic][playback:{}] prepare complete elapsedMs={}",
+                                requestId, elapsedMs(startedAt));
                     }
                 });
     }
 
-    private CompletableFuture<Path> resolveAudioFile(MusicTrack track, boolean requestedPersistent) {
+    private CompletableFuture<Path> resolveAudioFile(MusicTrack track, boolean requestedPersistent, long requestId) {
         Path cachedFile = this.cacheManager.cachedAudio(track);
         if (this.cacheManager.isUsableAudio(cachedFile)) {
+            LOGGER.info("[MizuluneMusic][playback:{}] persistent cache hit file={} bytes={}",
+                    requestId, cachedFile, fileSize(cachedFile));
             return CompletableFuture.completedFuture(cachedFile);
         }
         Path tempFile = this.cacheManager.tempAudio(track);
         MusicConfig config = this.configSupplier.get();
         boolean persistent = requestedPersistent && config.isCacheEnabled();
         if (!persistent && config.isTemporaryCacheEnabled() && this.cacheManager.isUsableAudio(tempFile)) {
+            LOGGER.info("[MizuluneMusic][playback:{}] temporary cache hit file={} bytes={}",
+                    requestId, tempFile, fileSize(tempFile));
             return CompletableFuture.completedFuture(tempFile);
         }
         boolean targetPersistent = persistent;
-        return this.apiClient.getUrl(sourceForPlayback(track), track.getUrlId(), config.getPreferredBitrate())
+        String source = sourceForPlayback(track);
+        LOGGER.info("[MizuluneMusic][playback:{}] request URL source={} id={} bitrate={}",
+                requestId, source, track.getUrlId(), config.getPreferredBitrate());
+        return this.apiClient.getUrl(source, track.getUrlId(), config.getPreferredBitrate())
                 .thenApplyAsync(result -> {
+                    LOGGER.info("[MizuluneMusic][playback:{}] URL resolved endpoint={} bitrate={} declaredBytes={} provider={}",
+                            requestId, safeEndpoint(result.getUrl()), result.getBr(), result.getSize(), result.getFrom());
                     Path file = this.cacheManager.downloadAudio(track, result.getUrl(), targetPersistent, config.getPreferredBitrate());
+                    LOGGER.info("[MizuluneMusic][playback:{}] download complete file={} bytes={} persistent={}",
+                            requestId, file, fileSize(file), targetPersistent);
                     if (targetPersistent) {
                         this.cacheManager.enforcePersistentCacheLimit(config.getMaxCacheSizeMb());
                     }
@@ -249,5 +272,28 @@ public class MusicPlaybackController {
             return "netease";
         }
         return source.endsWith("_album") ? source.substring(0, source.length() - "_album".length()) : source;
+    }
+
+    private static long fileSize(Path path) {
+        try {
+            return path == null ? -1L : Files.size(path);
+        } catch (Exception ignored) {
+            return -1L;
+        }
+    }
+
+    private static long elapsedMs(long startedAt) {
+        return (System.nanoTime() - startedAt) / 1_000_000L;
+    }
+
+    private static String safeEndpoint(String value) {
+        try {
+            URI uri = URI.create(value);
+            String host = uri.getHost() == null ? "unknown-host" : uri.getHost();
+            String path = uri.getPath() == null ? "" : uri.getPath();
+            return uri.getScheme() + "://" + host + path;
+        } catch (Exception ignored) {
+            return "invalid-url";
+        }
     }
 }

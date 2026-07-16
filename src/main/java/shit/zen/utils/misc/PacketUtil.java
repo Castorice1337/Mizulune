@@ -2,12 +2,16 @@ package shit.zen.utils.misc;
 
 import java.lang.reflect.Field;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.IdentityHashMap;
+import java.util.Set;
 import lombok.Generated;
 import net.minecraft.client.gui.screens.ReceivingLevelScreen;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.multiplayer.prediction.BlockStatePredictionHandler;
 import net.minecraft.client.multiplayer.prediction.PredictiveAction;
 import net.minecraft.network.protocol.Packet;
+import net.minecraft.network.PacketSendListener;
 import net.minecraft.network.protocol.game.ClientboundCustomPayloadPacket;
 import net.minecraft.network.protocol.game.ClientboundDisconnectPacket;
 import net.minecraft.network.protocol.game.ClientboundForgetLevelChunkPacket;
@@ -31,18 +35,38 @@ import shit.zen.utils.misc.ReflectionUtil;
 public final class PacketUtil
 extends ClientBase {
     public static final ArrayList<Packet<ServerGamePacketListener>> queuedPackets = new ArrayList<>();
+    private static final Set<Packet<?>> preparedBufferedPackets =
+            Collections.newSetFromMap(new IdentityHashMap<>());
 
-    public static boolean shouldBypass(Packet<ServerGamePacketListener> packet) {
+    public static SendPreparation prepareSend(Packet<ServerGamePacketListener> packet) {
+        if (removePreparedBufferedMarker(packet)) {
+            removeQueuedMarker(packet);
+            return new SendPreparation(false, true);
+        }
         PacketSendEvent packetSendEvent = new PacketSendEvent(packet);
         ZenClient.getInstance().getEventBus().call(packetSendEvent);
         if (packetSendEvent.isCancelled()) {
-            return true;
+            removeQueuedMarker(packet);
+            return new SendPreparation(true, false);
         }
-        if (queuedPackets.contains(packet)) {
-            queuedPackets.remove(packet);
-            return true;
+        return new SendPreparation(false, removeQueuedMarker(packet));
+    }
+
+    public static boolean shouldBypass(Packet<ServerGamePacketListener> packet) {
+        SendPreparation preparation = prepareSend(packet);
+        return preparation.cancelled() || preparation.bypass();
+    }
+
+    private static boolean removeQueuedMarker(Packet<ServerGamePacketListener> packet) {
+        synchronized (queuedPackets) {
+            return queuedPackets.remove(packet);
         }
-        return false;
+    }
+
+    private static boolean removePreparedBufferedMarker(Packet<?> packet) {
+        synchronized (preparedBufferedPackets) {
+            return preparedBufferedPackets.remove(packet);
+        }
     }
 
     public static void sendPredictive(PredictiveAction predictiveAction) {
@@ -143,8 +167,25 @@ extends ClientBase {
         if (mc.player == null) {
             return;
         }
-        queuedPackets.add(packet);
+        synchronized (queuedPackets) {
+            queuedPackets.add(packet);
+        }
         mc.player.connection.send(packet);
+    }
+
+    public static void sendBuffered(
+            Packet<ServerGamePacketListener> packet,
+            PacketSendListener listener) {
+        if (mc.player == null || mc.player.connection == null) {
+            return;
+        }
+        synchronized (queuedPackets) {
+            queuedPackets.add(packet);
+        }
+        synchronized (preparedBufferedPackets) {
+            preparedBufferedPackets.add(packet);
+        }
+        mc.player.connection.getConnection().send(packet, listener);
     }
 
     public static void send(Packet<ServerGamePacketListener> packet) {
@@ -157,5 +198,8 @@ extends ClientBase {
     @Generated
     private PacketUtil() {
         throw new UnsupportedOperationException("This is a utility class and cannot be instantiated");
+    }
+
+    public record SendPreparation(boolean cancelled, boolean bypass) {
     }
 }

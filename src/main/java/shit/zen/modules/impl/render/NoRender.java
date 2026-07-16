@@ -7,6 +7,7 @@ import shit.zen.modules.Category;
 import shit.zen.modules.Module;
 import shit.zen.value.ValueGroup;
 import shit.zen.value.impl.BooleanValue;
+import shit.zen.value.impl.NumberValue;
 
 public class NoRender extends Module {
     public static NoRender INSTANCE;
@@ -24,6 +25,8 @@ public class NoRender extends Module {
     private final BooleanValue blockOverlay = new BooleanValue("Block Overlay", true);
     private final BooleanValue powderSnow = new BooleanValue("Powder Snow", true);
     private final BooleanValue fireNotification = new BooleanValue("Fire Notification", true);
+    private final BooleanValue noFov = new BooleanValue("NoFOV", true);
+    private final NumberValue fov = new NumberValue("FOV", 90, 30, 180, 1, this.noFov::getValue);
 
     public NoRender() {
         super("NoRender", Category.RENDER);
@@ -46,6 +49,10 @@ public class NoRender extends Module {
 
         ValueGroup alerts = root.group("alerts", "Alerts");
         alerts.add(this.fireNotification);
+
+        ValueGroup camera = root.group("camera", "Camera");
+        camera.add(this.noFov);
+        camera.add(this.fov);
     }
 
     @EventTarget
@@ -81,6 +88,17 @@ public class NoRender extends Module {
 
     public static boolean shouldHideNausea() {
         return isOptionEnabled(INSTANCE == null ? null : INSTANCE.nausea);
+    }
+
+    public static boolean shouldUseFixedFov() {
+        return isOptionEnabled(INSTANCE == null ? null : INSTANCE.noFov);
+    }
+
+    public static float getFixedFov() {
+        if (INSTANCE == null) {
+            return 90.0f;
+        }
+        return INSTANCE.fov.getValue().floatValue();
     }
 
     public static boolean shouldHidePortalOverlay() {

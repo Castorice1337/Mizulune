@@ -57,6 +57,7 @@ public class MusicService {
         this.engine.setVolume(this.config.getVolume());
         this.engine.setErrorCallback(message -> {
             this.lastMessage = message == null ? "Unable to play this track." : message;
+            LOGGER.warn("[MizuluneMusic][engine] playback callback error={}", this.lastMessage);
             this.playbackController.markEngineError(this.lastMessage);
         });
         this.engine.setFinishedCallback(() -> {
@@ -71,6 +72,9 @@ public class MusicService {
         if (this.queueManager.getPlayMode() != this.config.getPlayMode()) {
             this.queueManager.setPlayMode(this.config.getPlayMode());
         }
+        LOGGER.info("[MizuluneMusic] initialized api={} cacheRoot={} source={} bitrate={}",
+                this.config.getApiBaseUrl(), this.cacheManager.getRoot(),
+                this.config.getDefaultSource(), this.config.getPreferredBitrate());
     }
 
     public MusicConfig config() {

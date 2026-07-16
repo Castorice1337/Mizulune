@@ -69,11 +69,8 @@ public final class PatchClassFileTransformer implements ClassFileTransformer {
                     LOGGER.error("Failed to apply patch {} -> {}", patch.getName(), className, t);
                 }
             }
-            // Override getClassLoader so COMPUTE_FRAMES resolves Minecraft / mod classes via the
-            // class loader that actually owns the target class (Forge's TransformingClassLoader),
-            // not the one that loaded our PatchTransformer.
             ClassLoader frameLoader = loader != null ? loader : Thread.currentThread().getContextClassLoader();
-            ClassWriter writer = new FrameAwareClassWriter(reader, ClassWriter.COMPUTE_FRAMES, frameLoader);
+            ClassWriter writer = new ResourceHierarchyClassWriter(reader, ClassWriter.COMPUTE_FRAMES, frameLoader);
             classNode.accept(writer);
             byte[] transformed = writer.toByteArray();
             dumpIfRequested(className, transformed);
@@ -96,17 +93,4 @@ public final class PatchClassFileTransformer implements ClassFileTransformer {
         }
     }
 
-    private static final class FrameAwareClassWriter extends ClassWriter {
-        private final ClassLoader loader;
-
-        FrameAwareClassWriter(ClassReader reader, int flags, ClassLoader loader) {
-            super(reader, flags);
-            this.loader = loader;
-        }
-
-        @Override
-        protected ClassLoader getClassLoader() {
-            return loader;
-        }
-    }
 }

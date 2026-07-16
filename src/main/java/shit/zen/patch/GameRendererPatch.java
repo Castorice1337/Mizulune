@@ -67,7 +67,17 @@ public class GameRendererPatch {
             targetDesc = "(FFFF)Lorg/joml/Matrix4f;"
     )
     public static Matrix4f onGetProjectionMatrix(GameRenderer gameRenderer, double fov, Invocation<GameRenderer, Matrix4f> original) throws Exception {
-        if (!ZenClient.isReady() || AspectRatio.INSTANCE == null || !AspectRatio.INSTANCE.isEnabled()) {
+        boolean useFixedFov = ZenClient.isReady() && NoRender.shouldUseFixedFov();
+        boolean useAspectRatio = ZenClient.isReady()
+                && AspectRatio.INSTANCE != null
+                && AspectRatio.INSTANCE.isEnabled();
+        if (!useFixedFov && !useAspectRatio) {
+            return original.call();
+        }
+        if (useFixedFov && !original.args().isEmpty()) {
+            original.args().set(0, (float) Math.toRadians(NoRender.getFixedFov()));
+        }
+        if (!useAspectRatio) {
             return original.call();
         }
         PoseStack poseStack = new PoseStack();
@@ -80,7 +90,7 @@ public class GameRendererPatch {
             poseStack.scale(zoom, zoom, 1.0f);
         }
         poseStack.last().pose().mul(new Matrix4f().setPerspective(
-                (float) (fov * (float) (Math.PI / 180.0)),
+                (float) Math.toRadians(useFixedFov ? NoRender.getFixedFov() : fov),
                 AspectRatio.INSTANCE.ratioSetting.getValue().floatValue(),
                 0.05f,
                 gameRenderer.getDepthFar()));

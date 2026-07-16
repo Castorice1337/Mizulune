@@ -4,7 +4,9 @@ import asm.patchify.annotation.At;
 import asm.patchify.annotation.Inject;
 import asm.patchify.annotation.Patch;
 import asm.patchify.annotation.Transform;
+import asm.patchify.annotation.WrapInvoke;
 import net.minecraft.client.player.LocalPlayer;
+import net.minecraft.client.player.Input;
 import net.minecraft.world.entity.Entity;
 import org.objectweb.asm.Opcodes;
 import org.objectweb.asm.Type;
@@ -17,10 +19,13 @@ import org.objectweb.asm.tree.MethodInsnNode;
 import org.objectweb.asm.tree.MethodNode;
 import org.objectweb.asm.tree.VarInsnNode;
 import shit.zen.ZenClient;
+import shit.zen.asm.Invocation;
 import shit.zen.event.impl.GameTickEvent;
 import shit.zen.event.impl.MotionEvent;
 import shit.zen.event.impl.SlowdownEvent;
+import shit.zen.event.impl.SprintDecisionEvent;
 import shit.zen.event.impl.SprintEvent;
+import shit.zen.utils.game.DirectionalInput;
 import shit.zen.utils.misc.ReflectionUtil;
 
 @Patch(LocalPlayer.class)
@@ -48,6 +53,20 @@ public class LocalPlayerPatch {
             return (SlowdownEvent) ZenClient.instance.getEventBus().call(new SlowdownEvent(slow));
         }
         return new SlowdownEvent(slow);
+    }
+
+    @Inject(
+            method = "tick",
+            desc = "()V",
+            at = @At(
+                    value = At.Type.BEFORE_INVOKE,
+                    method = "net/minecraft/client/player/AbstractClientPlayer/tick",
+                    desc = "()V")
+    )
+    public static void onTickSprintEvent(LocalPlayer player, CallbackInfo callbackInfo) {
+        if (ZenClient.isReady()) {
+            ZenClient.getInstance().getEventBus().call(new SprintEvent());
+        }
     }
 
     @Transform(method = "aiStep", desc = "()V")
@@ -91,15 +110,68 @@ public class LocalPlayerPatch {
         methodNode.instructions.remove(targetCall);
     }
 
-    @Inject(
-            method = "tick",
+    @WrapInvoke(
+            method = "aiStep",
             desc = "()V",
-            at = @At(value = At.Type.BEFORE_INVOKE, method = "net/minecraft/client/player/AbstractClientPlayer/tick", desc = "()V")
+            target = "net/minecraft/client/player/LocalPlayer/canStartSprinting",
+            targetDesc = "()Z"
     )
-    public static void onTick(LocalPlayer player, CallbackInfo callbackInfo) throws Throwable {
-        if (ZenClient.isReady()) {
-            ZenClient.getInstance().getEventBus().call(new SprintEvent());
+    public static boolean onCanStartSprinting(
+            LocalPlayer player,
+            Invocation<LocalPlayer, Boolean> original) throws Exception {
+        return applySprintDecision(
+                player.input,
+                original.call(),
+                SprintDecisionEvent.Source.MOVEMENT_TICK);
+    }
+
+    @WrapInvoke(
+            method = "aiStep",
+            desc = "()V",
+            target = "net/minecraft/client/player/Input/hasForwardImpulse",
+            targetDesc = "()Z"
+    )
+    public static boolean onHasForwardImpulse(
+            LocalPlayer player,
+            Invocation<Input, Boolean> original) throws Exception {
+        return applySprintDecision(
+                original.instance(),
+                original.call(),
+                SprintDecisionEvent.Source.MOVEMENT_TICK);
+    }
+
+    @WrapInvoke(
+            method = "sendIsSprintingIfNeeded",
+            desc = "()V",
+            target = "net/minecraft/client/player/LocalPlayer/isSprinting",
+            targetDesc = "()Z"
+    )
+    public static boolean onNetworkSprint(
+            LocalPlayer player,
+            Invocation<LocalPlayer, Boolean> original) throws Exception {
+        return applySprintDecision(
+                player.input,
+                original.call(),
+                SprintDecisionEvent.Source.NETWORK);
+    }
+
+    private static boolean applySprintDecision(
+            Input input,
+            boolean sprinting,
+            SprintDecisionEvent.Source source) {
+        if (!ZenClient.isReady()) {
+            return sprinting;
         }
+        SprintDecisionEvent decisionEvent = new SprintDecisionEvent(
+                input == null
+                        ? DirectionalInput.NONE
+                        : DirectionalInput.fromImpulses(
+                                input.forwardImpulse,
+                                input.leftImpulse),
+                sprinting,
+                source);
+        ZenClient.getInstance().getEventBus().call(decisionEvent);
+        return decisionEvent.isSprinting();
     }
 
     @Inject(method = "aiStep", desc = "()V")

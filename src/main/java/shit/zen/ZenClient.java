@@ -57,6 +57,7 @@ import shit.zen.patch.PlayerPatch;
 import shit.zen.patch.PlayerTabOverlayPatch;
 import shit.zen.patch.ScreenEffectRendererPatch;
 import shit.zen.asm.Bootstrap;
+import shit.zen.utils.game.PlayerPositionHold;
 import shit.zen.utils.rotation.RotationHandler;
 
 @Mod(value = "hey")
@@ -107,6 +108,7 @@ public class ZenClient extends ClientBase {
             this.eventBus = new EventBus();
             this.rotationHandler = new RotationHandler();
             this.eventBus.register(this.rotationHandler);
+            this.eventBus.register(new PlayerPositionHold());
             this.moduleManager = new ModuleManager();
             this.hudManager = new HudManager();
             this.commandManager = new CommandManager();
@@ -121,6 +123,7 @@ public class ZenClient extends ClientBase {
             this.eventBus.register(this);
             this.commandManager.initCommands();
             this.eventBus.register(new IntroAnimation());
+            this.configManager.loadAll();
             Bootstrap.init();
             registerPatches();
             if (PatchAgent.getInstrumentation() != null) {

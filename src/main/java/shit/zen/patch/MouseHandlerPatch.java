@@ -7,6 +7,7 @@ import net.minecraft.client.MouseHandler;
 import net.minecraft.util.Mth;
 import shit.zen.ClientBase;
 import shit.zen.ZenClient;
+import shit.zen.event.impl.MouseButtonEvent;
 import shit.zen.utils.rotation.RotationHandler;
 
 @Patch(MouseHandler.class)
@@ -14,6 +15,14 @@ public class MouseHandlerPatch {
     private static float beforeYaw;
     private static float beforePitch;
     private static boolean capturedRotation;
+
+    @Inject(method = "onPress", desc = "(JIII)V", at = @At(At.Type.HEAD))
+    public static void onPress(MouseHandler handler, long window, int button, int action, int modifiers,
+                               CallbackInfo callbackInfo) {
+        if (ZenClient.isReady()) {
+            ZenClient.getInstance().getEventBus().call(new MouseButtonEvent(button, action));
+        }
+    }
 
     @Inject(method = "turnPlayer", desc = "()V", at = @At(At.Type.HEAD))
     public static void onTurnPlayerHead(MouseHandler handler, CallbackInfo callbackInfo) {

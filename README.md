@@ -182,3 +182,6 @@ Please avoid adding features that automate combat, conceal unfair behavior, coll
 ## 📄 License
 
 This repository includes the **GNU General Public License v3.0**. See [`LICENSE`](./LICENSE) for the full license text.
+
+The proprietary server-protocol and authentication components are not part of
+this public source tree. See [PUBLIC_SOURCE_BOUNDARY.md](./PUBLIC_SOURCE_BOUNDARY.md).

@@ -13,12 +13,26 @@ import shit.zen.ZenClient;
 import shit.zen.event.impl.PreTickEvent;
 import shit.zen.event.impl.RayTraceEvent;
 import shit.zen.event.impl.RotationEvent;
+import shit.zen.event.impl.SafeWalkEvent;
 import shit.zen.event.impl.SneakEvent;
 import shit.zen.event.impl.StuckInBlockEvent;
 import shit.zen.utils.misc.ReflectionUtil;
 
 @Patch(Entity.class)
 public class EntityPatch {
+    @Inject(method = "isStayingOnGroundSurface", desc = "()Z", at = @At(At.Type.HEAD))
+    public static void onIsStayingOnGroundSurface(Entity entity, CallbackInfo callbackInfo) {
+        if (!ZenClient.isReady() || entity != ClientBase.mc.player) {
+            return;
+        }
+        SafeWalkEvent event = new SafeWalkEvent(entity.onGround() && entity.isShiftKeyDown());
+        ZenClient.getInstance().getEventBus().call(event);
+        if (event.isModified()) {
+            callbackInfo.result = event.isSafeWalk();
+            callbackInfo.cancel();
+        }
+    }
+
     @Inject(method = "makeStuckInBlock", desc = "(Lnet/minecraft/world/level/block/state/BlockState;Lnet/minecraft/world/phys/Vec3;)V", at = @At(At.Type.TAIL))
     public static void onMakeStuckInBlock(Entity entity, BlockState state, Vec3 motion, CallbackInfo callbackInfo) {
         if (ClientBase.mc.player != entity) return;

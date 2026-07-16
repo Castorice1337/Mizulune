@@ -184,35 +184,54 @@ public class MusicCacheManager {
         }
         Path part = target.resolveSibling(target.getFileName() + ".part");
         try {
+            long startedAt = System.nanoTime();
             Files.createDirectories(target.getParent());
+            Files.deleteIfExists(part);
+            LOGGER.info("[MizuluneMusic][download] start kind={} target={} endpoint={}",
+                    kind, target, safeEndpoint(url));
             HttpRequest request = HttpRequest.newBuilder(URI.create(url))
                     .timeout(Duration.ofSeconds(60L))
                     .GET()
-                    .header("User-Agent", "Mizulune-Music/1.0")
+                    .header("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Mizulune-Music/1.0")
+                    .header("Accept", kind == DownloadKind.AUDIO
+                            ? "audio/mpeg,audio/*;q=0.9,application/octet-stream;q=0.8,*/*;q=0.5"
+                            : "image/avif,image/webp,image/png,image/jpeg,*/*;q=0.5")
+                    .header("Referer", "https://music.gdstudio.org/")
                     .build();
             HttpResponse<Path> response = this.httpClient.send(request, HttpResponse.BodyHandlers.ofFile(part));
+            String contentType = response.headers().firstValue("Content-Type").orElse("");
+            long downloadedBytes = Files.isRegularFile(part) ? Files.size(part) : -1L;
+            LOGGER.info("[MizuluneMusic][download] response kind={} status={} contentType=\"{}\" bytes={} elapsedMs={}",
+                    kind, response.statusCode(), contentType, downloadedBytes,
+                    (System.nanoTime() - startedAt) / 1_000_000L);
             if (response.statusCode() < 200 || response.statusCode() >= 300) {
                 Files.deleteIfExists(part);
                 throw new IllegalStateException("Network error. Please try again later.");
             }
-            String contentType = response.headers().firstValue("Content-Type").orElse("");
             if (kind == DownloadKind.AUDIO && (!isAudioContentType(contentType) || !this.isLikelyValidAudio(part))) {
+                LOGGER.warn("[MizuluneMusic][download] rejected audio contentType=\"{}\" bytes={} signature={}",
+                        contentType, downloadedBytes, headerSignature(part));
                 Files.deleteIfExists(part);
                 throw new IllegalStateException("Only MP3 audio is supported by the current player.");
             }
             if (kind == DownloadKind.IMAGE && (!isImageContentType(contentType) || !this.isLikelyValidImage(part))) {
+                LOGGER.warn("[MizuluneMusic][download] rejected image contentType=\"{}\" bytes={} signature={}",
+                        contentType, downloadedBytes, headerSignature(part));
                 Files.deleteIfExists(part);
                 throw new IllegalStateException("Cover response is not a valid image.");
             }
             moveAtomically(part, target);
+            LOGGER.info("[MizuluneMusic][download] committed target={} bytes={}", target, Files.size(target));
         } catch (Exception exception) {
             try {
                 Files.deleteIfExists(part);
             } catch (IOException ignored) {
             }
             if (exception instanceof RuntimeException runtimeException) {
+                LOGGER.warn("[MizuluneMusic][download] failed kind={} target={}", kind, target, runtimeException);
                 throw runtimeException;
             }
+            LOGGER.warn("[MizuluneMusic][download] failed kind={} target={}", kind, target, exception);
             throw new IllegalStateException("Failed to cache this track.", exception);
         }
     }
@@ -356,6 +375,33 @@ public class MusicCacheManager {
     private static String safe(String value) {
         String clean = value == null || value.isBlank() ? "unknown" : value;
         return clean.replaceAll("[^A-Za-z0-9._=-]", "_");
+    }
+
+    private static String safeEndpoint(String value) {
+        try {
+            URI uri = URI.create(value);
+            String host = uri.getHost() == null ? "unknown-host" : uri.getHost();
+            String path = uri.getPath() == null ? "" : uri.getPath();
+            return uri.getScheme() + "://" + host + path;
+        } catch (Exception ignored) {
+            return "invalid-url";
+        }
+    }
+
+    private static String headerSignature(Path path) {
+        try (var input = Files.newInputStream(path)) {
+            byte[] bytes = input.readNBytes(12);
+            StringBuilder builder = new StringBuilder(bytes.length * 3);
+            for (int i = 0; i < bytes.length; i++) {
+                if (i > 0) {
+                    builder.append(' ');
+                }
+                builder.append(String.format("%02X", bytes[i] & 0xFF));
+            }
+            return builder.toString();
+        } catch (Exception ignored) {
+            return "unavailable";
+        }
     }
 
     private enum DownloadKind {

@@ -5,6 +5,8 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 import org.apache.commons.lang3.StringUtils;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
 import shit.zen.ClientBase;
 import shit.zen.ZenClient;
 import shit.zen.event.impl.KeyEvent;
@@ -48,6 +50,7 @@ import shit.zen.modules.impl.player.AntiWeb;
 import shit.zen.modules.impl.player.AutoMLG;
 import shit.zen.modules.impl.player.AutoWebPlace;
 import shit.zen.modules.impl.player.ChestStealer;
+import shit.zen.modules.impl.player.Clutch;
 import shit.zen.modules.impl.player.GhostHand;
 import shit.zen.modules.impl.player.Helper;
 import shit.zen.modules.impl.player.InventoryManager;
@@ -86,6 +89,7 @@ import shit.zen.event.EventTarget;
 import shit.zen.value.Value;
 
 public class ModuleManager extends ClientBase {
+    private static final Logger LOGGER = LogManager.getLogger(ModuleManager.class);
     private final Map<String, Module> moduleMap = new ConcurrentHashMap<>();
 
     public ModuleManager() {
@@ -134,6 +138,7 @@ public class ModuleManager extends ClientBase {
         this.register(new AutoMLG());
         this.register(new AutoWebPlace());
         this.register(new ChestStealer());
+        this.register(new Clutch());
         this.register(new GhostHand());
         this.register(new Helper());
         this.register(new InventoryManager());
@@ -173,6 +178,13 @@ public class ModuleManager extends ClientBase {
     }
 
     public void register(Module module) {
+        for (Module existing : this.moduleMap.values()) {
+            if (existing.getId().equals(module.getId())) {
+                LOGGER.error("Duplicate module id {} for {} and {}; refusing to register duplicate",
+                        module.getId(), existing.getClass().getName(), module.getClass().getName());
+                return;
+            }
+        }
         this.moduleMap.put(module.getClass().getSimpleName(), module);
         module.registerSettings();
     }

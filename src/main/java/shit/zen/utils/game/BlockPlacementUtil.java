@@ -86,7 +86,21 @@ public final class BlockPlacementUtil extends ClientBase {
             Direction facing,
             ItemStack stack,
             BlockPlacementOptions options) {
-        if (mc.player == null || mc.level == null || placedBlock == null || facing == null) {
+        return createPlacementTarget(
+                placedBlock,
+                facing,
+                stack,
+                options,
+                mc.player == null ? null : mc.player.getEyePosition(1.0f));
+    }
+
+    public static BlockPlacementTarget createPlacementTarget(
+            BlockPos placedBlock,
+            Direction facing,
+            ItemStack stack,
+            BlockPlacementOptions options,
+            Vec3 planningEye) {
+        if (mc.player == null || mc.level == null || placedBlock == null || facing == null || planningEye == null) {
             return null;
         }
         if (mc.level.isOutsideBuildHeight(placedBlock) || !canReplace(placedBlock, stack)) {
@@ -103,21 +117,34 @@ public final class BlockPlacementUtil extends ClientBase {
         if (faceTarget == null) {
             return null;
         }
-        if (!options.considerFacingAwayFaces() && !isFaceVisibleToPlayer(faceTarget.point(), facing)) {
+        if (!options.considerFacingAwayFaces()
+                && !isFaceVisibleToPlayer(faceTarget.point(), facing, planningEye)) {
             return null;
         }
 
-        Rotation rotation = getRotationToPoint(faceTarget.point());
+        Rotation rotation = getRotationToPoint(faceTarget.point(), planningEye);
         BlockPlacementTarget target = new BlockPlacementTarget(interactedBlock, placedBlock, facing,
                 faceTarget.point(), faceTarget.minPlacementY(), rotation);
-        return isValidPlacementTarget(target, stack, options) ? target : null;
+        return isValidPlacementTarget(target, stack, options, planningEye) ? target : null;
     }
 
     public static boolean isValidPlacementTarget(
             BlockPlacementTarget target,
             ItemStack stack,
             BlockPlacementOptions options) {
-        if (target == null || mc.player == null || mc.level == null) {
+        return isValidPlacementTarget(
+                target,
+                stack,
+                options,
+                mc.player == null ? null : mc.player.getEyePosition(1.0f));
+    }
+
+    public static boolean isValidPlacementTarget(
+            BlockPlacementTarget target,
+            ItemStack stack,
+            BlockPlacementOptions options,
+            Vec3 eyePosition) {
+        if (target == null || mc.player == null || mc.level == null || eyePosition == null) {
             return false;
         }
         if (mc.level.isOutsideBuildHeight(target.placedBlockPos())
@@ -125,15 +152,25 @@ public final class BlockPlacementUtil extends ClientBase {
                 || !isValidSupport(target.interactedBlockPos())) {
             return false;
         }
-        return mc.player.getEyePosition().distanceToSqr(target.targetPoint()) <= options.maxRange() * options.maxRange();
+        return eyePosition.distanceToSqr(target.targetPoint()) <= options.maxRange() * options.maxRange();
     }
 
     public static boolean isRayTraceReachable(
             BlockPlacementTarget target,
             BlockPlacementOptions options) {
+        return isRayTraceReachable(
+                target,
+                options,
+                mc.player == null ? null : mc.player.getEyePosition(1.0f));
+    }
+
+    public static boolean isRayTraceReachable(
+            BlockPlacementTarget target,
+            BlockPlacementOptions options,
+            Vec3 eyePosition) {
         return target != null
                 && target.rotation() != null
-                && rayTraceTarget(target.rotation(), target, options, false) != null;
+                && rayTraceTarget(target.rotation(), target, options, false, eyePosition) != null;
     }
 
     public static boolean canReplace(BlockPos pos, ItemStack stack) {
@@ -178,31 +215,59 @@ public final class BlockPlacementUtil extends ClientBase {
             BlockPlacementTarget target,
             BlockPlacementOptions options,
             boolean allowConstructFailResult) {
-        if (rotation == null || target == null || mc.player == null || mc.level == null) {
+        return rayTraceTarget(
+                rotation,
+                target,
+                options,
+                allowConstructFailResult,
+                mc.player == null ? null : mc.player.getEyePosition(1.0f));
+    }
+
+    public static BlockHitResult rayTraceTarget(
+            Rotation rotation,
+            BlockPlacementTarget target,
+            BlockPlacementOptions options,
+            boolean allowConstructFailResult,
+            Vec3 eyePosition) {
+        if (rotation == null || target == null || mc.player == null || mc.level == null || eyePosition == null) {
             return null;
         }
 
-        HitResult result = rayTrace(rotation, options.maxRange());
+        HitResult result = rayTrace(rotation, options.maxRange(), eyePosition);
         if (result instanceof BlockHitResult hit
                 && hit.getType() == HitResult.Type.BLOCK
                 && hit.getBlockPos().equals(target.interactedBlockPos())) {
+            if (options.requireDirectionMatch() && hit.getDirection() != target.facing()) {
+                return null;
+            }
             // LB keeps the traced hit location but forces the planned placement face.
             return new BlockHitResult(hit.getLocation(), target.facing(), target.interactedBlockPos(), hit.isInside());
         }
         if (allowConstructFailResult && options.constructFailResult()) {
-            return getConstructedFallbackHit(rotation, target);
+            return getConstructedFallbackHit(rotation, target, eyePosition);
         }
         return null;
     }
 
     public static HitResult rayTrace(Rotation rotation, double range) {
-        if (rotation == null || mc.player == null || mc.level == null) {
+        return rayTrace(
+                rotation,
+                range,
+                mc.player == null ? null : mc.player.getEyePosition(1.0f));
+    }
+
+    public static HitResult rayTrace(Rotation rotation, double range, Vec3 eyePosition) {
+        if (rotation == null || mc.player == null || mc.level == null || eyePosition == null) {
             return null;
         }
-        Vec3 eyePos = mc.player.getEyePosition(1.0f);
         Vec3 lookDir = Vec3.directionFromRotation(rotation.getPitch(), rotation.getYaw());
-        Vec3 endPos = eyePos.add(lookDir.scale(range));
-        return mc.level.clip(new ClipContext(eyePos, endPos, ClipContext.Block.OUTLINE, ClipContext.Fluid.NONE, mc.player));
+        Vec3 endPos = eyePosition.add(lookDir.scale(range));
+        return mc.level.clip(new ClipContext(
+                eyePosition,
+                endPos,
+                ClipContext.Block.OUTLINE,
+                ClipContext.Fluid.NONE,
+                mc.player));
     }
 
     public static boolean doesHitMatchTarget(
@@ -253,13 +318,18 @@ public final class BlockPlacementUtil extends ClientBase {
     }
 
     public static Rotation getRotationToPoint(Vec3 point) {
-        if (mc.player == null || point == null) {
+        return getRotationToPoint(
+                point,
+                mc.player == null ? null : mc.player.getEyePosition(1.0f));
+    }
+
+    public static Rotation getRotationToPoint(Vec3 point, Vec3 eyePosition) {
+        if (point == null || eyePosition == null) {
             return null;
         }
-        Vec3 eye = mc.player.getEyePosition(1.0f);
-        double dx = point.x - eye.x;
-        double dy = point.y - eye.y;
-        double dz = point.z - eye.z;
+        double dx = point.x - eyePosition.x;
+        double dy = point.y - eyePosition.y;
+        double dz = point.z - eyePosition.z;
         double horizontal = Math.sqrt(dx * dx + dz * dz);
         float yaw = (float) Math.toDegrees(Math.atan2(dz, dx)) - 90.0f;
         float pitch = (float) -Math.toDegrees(Math.atan2(dy, horizontal));
@@ -274,12 +344,15 @@ public final class BlockPlacementUtil extends ClientBase {
                 + Math.abs(first.getPitch() - second.getPitch());
     }
 
-    private static BlockHitResult getConstructedFallbackHit(Rotation rotation, BlockPlacementTarget target) {
-        Rotation centerRotation = getRotationToPoint(Vec3.atCenterOf(target.interactedBlockPos()));
+    private static BlockHitResult getConstructedFallbackHit(
+            Rotation rotation,
+            BlockPlacementTarget target,
+            Vec3 eyePosition) {
+        Rotation centerRotation = getRotationToPoint(Vec3.atCenterOf(target.interactedBlockPos()), eyePosition);
         if (rotationDistance(rotation, centerRotation) <= CONSTRUCT_FALLBACK_MAX_ANGLE) {
             return target.toHitResult();
         }
-        Rotation plannedPointRotation = getRotationToPoint(target.targetPoint());
+        Rotation plannedPointRotation = getRotationToPoint(target.targetPoint(), eyePosition);
         if (rotationDistance(rotation, plannedPointRotation) <= CONSTRUCT_FALLBACK_MAX_ANGLE) {
             return new BlockHitResult(target.targetPoint(), target.facing(), target.interactedBlockPos(), false);
         }
@@ -364,11 +437,11 @@ public final class BlockPlacementUtil extends ClientBase {
         return false;
     }
 
-    private static boolean isFaceVisibleToPlayer(Vec3 targetPoint, Direction facing) {
-        if (mc.player == null || targetPoint == null || facing == null) {
+    private static boolean isFaceVisibleToPlayer(Vec3 targetPoint, Direction facing, Vec3 eyePosition) {
+        if (targetPoint == null || facing == null || eyePosition == null) {
             return false;
         }
-        Vec3 delta = mc.player.getEyePosition(1.0f).subtract(targetPoint);
+        Vec3 delta = eyePosition.subtract(targetPoint);
         return delta.length() > 1.0E-5 && delta.dot(Vec3.atLowerCornerOf(facing.getNormal())) >= 0.0;
     }
 

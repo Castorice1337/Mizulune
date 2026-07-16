@@ -8,7 +8,9 @@ import com.google.gson.JsonParser;
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.IOException;
+import java.util.List;
 import java.util.Map;
+import java.util.function.Supplier;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import shit.zen.ZenClient;
@@ -26,38 +28,47 @@ public class JsonValuesConfig extends Config {
     private static final Logger LOGGER = LogManager.getLogger(JsonValuesConfig.class);
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
     private static final int SCHEMA_VERSION = 1;
+    private final Supplier<List<Module>> modulesSupplier;
     private JsonObject preservedRootFields = new JsonObject();
+    private JsonObject preservedUnknownModules = new JsonObject();
 
     public JsonValuesConfig() {
+        this(() -> ZenClient.getInstance().getModuleManager().getModules());
+    }
+
+    JsonValuesConfig(Supplier<List<Module>> modulesSupplier) {
         super("settings.json");
+        this.modulesSupplier = modulesSupplier;
     }
 
     @Override
     public void read(BufferedReader bufferedReader) throws IOException {
+        this.preservedRootFields = new JsonObject();
+        this.preservedUnknownModules = new JsonObject();
         JsonElement parsed = JsonParser.parseReader(bufferedReader);
         if (!parsed.isJsonObject()) {
-            LOGGER.warn("settings.json root is not an object, ignoring");
-            return;
+            throw new IOException("settings.json root is not an object");
         }
         JsonObject root = parsed.getAsJsonObject();
         this.preserveRootFields(root);
         MusicConfigStore.read(root);
         JsonObject modules = object(root, "modules");
         if (modules == null) {
-            LOGGER.warn("settings.json has no modules object, ignoring");
-            return;
+            throw new IOException("settings.json has no modules object");
         }
         for (Map.Entry<String, JsonElement> entry : modules.entrySet()) {
-            Module module = this.findModule(entry.getKey());
-            if (module == null) {
-                LOGGER.warn("Ignoring unknown module id {} in settings.json", entry.getKey());
-                continue;
-            }
             if (!entry.getValue().isJsonObject()) {
                 LOGGER.warn("Ignoring malformed module config for {}", entry.getKey());
                 continue;
             }
-            this.readModule(module, entry.getValue().getAsJsonObject());
+            JsonObject moduleObject = entry.getValue().getAsJsonObject();
+            Module module = this.resolveModule(entry.getKey(), moduleObject);
+            if (module == null) {
+                LOGGER.warn("Preserving unknown module id {} in settings.json", entry.getKey());
+                this.preservedUnknownModules.add(entry.getKey(), moduleObject.deepCopy());
+                continue;
+            }
+            this.readModule(module, moduleObject);
         }
     }
 
@@ -66,8 +77,13 @@ public class JsonValuesConfig extends Config {
         JsonObject root = this.copyPreservedRootFields();
         root.addProperty("schema", SCHEMA_VERSION);
         JsonObject modules = new JsonObject();
-        for (Module module : ZenClient.getInstance().getModuleManager().getModules()) {
+        for (Module module : this.modules()) {
             modules.add(module.getId(), this.writeModule(module));
+        }
+        for (Map.Entry<String, JsonElement> entry : this.preservedUnknownModules.entrySet()) {
+            if (!modules.has(entry.getKey())) {
+                modules.add(entry.getKey(), entry.getValue().deepCopy());
+            }
         }
         root.add("modules", modules);
         MusicConfigStore.write(root);
@@ -121,6 +137,7 @@ public class JsonValuesConfig extends Config {
         if (values != null) {
             this.readGroup(values, module.getValueTree(), module.getId());
         }
+        module.notifyConfigLoaded();
     }
 
     private JsonObject writeModule(Module module) {
@@ -208,7 +225,8 @@ public class JsonValuesConfig extends Config {
 
         Map<String, Value<?>> children = group.childMap();
         for (Map.Entry<String, JsonElement> entry : values.entrySet()) {
-            if ("type".equals(entry.getKey()) || "enabled".equals(entry.getKey()) || "mode".equals(entry.getKey())) {
+            if ("type".equals(entry.getKey())
+                    || "enabled".equals(entry.getKey()) && group instanceof ToggleValueGroup) {
                 continue;
             }
             Value<?> child = children.get(Value.normalizeId(entry.getKey()));
@@ -251,8 +269,53 @@ public class JsonValuesConfig extends Config {
     }
 
     private Module findModule(String id) {
+        if (id == null || id.isBlank()) {
+            return null;
+        }
+        String normalized = Value.normalizeId(id);
+        for (Module module : this.modules()) {
+            if (module.getId().equals(normalized)
+                    || Value.normalizeId(module.getName()).equals(normalized)
+                    || module.getName().replace(" ", "").equalsIgnoreCase(id)
+                    || Value.normalizeId(module.getClass().getSimpleName()).equals(normalized)) {
+                return module;
+            }
+        }
+        return null;
+    }
+
+    private Module resolveModule(String entryKey, JsonObject object) {
+        Module module = this.findModule(entryKey);
+        if (module != null) {
+            return module;
+        }
+        module = this.findModule(readString(object, "displayName"));
+        if (module != null) {
+            LOGGER.info("Migrating config module key {} to stable id {}", entryKey, module.getId());
+            return module;
+        }
+        module = this.findModule(readString(object, "id"));
+        if (module != null) {
+            LOGGER.info("Migrating config module key {} to stable id {}", entryKey, module.getId());
+        }
+        return module;
+    }
+
+    private List<Module> modules() {
         try {
-            return ZenClient.getInstance().getModuleManager().getModule(id);
+            List<Module> modules = this.modulesSupplier.get();
+            return modules == null ? List.of() : modules;
+        } catch (Exception ignored) {
+            return List.of();
+        }
+    }
+
+    private static String readString(JsonObject object, String key) {
+        if (object == null || !object.has(key)) {
+            return null;
+        }
+        try {
+            return object.get(key).getAsString();
         } catch (Exception ignored) {
             return null;
         }

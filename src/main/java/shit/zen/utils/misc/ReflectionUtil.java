@@ -93,6 +93,17 @@ public final class ReflectionUtil {
         }
     }
 
+    public static int getJumpDelay(LivingEntity livingEntity) {
+        if (livingEntity == null) return -1;
+        try {
+            Field field = findField(livingEntity.getClass(), "noJumpDelay", "f_20954_");
+            return field.getInt(livingEntity);
+        } catch (Exception ex) {
+            ClientBase.logger.error("Failed to get noJumpDelay field", ex);
+            return -1;
+        }
+    }
+
     public static void setRightClickDelay(int delay) {
         if (ClientBase.mc == null) return;
         try {

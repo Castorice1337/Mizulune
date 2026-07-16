@@ -71,8 +71,23 @@ public interface RotationProvider {
         return false;
     }
 
+    default boolean shouldSnapToSensitivity() {
+        return true;
+    }
+
+    default boolean shouldNormalizeYawForServerPackets() {
+        return false;
+    }
+
     default boolean shouldFixMovement() {
         return this.getApplyMode() == RotationApplyMode.SILENT;
+    }
+
+    default MovementCorrection getMovementCorrection() {
+        if (this.getApplyMode() == RotationApplyMode.CHANGE_LOOK) {
+            return MovementCorrection.CHANGE_LOOK;
+        }
+        return this.shouldFixMovement() ? MovementCorrection.SILENT : MovementCorrection.OFF;
     }
 
     default int getTicksUntilReset() {

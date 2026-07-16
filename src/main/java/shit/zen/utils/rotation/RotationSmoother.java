@@ -35,6 +35,44 @@ public class RotationSmoother extends ClientBase {
             double interpolationDirectionChangeFactorMax,
             double interpolationMidpoint,
             boolean humanize) {
+        return this.update(
+                target,
+                mode,
+                durationTicks,
+                steepness,
+                maxYawSpeed,
+                maxPitchSpeed,
+                minStep,
+                epsilon,
+                interpolationHorizontalSpeedMin,
+                interpolationHorizontalSpeedMax,
+                interpolationVerticalSpeedMin,
+                interpolationVerticalSpeedMax,
+                interpolationDirectionChangeFactorMin,
+                interpolationDirectionChangeFactorMax,
+                interpolationMidpoint,
+                humanize,
+                true);
+    }
+
+    public Rotation update(
+            Rotation target,
+            SmoothMode mode,
+            int durationTicks,
+            double steepness,
+            double maxYawSpeed,
+            double maxPitchSpeed,
+            double minStep,
+            double epsilon,
+            double interpolationHorizontalSpeedMin,
+            double interpolationHorizontalSpeedMax,
+            double interpolationVerticalSpeedMin,
+            double interpolationVerticalSpeedMax,
+            double interpolationDirectionChangeFactorMin,
+            double interpolationDirectionChangeFactorMax,
+            double interpolationMidpoint,
+            boolean humanize,
+            boolean snapToSensitivity) {
         if (target == null || mc.player == null || mc.options == null) {
             this.reset();
             return null;
@@ -51,15 +89,19 @@ public class RotationSmoother extends ClientBase {
 
         float yawDiff = Mth.wrapDegrees(this.targetRotation.getYaw() - this.currentRotation.getYaw());
         float pitchDiff = this.targetRotation.getPitch() - this.currentRotation.getPitch();
-        double gcd = this.getSensitivityStep();
+        double gcd = snapToSensitivity ? this.getSensitivityStep() : 0.0;
         double reachEpsilon = Math.max(Math.max(0.0, epsilon), gcd * 0.5);
         if (this.isClose(yawDiff, pitchDiff, reachEpsilon)) {
-            this.currentRotation = this.snapDelta(this.currentRotation, this.targetRotation, false);
+            this.currentRotation = snapToSensitivity
+                    ? this.snapDelta(this.currentRotation, this.targetRotation, false)
+                    : this.targetRotation.clone();
             return this.currentRotation.clone();
         }
 
         if (smoothMode == SmoothMode.SNAP) {
-            this.currentRotation = this.snapDelta(this.currentRotation, this.targetRotation, true);
+            this.currentRotation = snapToSensitivity
+                    ? this.snapDelta(this.currentRotation, this.targetRotation, true)
+                    : this.targetRotation.clone();
             return this.currentRotation.clone();
         }
 
@@ -92,11 +134,15 @@ public class RotationSmoother extends ClientBase {
             next.setPitch(Mth.clamp(next.getPitch() + ThreadLocalRandom.current().nextFloat(-0.01f, 0.01f), -90.0f, 90.0f));
         }
 
-        next = this.snapDelta(this.currentRotation, next, true);
+        if (snapToSensitivity) {
+            next = this.snapDelta(this.currentRotation, next, true);
+        }
         float snappedYawDiff = Mth.wrapDegrees(this.targetRotation.getYaw() - next.getYaw());
         float snappedPitchDiff = this.targetRotation.getPitch() - next.getPitch();
         if (this.isClose(snappedYawDiff, snappedPitchDiff, reachEpsilon)) {
-            next = this.snapDelta(next, this.targetRotation, false);
+            next = snapToSensitivity
+                    ? this.snapDelta(next, this.targetRotation, false)
+                    : this.targetRotation.clone();
         }
 
         this.currentRotation = next;

@@ -25,6 +25,7 @@ import shit.zen.music.model.PlayMode;
 import shit.zen.render.DrawContext;
 import shit.zen.render.FontPresets;
 import shit.zen.render.FontRenderer;
+import shit.zen.render.GlyphMetrics;
 import shit.zen.render.LiquidGlassStyle;
 import shit.zen.render.Paint;
 import shit.zen.render.Rectangle;
@@ -69,16 +70,17 @@ public class MusicScreen extends Screen {
     private static final int WHITE = 0xFFF2F2F2;
     private static final int MUTED = 0xFFB5B5B5;
     private static final int DIM = 0xFF777777;
-    private static final int LINE = 0x22FFFFFF;
-    private static final int LINE_HOVER = 0x44FFFFFF;
+    private static final int LINE = 0x1CFFFFFF;
+    private static final int LINE_HOVER = 0x3AFFFFFF;
     private static final int LINE_ACTIVE = 0x99FFFFFF;
-    private static final int OUTER_GLASS = 0xA8000000;
-    private static final int SIDEBAR_GLASS = 0xD8060606;
-    private static final int CONTENT_GLASS = 0x96141414;
-    private static final int BOTTOM_GLASS = 0xAA101010;
-    private static final int ROW_BASE = 0x30161616;
-    private static final int ROW_HOVER = 0x50232323;
-    private static final int INPUT = 0x66181818;
+    private static final int OUTER_GLASS = 0x18000000;
+    private static final int SIDEBAR_GLASS = 0x94030303;
+    private static final int CONTENT_GLASS = 0x24FFFFFF;
+    private static final int BOTTOM_GLASS = 0x78101010;
+    private static final int ROW_BASE = 0x24141414;
+    private static final int ROW_HOVER = 0x36FFFFFF;
+    private static final int INPUT = 0x26FFFFFF;
+    private static final float MATERIAL_ICON_OPTICAL_Y = 2.5f;
 
     private final MusicService service;
     private final MizuluneMusic module;
@@ -91,6 +93,7 @@ public class MusicScreen extends Screen {
     private final Map<String, SmoothAnimationTimer> hoverTimers = new ConcurrentHashMap<>();
     private final SmoothAnimationTimer openTimer = new SmoothAnimationTimer();
     private final SmoothAnimationTimer pageTimer = new SmoothAnimationTimer();
+    private final SmoothAnimationTimer navSelectionTimer = new SmoothAnimationTimer();
     private final SmoothAnimationTimer searchScrollTimer = new SmoothAnimationTimer();
     private final SmoothAnimationTimer queueScrollTimer = new SmoothAnimationTimer();
     private final AtomicLong searchRequestSequence = new AtomicLong();
@@ -127,6 +130,10 @@ public class MusicScreen extends Screen {
         this.openTimer.setToValue(0.0);
         this.pageTimer.setCurrentValue(1.0);
         this.pageTimer.setToValue(1.0);
+        double initialNavOffset = this.page.ordinal() * 42.0;
+        this.navSelectionTimer.setCurrentValue(initialNavOffset);
+        this.navSelectionTimer.setFromValue(initialNavOffset);
+        this.navSelectionTimer.setToValue(initialNavOffset);
     }
 
     @Override
@@ -146,7 +153,8 @@ public class MusicScreen extends Screen {
         this.alpha = open;
         Renderer.render(guiGraphics, context -> {
             context.save();
-            float scale = 0.965f + 0.035f * open;
+            float scale = 0.92f + 0.08f * open;
+            context.translate(0.0f, (1.0f - open) * 14.0f);
             context.translate(this.width * 0.5f, this.height * 0.5f);
             context.scale(scale, scale);
             context.translate(-this.width * 0.5f, -this.height * 0.5f);
@@ -244,7 +252,8 @@ public class MusicScreen extends Screen {
         this.pageTimer.tick();
         float pageProgress = clamp(this.pageTimer.getValueF(), 0.0f, 1.0f);
         context.save();
-        context.translate((1.0f - pageProgress) * 8.0f, 0.0f);
+        context.clip(Rectangle.ofXYWH(contentX, y, contentW, contentH));
+        context.translate((1.0f - pageProgress) * 14.0f, (1.0f - pageProgress) * 2.0f);
         switch (this.page) {
             case PLAYER -> this.renderPlayer(context, contentX, y, contentW, contentH, mouseX, mouseY);
             case SEARCH -> this.renderSearch(context, contentX, y, contentW, contentH, mouseX, mouseY);
@@ -258,10 +267,16 @@ public class MusicScreen extends Screen {
     private void drawChrome(DrawContext context, float x, float y, float outerW, float outerH, float sidebarW, float bottomH) {
         float radius = 13.0f;
         this.drawGlass(context, x, y, outerW, outerH, radius, OUTER_GLASS, true);
-        this.rounded(context, x, y, sidebarW, outerH, radius, SIDEBAR_GLASS);
-        this.rounded(context, x + sidebarW, y, outerW - sidebarW, outerH, radius, CONTENT_GLASS);
-        this.rounded(context, x, y + outerH - bottomH, outerW, bottomH, radius, BOTTOM_GLASS);
-        this.line(context, x + sidebarW, y + 8.0f, x + sidebarW, y + outerH - 8.0f, LINE);
+        context.save();
+        context.clipRoundedRect(RoundedRectangle.ofXYWHR(x, y, outerW, outerH, radius), true);
+        if (!this.module.useLiquidGlass()) {
+            this.rect(context, x, y, sidebarW, outerH - bottomH, SIDEBAR_GLASS);
+            this.rect(context, x + sidebarW, y, outerW - sidebarW, outerH - bottomH, CONTENT_GLASS);
+        }
+        this.rect(context, x, y + outerH - bottomH, outerW, bottomH, BOTTOM_GLASS);
+        context.restore();
+        this.line(context, x + sidebarW, y + 10.0f,
+                x + sidebarW, y + outerH - bottomH - 8.0f, LINE);
         this.line(context, x + 8.0f, y + outerH - bottomH, x + outerW - 8.0f, y + outerH - bottomH, LINE);
     }
 
@@ -276,26 +291,28 @@ public class MusicScreen extends Screen {
         float navX = x + 12.0f;
         float navY = y + 104.0f;
         float navW = width - 24.0f;
+        this.navSelectionTimer.tick();
+        float selectionY = navY + this.navSelectionTimer.getValueF();
+        this.rounded(context, navX, selectionY, navW, 30.0f, 7.0f, 0x56303030);
+        this.rounded(context, navX + 2.0f, selectionY + 7.0f, 2.0f, 16.0f, 1.0f, 0xFFFFFFFF);
         this.navItem(context, navX, navY, navW, Page.PLAYER, ICON_PLAYER, "Player", mouseX, mouseY);
         this.navItem(context, navX, navY + 42.0f, navW, Page.SEARCH, ICON_SEARCH, "Search", mouseX, mouseY);
         this.navItem(context, navX, navY + 84.0f, navW, Page.QUEUE, ICON_QUEUE, "Queue", mouseX, mouseY);
         this.navItem(context, navX, navY + 126.0f, navW, Page.ABOUT, ICON_INFO, "About", mouseX, mouseY);
-        this.text(context, this.module.useLiquidGlass() ? "Liquid Glass" : "Frosted Glass",
-                x + 18.0f, y + height - 26.0f, SMALL, DIM, Align.LEFT);
     }
 
     private void navItem(DrawContext context, float x, float y, float width, Page target, String icon, String title,
                          int mouseX, int mouseY) {
         boolean active = this.page == target;
         boolean hovered = contains(mouseX, mouseY, x, y, width, 30.0f);
-        float hover = this.hover("nav:" + target.name(), hovered || active);
-        int fill = active ? 0x5A2B2B2B : Argb.interpolate(0x00181818, 0x38252525, hover);
-        this.rounded(context, x, y, width, 30.0f, 7.0f, fill);
-        if (active) {
-            this.rounded(context, x + 2.0f, y + 7.0f, 2.0f, 16.0f, 1.0f, 0xCCFFFFFF);
+        float hover = this.hover("nav:" + target.name(), hovered);
+        if (hover > 0.001f) {
+            this.rounded(context, x, y, width, 30.0f, 7.0f,
+                    Argb.interpolate(0x00181818, 0x282D2D2D, hover));
         }
-        this.iconCenterY(context, icon, x + 23.0f, y + 15.0f, ICON, active ? WHITE : MUTED, Align.CENTER);
-        this.textCenterY(context, title, x + 45.0f, y + 15.0f, BODY, active ? WHITE : MUTED, Align.LEFT);
+        float shift = hover * 2.5f;
+        this.iconCenterY(context, icon, x + 23.0f + shift, y + 15.0f, ICON, active ? WHITE : MUTED, Align.CENTER);
+        this.textCenterY(context, title, x + 45.0f + shift, y + 15.0f, BODY, active ? WHITE : MUTED, Align.LEFT);
         this.clickAreas.add(new ClickArea(x, y, width, 30.0f, () -> this.setPage(target)));
     }
 
@@ -515,7 +532,8 @@ public class MusicScreen extends Screen {
         }
 
         float cover = 34.0f;
-        float coverX = searchResult ? x + 8.0f : x + 42.0f;
+        float contentShift = hover * 2.0f;
+        float coverX = (searchResult ? x + 8.0f : x + 42.0f) + contentShift;
         if (!searchResult) {
             if (current) {
                 this.iconCenterY(context, ICON_VOLUME, x + 22.0f, y + height * 0.5f, ICON_SMALL, WHITE, Align.CENTER);
@@ -700,6 +718,7 @@ public class MusicScreen extends Screen {
             return;
         }
         this.page = target;
+        this.navSelectionTimer.animate(target.ordinal() * 42.0, 0.24, Easings.EASE_OUT_POW3);
         this.pageTimer.setCurrentValue(0.0);
         this.pageTimer.setFromValue(0.0);
         this.pageTimer.setToValue(0.0);
@@ -721,10 +740,12 @@ public class MusicScreen extends Screen {
                             int mouseX, int mouseY, boolean disabled, Runnable action) {
         boolean hovered = !disabled && contains(mouseX, mouseY, x, y, width, height);
         float hover = this.hover("btn:" + key, hovered);
-        int fill = disabled ? 0x22161616 : Argb.interpolate(0x3A1B1B1B, 0x662C2C2C, hover);
+        int fill = disabled ? 0x16161616 : Argb.interpolate(0x301B1B1B, 0x68FFFFFF, hover);
         int border = disabled ? 0x16FFFFFF : Argb.interpolate(LINE, LINE_HOVER, hover);
         this.rounded(context, x, y, width, height, 7.0f, fill);
-        this.stroke(context, x, y, width, height, 7.0f, border, 1.0f);
+        if (hover > 0.02f) {
+            this.stroke(context, x, y, width, height, 7.0f, border, 1.0f);
+        }
         this.textCenterY(context, label, x + width * 0.5f, y + height * 0.5f, SMALL, disabled ? DIM : WHITE, Align.CENTER);
         if (!disabled) {
             this.clickAreas.add(new ClickArea(x, y, width, height, action));
@@ -752,9 +773,17 @@ public class MusicScreen extends Screen {
                             int mouseX, int mouseY, Runnable action) {
         boolean hovered = contains(mouseX, mouseY, x, y, size, size);
         float hover = this.hover("icon:" + key, hovered);
-        this.rounded(context, x, y, size, size, size * 0.5f, Argb.interpolate(0x00181818, 0x552D2D2D, hover));
-        this.iconCenterY(context, icon, x + size * 0.5f, y + size * 0.5f,
+        this.rounded(context, x, y, size, size, size * 0.5f, Argb.interpolate(0x00181818, 0x68FFFFFF, hover));
+        float centerX = x + size * 0.5f;
+        float centerY = y + size * 0.5f;
+        float scale = 0.90f + hover * 0.10f;
+        context.save();
+        context.translate(centerX, centerY);
+        context.scale(scale, scale);
+        context.translate(-centerX, -centerY);
+        this.iconCenterY(context, icon, centerX, centerY,
                 size > 30.0f ? ICON_LARGE : ICON, hovered ? WHITE : MUTED, Align.CENTER);
+        context.restore();
         this.clickAreas.add(new ClickArea(x, y, size, size, action));
     }
 
@@ -762,24 +791,28 @@ public class MusicScreen extends Screen {
         float progress = clamp(value, 0.0f, 1.0f);
         this.rounded(context, x, y, width, 4.0f, 2.0f, 0x55353535);
         this.rounded(context, x, y, width * progress, 4.0f, 2.0f, 0xFFE5E5E5);
-        this.rounded(context, x + width * progress - 4.0f, y - 3.0f, 10.0f, 10.0f, 5.0f, 0xFFFFFFFF);
+        this.rounded(context, x + width * progress - 5.0f, y - 3.0f, 10.0f, 10.0f, 5.0f, 0xFFFFFFFF);
     }
 
     private void drawGlass(DrawContext context, float x, float y, float width, float height, float radius, int tint, boolean strong) {
         RoundedRectangle rect = RoundedRectangle.ofXYWHR(x, y, width, height, radius);
         if (this.module.useLiquidGlass()) {
             LiquidGlassStyle style = LiquidGlassStyle.builder()
-                    .blurRadius(16.0f)
-                    .opacity(strong ? 0.78f : 0.62f)
-                    .tint(Argb.scaleAlpha(tint, 1.0f), 0.42f)
-                    .darkness(0.30f)
+                    .blurRadius(20.0f)
+                    .opacity(strong ? 0.84f : 0.68f)
+                    .tint(Argb.scaleAlpha(tint, 1.0f), 0.30f)
+                    .darkness(0.18f)
                     .chromaStrength(0.0f)
                     .build();
             context.drawLiquidGlassPanel(rect, style);
         } else {
-            context.drawBackdropBlurredRoundedRect(rect, 16.0f, strong ? 0.78f : 0.58f, color(tint));
+            context.drawBackdropBlurredRoundedRect(rect, 22.0f, strong ? 0.92f : 0.72f, color(tint));
         }
         this.stroke(context, x, y, width, height, radius, LINE_HOVER, 1.0f);
+    }
+
+    private void rect(DrawContext context, float x, float y, float width, float height, int color) {
+        context.drawRect(Rectangle.ofXYWH(x, y, width, height), paint(color));
     }
 
     private void rounded(DrawContext context, float x, float y, float width, float height, float radius, int color) {
@@ -795,27 +828,37 @@ public class MusicScreen extends Screen {
         context.drawLine(x1, y1, x2, y2, paint(color).setStrokeWidth(1.0f));
     }
 
-    private void text(DrawContext context, String text, float x, float y, FontRenderer font, int color, Align align) {
+    private void text(DrawContext context, String value, float x, float y, FontRenderer font, int color, Align align) {
+        float capHeight = Math.max(1.0f, font.getMetrics().capHeight());
+        this.drawAlignedText(context, value, x, centeredTextY(font, y + capHeight * 0.5f), font, color, align);
+    }
+
+    private void drawAlignedText(DrawContext context, String value, float x, float y,
+                                 FontRenderer font, int color, Align align) {
         float drawX = switch (align) {
             case LEFT -> x;
-            case CENTER -> x - this.measure(text, font) * 0.5f;
-            case RIGHT -> x - this.measure(text, font);
+            case CENTER -> x - this.measure(value, font) * 0.5f;
+            case RIGHT -> x - this.measure(value, font);
         };
-        context.drawString(text, drawX, y, font, paint(color));
+        context.drawString(value, drawX, y, font, paint(color));
     }
 
     private void textCenterY(DrawContext context, String value, float x, float centerY,
                              FontRenderer font, int color, Align align) {
-        Rectangle bounds = font.getBounds(value);
-        float drawY = centerY - bounds.getHeight() * 0.5f;
-        this.text(context, value, x, drawY, font, color, align);
+        this.drawAlignedText(context, value, x, centeredTextY(font, centerY), font, color, align);
     }
 
     private void iconCenterY(DrawContext context, String icon, float x, float centerY,
                              FontRenderer font, int color, Align align) {
-        Rectangle bounds = font.getBounds(icon);
-        float drawY = centerY - bounds.getHeight() * 0.5f;
-        this.text(context, icon, x, drawY, font, color, align);
+        this.drawAlignedText(context, icon, x,
+                centeredTextY(font, centerY + MATERIAL_ICON_OPTICAL_Y), font, color, align);
+    }
+
+    private static float centeredTextY(FontRenderer font, float centerY) {
+        GlyphMetrics metrics = font.getMetrics();
+        float capHeight = Math.max(1.0f, metrics.capHeight());
+        float logicalAscent = (metrics.getLineGap() - metrics.ascent() - metrics.descent()) * 0.5f;
+        return centerY - capHeight * 0.5f - (logicalAscent - capHeight);
     }
 
     private float hover(String key, boolean hovered) {
