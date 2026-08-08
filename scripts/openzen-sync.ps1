@@ -105,6 +105,9 @@ switch ($Action) {
         $publicHead = Get-RefCommit $PublicRepo 'master'
         Assert-Ancestor $PublicRepo $publicHead $target
         Invoke-Git $PublicRepo @('push', 'origin', "$target`:refs/heads/master")
+        # Keep the local public worktree on the same fast-forwarded master that
+        # was just published, so parity checks do not compare stale local refs.
+        Invoke-Git $PublicRepo @('merge', '--ff-only', $target) | Out-Null
 
         if (-not [string]::IsNullOrWhiteSpace($ReleaseTag)) {
             Invoke-Git $PrivateRepo @('tag', '-a', $ReleaseTag, $target, '-m', "Public release $ReleaseTag")
