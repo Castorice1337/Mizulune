@@ -1,6 +1,5 @@
 package shit.zen.protocol.heypixel;
 
-import asm.patchify.loader.PatchAgent;
 import com.heypixel.heypixelmod.SyncToken;
 import java.io.IOException;
 import java.io.InputStream;
@@ -43,7 +42,7 @@ final class OfficialId114NativeSink implements Id114NativeSink {
     private final NativeLoadRegistry loadRegistry;
     private final BooleanSupplier platformSupported;
     private final PackagedMaxHookLocator packagedMaxHookLocator;
-    private final Supplier<PatchAgent.StartupMode> startupMode;
+    private final Supplier<ProtocolStartupMode> startupMode;
     private volatile Availability cachedAvailability;
 
     OfficialId114NativeSink(HeyPixelInstallLayout layout) {
@@ -56,7 +55,7 @@ final class OfficialId114NativeSink implements Id114NativeSink {
             PRODUCTION_LOAD_REGISTRY,
             OfficialId114NativeSink::isWindowsX64,
             OfficialId114NativeSink::locatePackagedMaxHook,
-            PatchAgent::getStartupMode
+            ProtocolStartupMode::fromSystemProperty
         );
     }
 
@@ -78,7 +77,7 @@ final class OfficialId114NativeSink implements Id114NativeSink {
             loadRegistry,
             platformSupported,
             () -> null,
-            () -> PatchAgent.StartupMode.PREMAIN
+            () -> ProtocolStartupMode.PREMAIN
         );
     }
 
@@ -101,7 +100,7 @@ final class OfficialId114NativeSink implements Id114NativeSink {
             loadRegistry,
             platformSupported,
             packagedMaxHookLocator,
-            () -> PatchAgent.StartupMode.PREMAIN
+            () -> ProtocolStartupMode.PREMAIN
         );
     }
 
@@ -114,7 +113,7 @@ final class OfficialId114NativeSink implements Id114NativeSink {
         NativeLoadRegistry loadRegistry,
         BooleanSupplier platformSupported,
         PackagedMaxHookLocator packagedMaxHookLocator,
-        Supplier<PatchAgent.StartupMode> startupMode
+        Supplier<ProtocolStartupMode> startupMode
     ) {
         this.layout = layout;
         this.javaHome = javaHome;
@@ -172,16 +171,16 @@ final class OfficialId114NativeSink implements Id114NativeSink {
     }
 
     private Availability evaluateAvailability() {
-        PatchAgent.StartupMode mode;
+        ProtocolStartupMode mode;
         try {
             mode = startupMode.get();
         } catch (RuntimeException error) {
-            mode = PatchAgent.StartupMode.NONE;
+            mode = ProtocolStartupMode.NONE;
         }
-        if (mode == PatchAgent.StartupMode.AGENTMAIN) {
+        if (mode == ProtocolStartupMode.AGENTMAIN) {
             return Availability.unavailable(Reason.LATE_ATTACH_UNSUPPORTED);
         }
-        if (mode != PatchAgent.StartupMode.PREMAIN) {
+        if (mode != ProtocolStartupMode.PREMAIN) {
             return Availability.unavailable(Reason.PREMAIN_REQUIRED);
         }
         if (!platformSupported.getAsBoolean()) {
