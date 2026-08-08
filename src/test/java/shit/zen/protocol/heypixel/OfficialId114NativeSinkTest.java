@@ -5,7 +5,6 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import asm.patchify.loader.PatchAgent;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -148,9 +147,9 @@ final class OfficialId114NativeSinkTest {
     void lateAttachAndMissingAgentFailBeforeNativeLoad(@TempDir Path directory)
         throws Exception {
         Fixture fixture = fixture(directory.resolve("startup-mode"));
-        for (PatchAgent.StartupMode mode : Set.of(
-            PatchAgent.StartupMode.AGENTMAIN,
-            PatchAgent.StartupMode.NONE
+        for (ProtocolStartupMode mode : Set.of(
+            ProtocolStartupMode.AGENTMAIN,
+            ProtocolStartupMode.NONE
         )) {
             AtomicInteger loads = new AtomicInteger();
             OfficialId114NativeSink sink = new OfficialId114NativeSink(
@@ -166,7 +165,7 @@ final class OfficialId114NativeSinkTest {
             );
 
             assertEquals(
-                mode == PatchAgent.StartupMode.AGENTMAIN
+                mode == ProtocolStartupMode.AGENTMAIN
                     ? Id114NativeSink.Reason.LATE_ATTACH_UNSUPPORTED
                     : Id114NativeSink.Reason.PREMAIN_REQUIRED,
                 sink.availability().reason()
