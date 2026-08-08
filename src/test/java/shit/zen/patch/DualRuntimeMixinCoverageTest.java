@@ -23,8 +23,26 @@ final class DualRuntimeMixinCoverageTest {
     private static final Set<String> FORGE_ONLY_OR_EMPTY = Set.of(
             "NetworkFiltersPatch",
             "ItemInHandLayerPatch");
-    private static final Set<String> FABRIC_ONLY = Set.of("TitleScreenMixin");
+    private static final Set<String> FABRIC_ONLY = Set.of(
+            "TitleScreenMixin",
+            "LivingEntityDropMixin");
     private static final Set<String> FABRIC_COMPAT_ONLY = Set.of("LocalPlayerSprintCompatMixin");
+    private static final Map<String, String> FABRIC_26_DIRECT_BOUNDARIES = Map.of(
+            "FogRendererMixin", "NoRender",
+            "GuiRendererMixin", "FabricBlurCompositor",
+            "LightmapRenderStateExtractorMixin", "GameRendererHookCallbacks.onFullBrightScale",
+            "PacketUtilsMixin", "ReceivePacketEvent");
+    private static final Map<String, String> FABRIC_26_API_REPLACEMENTS = Map.of(
+            "GameRendererMixin", "GameRendererHookCallbacks.onRender",
+            "LevelRendererMixin", "RenderHookCallbacks.onRenderLevel");
+    private static final Set<String> FABRIC_26_DEFERRED_RENDER_HOOKS = Set.of(
+            "ContainerScreenMixin",
+            "EntityRendererMixin",
+            "FriendlyByteBufMixin",
+            "GuiMixin",
+            "LightTextureMixin",
+            "LivingEntityRendererMixin",
+            "PlayerTabOverlayMixin");
 
     @Test
     void everyApplicableForgePatchHasExactlyOneRegisteredFabricAdapter() throws Exception {
@@ -49,21 +67,41 @@ final class DualRuntimeMixinCoverageTest {
         }
 
         Set<String> expected = new LinkedHashSet<>(APPLICABLE_PATCHES.values());
+        expected.removeAll(FABRIC_26_API_REPLACEMENTS.keySet());
+        expected.removeAll(FABRIC_26_DEFERRED_RENDER_HOOKS);
         expected.addAll(FABRIC_COMPAT_ONLY);
         expected.addAll(FABRIC_ONLY);
+        expected.addAll(FABRIC_26_DIRECT_BOUNDARIES.keySet());
         assertEquals(expected, registered);
-        Path mixinRoot = root.resolve("fabricmod/src/main/java/shit/zen/fabric/mixin");
         for (String mixin : registered) {
-            Path source = mixinRoot.resolve(mixin + ".java");
+            Path source = resolveMixinSource(root, mixin);
             assertTrue(Files.isRegularFile(source), source.toString());
             String contents = Files.readString(source, StandardCharsets.UTF_8);
-            if (FABRIC_ONLY.contains(mixin)) {
+            if ("TitleScreenMixin".equals(mixin)) {
                 assertTrue(contents.contains("FantnelScreen"),
                         mixin + " must remain the Fabric-only FantNEL entry point");
+            } else if (FABRIC_26_DIRECT_BOUNDARIES.containsKey(mixin)) {
+                assertTrue(contents.contains(FABRIC_26_DIRECT_BOUNDARIES.get(mixin)),
+                        mixin + " must remain an explicit thin 26.2 API-boundary adapter");
             } else {
                 assertTrue(contents.contains("shit.zen.hook"),
                         mixin + " must remain a thin adapter over shared hook semantics");
             }
+        }
+
+        String fabricEntrypoint = Files.readString(
+                root.resolve("fabricmod/src/main/java/shit/zen/fabric/MizuluneFabricClient.java"),
+                StandardCharsets.UTF_8);
+        for (Map.Entry<String, String> replacement : FABRIC_26_API_REPLACEMENTS.entrySet()) {
+            assertTrue(fabricEntrypoint.contains(replacement.getValue()),
+                    replacement.getKey() + " must have a Fabric 26 API replacement");
+        }
+
+        String compatibilityNotes = Files.readString(
+                root.resolve("fabricmod/README.md"), StandardCharsets.UTF_8);
+        for (String deferred : FABRIC_26_DEFERRED_RENDER_HOOKS) {
+            assertTrue(compatibilityNotes.contains(deferred),
+                    deferred + " must remain an explicit Fabric 26 compatibility boundary");
         }
     }
 
@@ -101,6 +139,34 @@ final class DualRuntimeMixinCoverageTest {
                         StandardCharsets.UTF_8).contains("isStayingOnGroundSurface"));
     }
 
+    @Test
+    void fabricTwentySixLivingRenderStateKeepsHeadYawAndPitchParity() throws Exception {
+        String mixin = Files.readString(
+                Path.of("fabricmod/src/fabric26/java/shit/zen/fabric/mixin/HumanoidModelMixin.java"),
+                StandardCharsets.UTF_8);
+
+        assertTrue(mixin.contains("ModifyExpressionValue"),
+                "26.2 must replace the extracted head-yaw expression before body-relative yRot is derived");
+        assertTrue(mixin.contains("Lnet/minecraft/util/Mth;rotLerp(FFF)F"),
+                "26.2 must hook the same head-yaw interpolation as the 1.20.1 renderer patch");
+        assertTrue(mixin.contains("LivingEntityRenderHookCallbacks.headYaw"),
+                "Scaffold/KillAura render yaw must keep the shared RotationAnimationEvent semantics");
+        assertTrue(mixin.contains("LivingEntityRenderHookCallbacks.pitch"),
+                "26.2 model pitch must keep the shared CameraPitchEvent semantics");
+    }
+
+    @Test
+    void fabricTwentySixRestoresOldHittingAtTheHandSubmitBoundary() throws Exception {
+        String mixin = Files.readString(
+                Path.of("fabricmod/src/fabric26/java/shit/zen/fabric/mixin/ItemInHandRendererMixin.java"),
+                StandardCharsets.UTF_8);
+
+        assertTrue(mixin.contains("submitArmWithItem"),
+                "OldHitting must run inside the 26.2 hand submission pose scope");
+        assertTrue(mixin.contains("ItemInHandRendererHookCallbacks.onSubmitArmWithItem"),
+                "26.2 must reuse the shared OldHitting policy through its platform submission adapter");
+    }
+
     private static String wrapTarget(Class<?> type, String methodName) {
         for (Method method : type.getDeclaredMethods()) {
             if (method.getName().equals(methodName)) {
@@ -108,6 +174,16 @@ final class DualRuntimeMixinCoverageTest {
             }
         }
         throw new AssertionError("Missing method " + type.getName() + "#" + methodName);
+    }
+
+    private static Path resolveMixinSource(Path root, String mixin) {
+        Path fabric26 = root.resolve(
+                "fabricmod/src/fabric26/java/shit/zen/fabric/mixin/" + mixin + ".java");
+        if (Files.isRegularFile(fabric26)) {
+            return fabric26;
+        }
+        return root.resolve(
+                "fabricmod/src/main/java/shit/zen/fabric/mixin/" + mixin + ".java");
     }
 
     private static Map<String, String> applicablePatches() {

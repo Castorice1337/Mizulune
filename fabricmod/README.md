@@ -1,27 +1,49 @@
-# Mizulune Fabric 1.20.1
+# Mizulune Fabric 26.2
 
-这是与根 Forge/Patchify 构建隔离的 Fabric Loom 构建。它直接复用根
-`src/main/java` 与资源，只排除 Forge、Patchify、DLL 和 ASM 专属包；Fabric
-入口与 Mixin 位于本目录。Fabric 使用自己的 Gradle 8.11.1 wrapper 与
-Loom 1.9.2，根 Forge 构建继续固定在 Gradle 8.8。
+Fabric 侧已与根目录的 Forge/Patchify 构建隔离：
 
-构建入口：
+- 根项目继续使用 Minecraft 1.20.1、Java 17 bytecode 与 ASM/Patchify。
+- `fabricmod/` 使用 Minecraft 26.2、Java 25、Fabric Loader 0.19.3、Fabric API 0.156.0+26.2、Loom 1.17.19 和 Gradle 9.5.1。
+- Sodium `mc26.2-0.9.1-fabric`、Iris `1.11.2+26.2-fabric`、ViaFabricPlus `4.6.1` 作为独立 runtime mod 加载，不嵌入 Mizulune JAR。
+- 三个 runtime mod 的 Modrinth version ID 与 SHA-512 固定在 `gradle.properties`，由 `verifyFabricRuntimeMods` 校验。
 
-- 根目录 `./gradlew buildForgeAsm`：Forge 1.20.1 + Patchify ASM JAR
-- 根目录 `./gradlew buildForgeAsmDll`：原有 `dllWithFantnel` 分发链
-- 根目录 `./gradlew buildFabricMod`：Fabric 1.20.1 + Mixin JAR
-- 根目录 `./gradlew runFabricClient`：以固定 Sodium 开发运行时启动 Fabric 客户端
-- 根目录 `./gradlew buildAll`：同时构建两个 Mod JAR
+## 维护边界
 
-Fabric 产物会暂存到根 `build/mod-dist/fabric/`。Fabric API 是必需依赖，
-Sodium 0.5+ 是推荐依赖；当前首批 Mixin 仅触及 Minecraft 生命周期和网络
-边界，刻意避开 Sodium 的渲染实现类。开发 `runClient` 固定加载 Sodium
-`mc1.20.1-0.5.13-fabric`，但发布 JAR 不会嵌入或再分发 Sodium。
+`../src/main/java` 仍是 Forge/ASM 1.20.1 的 canonical 共享源码。Fabric 26.2 的机械名称迁移集中在 `gradle/fabric26-source-compat.gradle`；无法用机械替换表达的行为差异放在 `src/fabric26/java`。
 
-根任务默认通过 Gradle Toolchain 选择 Java 17。MaxHook 完整验证/发行时可用
-`-PfabricJavaHome=<固定 Temurin 17.0.2>` 或环境变量 `FABRIC_JAVA_HOME` 覆盖；
-共享 native sink 仍会独立校验 `jvm.dll` SHA-256，错误运行时不会被放行。
+Minecraft 26.2 改为 GUI/world render-state 提取与提交。Fabric 侧使用 `FabricRenderBridge`、`FabricSubmissionBackend` 和 `GuiGraphics` facade，把旧绘制调用提交到 26.2 render state，禁止在 GUI extraction 阶段直接改写 framebuffer。该边界用于兼容 Sodium/Iris，也避免 ClickGUI 污染整帧颜色状态。
 
-MaxHook 不在 Fabric 中复制或改写。共享 `OfficialId114NativeSink` 仍在游戏
-JVM 内校验固定 `MaxHook.dll`、固定 `jvm.dll` 和 exact `SyncToken` ABI 后加载；
-Fabric/Knot 的 callback map 在完整运行验证前仍视为未知。
+HUD 与 world render 已分别迁到 Fabric API 的 `HudElementRegistry` 和 `LevelRenderEvents.COLLECT_SUBMITS`。输入事件、网络 `PacketProcessor`、camera、fog、实体移动、客户端生命周期等使用 26.2 专用薄 Mixin，继续调用共享 hook semantics。
+
+Fabric 26.2 当前只支持 OpenGL graphics backend；Vulkan backend 会在入口处 fail fast。Fabric 26.2 / Java 25 也不会加载绑定 Java 17 `jvm.dll` 的 official ID114 native sink，Forge/ASM 1.20.1 native 路径不变。
+
+## 明确的剩余兼容边界
+
+以下 1.20.1 render/codec Mixin 没有在 26.2 注册，避免把已经删除的方法签名强行注入新 render-state 管线。名称保留在这里，并由根项目测试保证不会悄悄扩散：
+
+- `ContainerScreenMixin`：容器页抑制需要迁到 26.2 screen extraction。
+- `EntityRendererMixin`：vanilla name-tag 抑制需要迁到 entity render-state。
+- `FriendlyByteBufMixin`：Component JSON 读取已改为 codec 管线；NameProtect decode hook 需要新的 codec 边界。
+- `GuiMixin`：scoreboard、portal、texture overlay 抑制需要逐项迁到 HUD render-state。
+- `LightTextureMixin`：darkness light scale 需要迁到 26.2 lightmap/fog state。
+- `LivingEntityRendererMixin`：entity render pre/post 与完整 body/head 插值需要迁到 extracted entity state；local-player head pitch 已由 26.2 adapter 保留。
+- `PlayerTabOverlayMixin`：tab list header/footer/name 与布局 hook 需要迁到 tab render-state。
+
+这些边界不影响本阶段验收目标：Fabric 26.2 构建、Sodium/Iris/ViaFabricPlus 同时加载、客户端进入主菜单与基础页面运行。后续若要求这些具体模块达到 1.20.1 功能全等，应单独建兼容阶段逐项验收。
+
+## 构建与运行
+
+在 `fabricmod/`：
+
+```powershell
+.\gradlew.bat build verifyFabricRuntimeMods stageFabricRuntimeMods stageFabricMod --no-daemon --console=plain
+.\gradlew.bat runClient --no-daemon --console=plain
+```
+
+在根目录：
+
+```powershell
+.\gradlew.bat build --no-parallel --no-daemon --console=plain
+```
+
+可用 `-PfabricJavaHome=<JDK 25>` 或环境变量 `FABRIC_JAVA_HOME` 覆盖 Fabric Java。根 Forge/ASM 构建仍保持自己的 Java 17 bytecode/toolchain 合同。

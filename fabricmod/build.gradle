@@ -1,5 +1,5 @@
 plugins {
-    id 'fabric-loom' version "${loom_version}"
+    id 'net.fabricmc.fabric-loom' version "${loom_version}"
     id 'maven-publish'
 }
 
@@ -23,17 +23,15 @@ repositories {
     }
 }
 
-configurations.configureEach {
-    resolutionStrategy.eachDependency { details ->
-        if (details.requested.group == 'org.lwjgl') {
-            details.useVersion '3.3.1'
-            details.because 'Minecraft 1.20.1 and Sodium 0.5.13 require the vanilla LWJGL line'
-        }
+configurations {
+    fabricRuntimeMods {
+        canBeConsumed = false
+        canBeResolved = true
     }
 }
 
 loom {
-    accessWidenerPath = file('src/main/resources/mizulune.accesswidener')
+    accessWidenerPath = file('src/main/resources/mizulune.classtweaker')
 
     runs {
         client {
@@ -46,14 +44,6 @@ loom {
 
 sourceSets {
     main {
-        java {
-            srcDirs = ['src/main/java', '../src/main/java']
-            exclude 'asm/**'
-            exclude 'shit/zen/asm/**'
-            exclude 'shit/zen/dll/**'
-            exclude 'shit/zen/patch/**'
-            exclude 'shit/zen/platform/forge/**'
-        }
         resources {
             srcDirs = ['src/main/resources', '../src/main/resources']
             exclude 'META-INF/**'
@@ -64,17 +54,23 @@ sourceSets {
 
 dependencies {
     minecraft "com.mojang:minecraft:${project.minecraft_version}"
-    mappings loom.officialMojangMappings()
-    modImplementation "net.fabricmc:fabric-loader:${project.fabric_loader_version}"
-    modImplementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_api_version}"
-    // Pinned dev/runtime compatibility target; never nested into Mizulune's release JAR.
-    modRuntimeOnly 'maven.modrinth:AANobbMI:OihdIimA' // Sodium mc1.20.1-0.5.13-fabric
+    implementation "net.fabricmc:fabric-loader:${project.fabric_loader_version}"
+    implementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_api_version}"
 
-    compileOnly 'org.projectlombok:lombok:1.18.34'
-    annotationProcessor 'org.projectlombok:lombok:1.18.34'
+    // These are external mods: available in development and staged beside Mizulune,
+    // but never nested into the Mizulune JAR. Immutable version IDs keep the matrix reproducible.
+    runtimeOnly "maven.modrinth:AANobbMI:${project.sodium_version_id}"
+    runtimeOnly "maven.modrinth:YL57xq9U:${project.iris_version_id}"
+    runtimeOnly "maven.modrinth:rIC2XJV4:${project.viafabricplus_version_id}"
+    fabricRuntimeMods("maven.modrinth:AANobbMI:${project.sodium_version_id}") { transitive = false }
+    fabricRuntimeMods("maven.modrinth:YL57xq9U:${project.iris_version_id}") { transitive = false }
+    fabricRuntimeMods("maven.modrinth:rIC2XJV4:${project.viafabricplus_version_id}") { transitive = false }
+
+    compileOnly 'org.projectlombok:lombok:1.18.46'
+    annotationProcessor 'org.projectlombok:lombok:1.18.46'
     compileOnly 'org.jetbrains:annotations:24.1.0'
     compileOnly 'com.google.code.findbugs:jsr305:3.0.2'
-    compileOnly 'io.github.llamalad7:mixinextras-common:0.4.1'
+    compileOnly 'io.github.llamalad7:mixinextras-common:0.5.4'
 
     include implementation('org.jetbrains.skiko:skiko-awt:0.148.1')
     include implementation('org.jetbrains.skiko:skiko-awt-runtime-windows-x64:0.148.1')
@@ -89,7 +85,7 @@ dependencies {
 
 tasks.withType(JavaCompile).configureEach {
     options.encoding = 'UTF-8'
-    options.release = 17
+    options.release = 25
 }
 
 processResources {
@@ -101,21 +97,71 @@ processResources {
 }
 
 java {
-    toolchain.languageVersion = JavaLanguageVersion.of(17)
-    sourceCompatibility = JavaVersion.VERSION_17
-    targetCompatibility = JavaVersion.VERSION_17
+    toolchain.languageVersion = JavaLanguageVersion.of(25)
+    sourceCompatibility = JavaVersion.VERSION_25
+    targetCompatibility = JavaVersion.VERSION_25
     withSourcesJar()
 }
 
 tasks.register('stageFabricMod', Copy) {
     group = 'distribution'
-    description = 'Build and stage the remapped Fabric mod under the root build/mod-dist directory.'
+    description = 'Build and stage the Fabric 26.2 mod under the root build/mod-dist directory.'
     dependsOn tasks.named('build')
     doFirst {
         project.delete(fileTree('../build/mod-dist/fabric') {
             include 'mizulune-fabric-*.jar'
         })
     }
-    from tasks.named('remapJar').flatMap { it.archiveFile }
+    from tasks.named('jar').flatMap { it.archiveFile }
     into file('../build/mod-dist/fabric')
 }
+
+tasks.register('stageFabricRuntimeMods', Copy) {
+    group = 'distribution'
+    description = 'Stage the pinned Sodium, Iris, and ViaFabricPlus runtime mods beside Mizulune.'
+    dependsOn 'verifyFabricRuntimeMods'
+    doFirst {
+        project.delete(fileTree('../build/mod-dist/fabric') {
+            include 'sodium-*.jar'
+            include 'iris-*.jar'
+            include 'ViaFabricPlus-*.jar'
+            include 'AANobbMI-*.jar'
+            include 'YL57xq9U-*.jar'
+            include 'rIC2XJV4-*.jar'
+        })
+    }
+    from configurations.fabricRuntimeMods
+    eachFile { details ->
+        if (details.name.startsWith('AANobbMI-')) details.name = 'sodium-fabric-0.9.1+mc26.2.jar'
+        if (details.name.startsWith('YL57xq9U-')) details.name = 'iris-fabric-1.11.2+mc26.2.jar'
+        if (details.name.startsWith('rIC2XJV4-')) details.name = 'ViaFabricPlus-4.6.1.jar'
+    }
+    into file('../build/mod-dist/fabric')
+}
+
+tasks.register('verifyFabricRuntimeMods') {
+    group = 'verification'
+    description = 'Verify the immutable Sodium, Iris, and ViaFabricPlus runtime artifacts.'
+    inputs.files(configurations.fabricRuntimeMods)
+    inputs.property('sodiumSha512', project.sodium_sha512)
+    inputs.property('irisSha512', project.iris_sha512)
+    inputs.property('viaFabricPlusSha512', project.viafabricplus_sha512)
+    doLast {
+        def expected = [
+            'AANobbMI-': project.sodium_sha512,
+            'YL57xq9U-': project.iris_sha512,
+            'rIC2XJV4-': project.viafabricplus_sha512
+        ]
+        configurations.fabricRuntimeMods.files.each { artifact ->
+            def entry = expected.find { prefix, ignored -> artifact.name.startsWith(prefix) }
+            if (entry == null) throw new GradleException("Unexpected Fabric runtime artifact: ${artifact.name}")
+            def digest = java.security.MessageDigest.getInstance('SHA-512')
+                .digest(artifact.bytes).encodeHex().toString()
+            if (!digest.equalsIgnoreCase(entry.value.toString())) {
+                throw new GradleException("SHA-512 mismatch for ${artifact.name}: ${digest}")
+            }
+        }
+    }
+}
+
+apply from: 'gradle/fabric26-source-compat.gradle'

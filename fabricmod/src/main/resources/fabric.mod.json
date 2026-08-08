@@ -3,7 +3,7 @@
   "id": "mizulune",
   "version": "${version}",
   "name": "Mizulune Client",
-  "description": "Mizulune Fabric 1.20.1 client distribution",
+  "description": "Mizulune Fabric 26.2 client distribution",
   "authors": ["Shirona1337"],
   "license": "All-Rights-Reserved",
   "environment": "client",
@@ -15,15 +15,16 @@
   "mixins": [
     "mizulune.fabric.mixins.json"
   ],
-  "accessWidener": "mizulune.accesswidener",
+  "accessWidener": "mizulune.classtweaker",
   "depends": {
-    "fabricloader": ">=0.16.0",
-    "minecraft": "=1.20.1",
-    "java": ">=17",
-    "fabric-api": "*",
-    "viafabricplus": ">=2.8.7"
+    "fabricloader": ">=0.19.3",
+    "minecraft": "=26.2",
+    "java": ">=25",
+    "fabric-api": ">=0.156.0"
   },
   "recommends": {
-    "sodium": ">=0.5.0"
+    "sodium": ">=0.9.1",
+    "iris": ">=1.11.2",
+    "viafabricplus": ">=4.6.1"
   }
 }

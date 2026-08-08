@@ -4,7 +4,6 @@ import java.util.concurrent.LinkedBlockingDeque;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.protocol.Packet;
 import net.minecraft.network.protocol.game.ClientboundPlayerPositionPacket;
-import net.minecraft.network.protocol.game.ServerGamePacketListener;
 import net.minecraft.network.protocol.game.ServerboundMovePlayerPacket;
 import net.minecraft.network.protocol.game.ServerboundPlayerCommandPacket;
 import net.minecraft.world.level.block.Blocks;
@@ -26,7 +25,7 @@ public class AntiVoid
 extends Module {
     public static AntiVoid INSTANCE;
     private final NumberValue fallDistanceSetting = new NumberValue("Fall Distance", 5.0, 1.0, 10.0, 0.5);
-    private final LinkedBlockingDeque<Packet<ServerGamePacketListener>> bufferedPackets = new LinkedBlockingDeque();
+    private final LinkedBlockingDeque<Packet<?>> bufferedPackets = new LinkedBlockingDeque();
     private boolean scaffoldWasActive = false;
     public boolean bufferingPackets = false;
     private boolean sentFlyPacket = false;

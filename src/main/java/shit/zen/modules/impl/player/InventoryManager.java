@@ -27,19 +27,16 @@ import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.inventory.BrewingStandMenu;
 import net.minecraft.world.inventory.ClickType;
 import net.minecraft.world.inventory.FurnaceMenu;
-import net.minecraft.world.item.ArmorItem;
 import net.minecraft.world.item.AxeItem;
 import net.minecraft.world.item.BowItem;
 import net.minecraft.world.item.CrossbowItem;
 import net.minecraft.world.item.FishingRodItem;
 import net.minecraft.world.item.Item;
-import net.minecraft.world.item.ItemNameBlockItem;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
-import net.minecraft.world.item.PickaxeItem;
 import net.minecraft.world.item.ShovelItem;
-import net.minecraft.world.item.SwordItem;
 import org.apache.commons.lang3.tuple.Pair;
+import shit.zen.platform.ItemCompat;
 import shit.zen.event.impl.MotionEvent;
 import shit.zen.event.impl.PacketEvent;
 import shit.zen.event.impl.SprintEvent;
@@ -96,7 +93,7 @@ public class InventoryManager extends Module {
     private boolean wasSprinting = false;
     private boolean skipNextTick = false;
     private boolean justClosedInventory = false;
-    private final Queue<Packet<ServerGamePacketListener>> pendingPackets = new ConcurrentLinkedQueue<>();
+    private final Queue<Packet<?>> pendingPackets = new ConcurrentLinkedQueue<>();
     private int sprintDelayTicks = 0;
 
     public InventoryManager() {
@@ -184,7 +181,7 @@ public class InventoryManager extends Module {
                         || packet instanceof ServerboundContainerClosePacket)) {
             ChatUtil.print("Cancelled Inventory Packet: " + packet.getClass().getName());
             event.setCancelled(true);
-            Packet<ServerGamePacketListener> typed = (Packet<ServerGamePacketListener>) packet;
+            Packet<?> typed = packet;
             this.pendingPackets.add(typed);
         }
     }
@@ -214,7 +211,7 @@ public class InventoryManager extends Module {
             return;
         }
         while (!this.pendingPackets.isEmpty()) {
-            Packet<ServerGamePacketListener> packet = this.pendingPackets.poll();
+            Packet<?> packet = this.pendingPackets.poll();
             ChatUtil.print("Releasing Packet: " + packet.getClass().getName());
             PacketUtil.sendQueued(packet);
         }
@@ -323,12 +320,12 @@ public class InventoryManager extends Module {
     private boolean performInventoryAction() {
         // --- auto armor: drop bad armor we're wearing ---
         if (this.autoArmorSetting.getValue()) {
-            for (int i = 0; i < mc.player.getInventory().armor.size(); i++) {
-                ItemStack equipped = mc.player.getInventory().armor.get(i);
-                if (equipped.getItem() instanceof ArmorItem armor
+            for (int i = 0; i < 4; i++) {
+                ItemStack equipped = mc.player.getInventory().getItem(36 + i);
+                if (ItemCompat.isArmor(equipped)
                         && !equipped.isEmpty()
                         && actionTimer.hasPassed(this.actionDelaySetting.getValue().intValue())
-                        && ItemUtil.getBestArmorScore(armor.getEquipmentSlot()) > ItemUtil.getArmorScore(equipped)) {
+                        && ItemUtil.getBestArmorScore(ItemCompat.armorSlot(equipped)) > ItemUtil.getArmorScore(equipped)) {
                     mc.gameMode.handleInventoryMouseClick(
                             mc.player.inventoryMenu.containerId,
                             4 + (4 - i), 1, ClickType.THROW, mc.player);
@@ -340,10 +337,10 @@ public class InventoryManager extends Module {
             // --- auto armor: equip best armor in inventory ---
             for (int i = 0; i < mc.player.getInventory().items.size(); i++) {
                 ItemStack candidate = mc.player.getInventory().items.get(i);
-                if (candidate.isEmpty() || !(candidate.getItem() instanceof ArmorItem armor)) continue;
+                if (candidate.isEmpty() || !ItemCompat.isArmor(candidate)) continue;
                 float candidateScore = ItemUtil.getArmorScore(candidate);
-                boolean isBest = ItemUtil.getBestArmorScore(armor.getEquipmentSlot()) == candidateScore;
-                boolean betterThanEquipped = ItemUtil.getEquippedArmorScore(armor.getEquipmentSlot()) < candidateScore;
+                boolean isBest = ItemUtil.getBestArmorScore(ItemCompat.armorSlot(candidate)) == candidateScore;
+                boolean betterThanEquipped = ItemUtil.getEquippedArmorScore(ItemCompat.armorSlot(candidate)) < candidateScore;
                 if (isBest && betterThanEquipped
                         && actionTimer.hasPassed(this.actionDelaySetting.getValue().intValue())) {
                     int target = i < 9 ? i + 36 : i;
@@ -370,7 +367,7 @@ public class InventoryManager extends Module {
         // --- offhand preference ---
         String offhandPref = this.offhandItemSetting.getValue();
         if ("Golden Apple".equals(offhandPref)) {
-            ItemStack offhand = mc.player.getInventory().offhand.get(0);
+            ItemStack offhand = mc.player.getInventory().getItem(40);
             int slot = ItemUtil.getSlot(Items.GOLDEN_APPLE);
             if (slot != -1 && actionTimer.hasPassed(this.actionDelaySetting.getValue().intValue())) {
                 if (offhand.getItem() != Items.GOLDEN_APPLE) {
@@ -389,7 +386,7 @@ public class InventoryManager extends Module {
                 }
             }
         } else if ("Projectile".equals(offhandPref)) {
-            ItemStack offhand = mc.player.getInventory().offhand.get(0);
+            ItemStack offhand = mc.player.getInventory().getItem(40);
             ItemStack bestProjectile = ItemUtil.getBestProjectile();
             if (bestProjectile != null) {
                 int slot = ItemUtil.getSlot(bestProjectile);
@@ -406,7 +403,7 @@ public class InventoryManager extends Module {
                 }
             }
         } else if ("Fishing Rod".equals(offhandPref)) {
-            ItemStack offhand = mc.player.getInventory().offhand.get(0);
+            ItemStack offhand = mc.player.getInventory().getItem(40);
             int slot = ItemUtil.getSlot(Items.FISHING_ROD);
             if (slot != -1
                     && actionTimer.hasPassed(this.actionDelaySetting.getValue().intValue())
@@ -415,7 +412,7 @@ public class InventoryManager extends Module {
                 return true;
             }
         } else if ("Block".equals(offhandPref)) {
-            ItemStack offhand = mc.player.getInventory().offhand.get(0);
+            ItemStack offhand = mc.player.getInventory().getItem(40);
             ItemStack bestBlock = ItemUtil.getBestBlock();
             if (bestBlock != null) {
                 int slot = ItemUtil.getSlot(bestBlock);
@@ -474,10 +471,10 @@ public class InventoryManager extends Module {
                 bestSword = bestSharpAxe;
             }
             if (bestSword != null) {
-                float currentDamage = current.getItem() instanceof SwordItem
+                float currentDamage = ItemCompat.isSword(current)
                         ? ItemUtil.getSwordDamage(current)
                         : ItemUtil.getAxeDamage(current);
-                float candidateDamage = bestSword.getItem() instanceof SwordItem
+                float candidateDamage = ItemCompat.isSword(bestSword)
                         ? ItemUtil.getSwordDamage(bestSword)
                         : ItemUtil.getAxeDamage(bestSword);
                 if (candidateDamage > currentDamage && this.swapToSlot(slot, bestSword)) {
@@ -491,9 +488,9 @@ public class InventoryManager extends Module {
             ItemStack bestPickaxe = ItemUtil.getBestPickaxe();
             ItemStack current = mc.player.getInventory().items.get(slot);
             if (bestPickaxe != null
-                    && bestPickaxe.getItem() instanceof PickaxeItem
+                    && ItemCompat.isPickaxe(bestPickaxe)
                     && (ItemUtil.getDigSpeed(bestPickaxe) > ItemUtil.getDigSpeed(current)
-                            || !(current.getItem() instanceof PickaxeItem))
+                            || !ItemCompat.isPickaxe(current))
                     && this.swapToSlot(slot, bestPickaxe)) {
                 return true;
             }
@@ -674,13 +671,13 @@ public class InventoryManager extends Module {
         if (ItemUtil.isWeaponItem(stack)) return true;
         if (stack.getDisplayName().getString().contains("鐐瑰嚮浣跨敤")) return true;
         if (stack.getItem() == Items.COBWEB) return true;
-        if (stack.getItem() instanceof ArmorItem armor) {
+        if (ItemCompat.isArmor(stack)) {
             float score = ItemUtil.getArmorScore(stack);
-            if (ItemUtil.getEquippedArmorScore(armor.getEquipmentSlot()) >= score) return false;
-            return score >= ItemUtil.getBestArmorScore(armor.getEquipmentSlot());
+            if (ItemUtil.getEquippedArmorScore(ItemCompat.armorSlot(stack)) >= score) return false;
+            return score >= ItemUtil.getBestArmorScore(ItemCompat.armorSlot(stack));
         }
-        if (stack.getItem() instanceof SwordItem)   return ItemUtil.getBestSword() == stack;
-        if (stack.getItem() instanceof PickaxeItem) return ItemUtil.getBestPickaxe() == stack;
+        if (ItemCompat.isSword(stack))   return ItemUtil.getBestSword() == stack;
+        if (ItemCompat.isPickaxe(stack)) return ItemUtil.getBestPickaxe() == stack;
         if (stack.getItem() instanceof AxeItem && !ItemUtil.isLegitAxe(stack)) {
             return ItemUtil.getBestAxe() == stack;
         }
@@ -692,7 +689,7 @@ public class InventoryManager extends Module {
         if (stack.getItem() == Items.WATER_BUCKET && ItemUtil.countItem(Items.WATER_BUCKET) > getMaxWaterBuckets()) return false;
         if (stack.getItem() == Items.LAVA_BUCKET && ItemUtil.countItem(Items.LAVA_BUCKET)   > getMaxLavaBuckets())  return false;
         if (stack.getItem() instanceof FishingRodItem && ItemUtil.countItem(Items.FISHING_ROD) > 1) return false;
-        if (stack.getItem() instanceof ItemNameBlockItem) return false;
+        if (ItemCompat.isNamedBlock(stack.getItem())) return false;
         return ItemUtil.isUsableItem(stack);
     }
 }

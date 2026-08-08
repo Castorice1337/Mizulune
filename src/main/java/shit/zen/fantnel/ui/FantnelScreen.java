@@ -472,7 +472,8 @@ public final class FantnelScreen extends Screen {
             captchaWidth = image.getWidth();
             captchaHeight = image.getHeight();
             DynamicTexture texture = new DynamicTexture(image);
-            captchaTexture = this.minecraft.getTextureManager().register("fantnel-captcha", texture);
+            captchaTexture = ResourceLocation.fromNamespaceAndPath("mizulune", "fantnel-captcha");
+            this.minecraft.getTextureManager().register(captchaTexture, texture);
         } catch (Exception error) {
             throw new IllegalArgumentException("无法解析 FantNEL 验证码图片", error);
         }

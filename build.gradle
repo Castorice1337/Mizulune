@@ -1307,17 +1307,13 @@ def fabricBuildDir = file('fabricmod')
 def fabricWrapperCommand = System.getProperty('os.name').toLowerCase(Locale.ROOT).contains('windows')
         ? ['cmd.exe', '/d', '/c', file('fabricmod/gradlew.bat').absolutePath]
         : [file('fabricmod/gradlew').absolutePath]
-def viaFabricPlusBuildDir = file('viafabricplusmod')
-def viaFabricPlusWrapperCommand = System.getProperty('os.name').toLowerCase(Locale.ROOT).contains('windows')
-        ? ['cmd.exe', '/d', '/c', file('viafabricplusmod/gradlew.bat').absolutePath]
-        : [file('viafabricplusmod/gradlew').absolutePath]
 def resolveFabricJavaHome = {
     def explicit = findProperty('fabricJavaHome') ?: System.getenv('FABRIC_JAVA_HOME')
     if (explicit != null && explicit.toString().trim()) {
         return file(explicit.toString()).absolutePath
     }
     return javaToolchains.launcherFor {
-        languageVersion = JavaLanguageVersion.of(17)
+        languageVersion = JavaLanguageVersion.of(25)
     }.get().metadata.installationPath.asFile.absolutePath
 }
 
@@ -1335,7 +1331,7 @@ tasks.register('buildForgeAsmDll') {
 
 tasks.register('buildFabricMod', Exec) {
     group = 'fabric'
-    description = 'Build and stage the isolated Fabric 1.20.1 Mixin distribution.'
+    description = 'Build and stage the isolated Fabric 26.2 Mixin distribution.'
     workingDir fabricBuildDir
     environment 'GRADLE_USER_HOME', file('fabricmod/.gradle-user-home').absolutePath
     doFirst {
@@ -1349,14 +1345,14 @@ tasks.register('buildFabricMod', Exec) {
 
 tasks.register('buildViaFabricPlusMod', Exec) {
     group = 'fabric'
-    description = 'Build and stage the full ViaFabricPlus 1.20.1 fork with protocol 766 support.'
-    workingDir viaFabricPlusBuildDir
+    description = 'Verify and stage the pinned upstream ViaFabricPlus/Sodium/Iris runtime set.'
+    workingDir fabricBuildDir
     environment 'GRADLE_USER_HOME', file('fabricmod/.gradle-user-home').absolutePath
     doFirst {
         environment 'JAVA_HOME', resolveFabricJavaHome()
     }
-    commandLine(viaFabricPlusWrapperCommand + [
-            'stageProtocolMod',
+    commandLine(fabricWrapperCommand + [
+            'stageFabricRuntimeMods',
             '--no-parallel'
     ])
 }
@@ -1375,7 +1371,7 @@ tasks.register('stageFabricFantnelHost', Sync) {
 // retaining buildFabricMod for existing scripts and buildAll dependencies.
 tasks.register('fabricmodbuild') {
     group = 'fabric'
-    description = 'Build Mizulune Fabric, the full ViaFabricPlus fork, and the FantNEL Host.'
+    description = 'Build Mizulune Fabric 26.2, pinned runtime mods, and the FantNEL Host.'
     dependsOn tasks.named('buildFabricMod')
     dependsOn tasks.named('buildViaFabricPlusMod')
     dependsOn tasks.named('stageFabricFantnelHost')
@@ -1383,21 +1379,11 @@ tasks.register('fabricmodbuild') {
 
 tasks.register('runFabricClient', Exec) {
     group = 'fabric'
-    description = 'Run the Fabric 1.20.1 development client with the pinned Sodium runtime.'
+    description = 'Run the Fabric 26.2 development client with pinned Sodium, Iris, and ViaFabricPlus.'
     workingDir fabricBuildDir
     environment 'GRADLE_USER_HOME', file('fabricmod/.gradle-user-home').absolutePath
     doFirst {
         environment 'JAVA_HOME', resolveFabricJavaHome()
-        project.delete(fileTree('fabricmod/run/mods') {
-            include 'viafabricplus-*.jar'
-            include 'mizulune-viafabricplus-*.jar'
-        })
-        copy {
-            from fileTree('build/mod-dist/fabric') {
-                include 'viafabricplus-*.jar'
-            }
-            into file('fabricmod/run/mods')
-        }
         copy {
             from file('build/mod-dist/fabric/fantnel')
             into file('fabricmod/run/fantnel')
@@ -1411,7 +1397,7 @@ tasks.register('runFabricClient', Exec) {
 
 tasks.register('buildAll') {
     group = 'build'
-    description = 'Build Forge/ASM plus both Fabric/Mixin mod artifacts.'
+    description = 'Build Forge/ASM 1.20.1 plus the Fabric 26.2 distribution.'
     dependsOn tasks.named('buildForgeAsm')
     dependsOn tasks.named('buildFabricMod')
     dependsOn tasks.named('buildViaFabricPlusMod')

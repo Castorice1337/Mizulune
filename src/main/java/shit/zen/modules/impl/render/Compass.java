@@ -60,7 +60,7 @@ extends Module {
             if (itemStack.getItem() != Items.COMPASS) continue;
             return true;
         }
-        return mc.player.getInventory().offhand.get(0).getItem() == Items.COMPASS;
+        return mc.player.getInventory().getItem(40).getItem() == Items.COMPASS;
     }
 
     @EventTarget

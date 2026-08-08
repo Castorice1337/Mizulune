@@ -4,7 +4,6 @@ import java.util.List;
 import lombok.Generated;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.item.BlockItem;
-import net.minecraft.world.item.ItemNameBlockItem;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.BlockGetter;
 import net.minecraft.world.level.block.AirBlock;
@@ -27,6 +26,7 @@ import net.minecraft.world.phys.shapes.Shapes;
 import net.minecraft.world.phys.shapes.VoxelShape;
 import shit.zen.ClientBase;
 import shit.zen.utils.game.ItemUtil;
+import shit.zen.platform.ItemCompat;
 
 public final class BlockUtil
 extends ClientBase {
@@ -104,7 +104,7 @@ extends ClientBase {
             if (displayName.contains("Click") || displayName.contains("点击")) {
                 return false;
             }
-            if (itemStack.getItem() instanceof ItemNameBlockItem) {
+            if (ItemCompat.isNamedBlock(itemStack.getItem())) {
                 return false;
             }
             Block block = ((BlockItem)itemStack.getItem()).getBlock();

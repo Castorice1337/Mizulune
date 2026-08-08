@@ -13,6 +13,7 @@ import shit.zen.event.impl.UseBlockEvent;
 import shit.zen.manager.ConfigManager;
 import shit.zen.modules.Category;
 import shit.zen.modules.Module;
+import shit.zen.platform.ClientPlatforms;
 import shit.zen.protocol.heypixel.HeyPixelProtocolRuntime;
 import shit.zen.value.Value;
 import shit.zen.value.ValueGroup;
@@ -234,7 +235,9 @@ public final class Protocol extends Module {
             id1OfficialJavaHome == null ? "" : id1OfficialJavaHome.getValue(),
             useSyntheticHwid,
             selectedHwidProfile,
-            id114OfficialNative != null && Boolean.TRUE.equals(id114OfficialNative.getValue())
+            id114OfficialNative != null
+                && Boolean.TRUE.equals(id114OfficialNative.getValue())
+                && ClientPlatforms.current().supportsOfficialId114Native()
         );
     }
 

@@ -9,7 +9,6 @@ import net.minecraft.world.entity.HumanoidArm;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.item.ItemDisplayContext;
 import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.SwordItem;
 import shit.zen.ClientBase;
 import shit.zen.ZenClient;
 import shit.zen.event.impl.UpdateHeldItemEvent;
@@ -48,12 +47,7 @@ public final class ItemInHandRendererHookCallbacks {
                 || !OldHitting.INSTANCE.isEnabled()) {
             return HookDecision.pass();
         }
-        boolean useKeyHeld = ClientBase.mc.options.keyUse.isDown()
-                && ClientBase.mc.player.getOffhandItem().isEmpty();
-        boolean killAuraAttacking = OldHitting.INSTANCE.isKillAuraAttacking();
-        if (hand != InteractionHand.MAIN_HAND
-                || !(stack.getItem() instanceof SwordItem)
-                || (!useKeyHeld && !killAuraAttacking)) {
+        if (!OldHitting.INSTANCE.shouldApply(hand, stack)) {
             return HookDecision.pass();
         }
 

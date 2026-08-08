@@ -23,7 +23,6 @@ import net.minecraft.network.protocol.game.ClientboundSetDefaultSpawnPositionPac
 import net.minecraft.network.protocol.game.ClientboundSetEntityMotionPacket;
 import net.minecraft.network.protocol.game.ClientboundSetTitleTextPacket;
 import net.minecraft.network.protocol.game.ClientboundTabListPacket;
-import net.minecraft.network.protocol.game.ServerGamePacketListener;
 import net.minecraft.network.protocol.login.ClientboundCustomQueryPacket;
 import net.minecraft.network.protocol.login.ClientboundGameProfilePacket;
 import net.minecraft.network.protocol.status.ClientboundPongResponsePacket;
@@ -34,11 +33,11 @@ import shit.zen.utils.misc.ReflectionUtil;
 
 public final class PacketUtil
 extends ClientBase {
-    public static final ArrayList<Packet<ServerGamePacketListener>> queuedPackets = new ArrayList<>();
+    public static final ArrayList<Packet<?>> queuedPackets = new ArrayList<>();
     private static final Set<Packet<?>> preparedBufferedPackets =
             Collections.newSetFromMap(new IdentityHashMap<>());
 
-    public static SendPreparation prepareSend(Packet<ServerGamePacketListener> packet) {
+    public static SendPreparation prepareSend(Packet<?> packet) {
         if (removePreparedBufferedMarker(packet)) {
             removeQueuedMarker(packet);
             return new SendPreparation(false, true);
@@ -52,12 +51,12 @@ extends ClientBase {
         return new SendPreparation(false, removeQueuedMarker(packet));
     }
 
-    public static boolean shouldBypass(Packet<ServerGamePacketListener> packet) {
+    public static boolean shouldBypass(Packet<?> packet) {
         SendPreparation preparation = prepareSend(packet);
         return preparation.cancelled() || preparation.bypass();
     }
 
-    private static boolean removeQueuedMarker(Packet<ServerGamePacketListener> packet) {
+    private static boolean removeQueuedMarker(Packet<?> packet) {
         synchronized (queuedPackets) {
             return queuedPackets.remove(packet);
         }
@@ -179,7 +178,7 @@ extends ClientBase {
         return mc.player.tickCount <= 60;
     }
 
-    public static void sendQueued(Packet<ServerGamePacketListener> packet) {
+    public static void sendQueued(Packet<?> packet) {
         if (mc.player == null) {
             return;
         }
@@ -190,7 +189,7 @@ extends ClientBase {
     }
 
     public static void sendBuffered(
-            Packet<ServerGamePacketListener> packet,
+            Packet<?> packet,
             PacketSendListener listener) {
         if (mc.player == null || mc.player.connection == null) {
             return;
@@ -204,7 +203,7 @@ extends ClientBase {
         mc.player.connection.getConnection().send(packet, listener);
     }
 
-    public static void send(Packet<ServerGamePacketListener> packet) {
+    public static void send(Packet<?> packet) {
         if (mc.player == null) {
             return;
         }

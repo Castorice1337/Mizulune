@@ -1,0 +1,437 @@
+/*
+ * Builds a Fabric 26.2 source view without rewriting the Forge/ASM 1.20.1
+ * canonical source tree. Keep this file limited to mechanical Mojang renames;
+ * semantic differences belong in Fabric adapters or Mixin classes.
+ */
+def generatedFabric26Sources = layout.buildDirectory.dir('generated/sources/fabric26/java')
+
+tasks.register('generateFabric26Sources', Sync) {
+    group = 'fabric'
+    description = 'Generate the mechanically renamed Fabric 26.2 source view.'
+    inputs.file(project.file('gradle/fabric26-source-compat.gradle'))
+    into generatedFabric26Sources
+
+    from('src/main/java')
+    // These hooks target the 1.20 render call graph. Their 26.2 equivalents
+    // live in src/fabric26/java and use the extraction/submission APIs.
+    exclude 'shit/zen/fabric/mixin/ChatScreenMixin.java'
+    exclude 'shit/zen/fabric/mixin/BlockMixin.java'
+    exclude 'shit/zen/fabric/mixin/CameraMixin.java'
+    exclude 'shit/zen/fabric/mixin/ContainerScreenMixin.java'
+    exclude 'shit/zen/fabric/mixin/ConnectionMixin.java'
+    exclude 'shit/zen/fabric/mixin/EntityRendererMixin.java'
+    exclude 'shit/zen/fabric/mixin/FogRendererMixin.java'
+    exclude 'shit/zen/fabric/mixin/GameRendererMixin.java'
+    exclude 'shit/zen/fabric/mixin/GuiMixin.java'
+    exclude 'shit/zen/fabric/mixin/HumanoidModelMixin.java'
+    exclude 'shit/zen/fabric/mixin/ItemInHandRendererMixin.java'
+    exclude 'shit/zen/fabric/mixin/KeyboardInputMixin.java'
+    exclude 'shit/zen/fabric/mixin/KeyboardHandlerMixin.java'
+    exclude 'shit/zen/fabric/mixin/LevelRendererMixin.java'
+    exclude 'shit/zen/fabric/mixin/LightTextureMixin.java'
+    exclude 'shit/zen/fabric/mixin/LocalPlayerMixin.java'
+    exclude 'shit/zen/fabric/mixin/LivingEntityRendererMixin.java'
+    exclude 'shit/zen/fabric/mixin/LivingEntityMixin.java'
+    exclude 'shit/zen/fabric/mixin/MinecraftMixin.java'
+    exclude 'shit/zen/fabric/mixin/MouseHandlerMixin.java'
+    exclude 'shit/zen/fabric/mixin/PacketUtilsMixin.java'
+    exclude 'shit/zen/fabric/mixin/PlayerTabOverlayMixin.java'
+    exclude 'shit/zen/fabric/mixin/PlayerMixin.java'
+    exclude 'shit/zen/fabric/mixin/ScreenEffectRendererMixin.java'
+    exclude 'shit/zen/fabric/mixin/TitleScreenMixin.java'
+    from('../src/main/java') {
+        exclude 'asm/**'
+        exclude 'shit/zen/asm/**'
+        exclude 'shit/zen/dll/**'
+        exclude 'shit/zen/patch/**'
+        exclude 'shit/zen/platform/forge/**'
+        exclude 'shit/zen/utils/render/RenderHelper.java'
+        exclude 'shit/zen/hook/KeyboardInputHookCallbacks.java'
+        exclude 'shit/zen/hook/ItemInHandRendererHookCallbacks.java'
+        exclude 'shit/zen/network/PacketHandlerUtil.java'
+        exclude 'shit/zen/render/Renderer.java'
+        exclude 'shit/zen/render/StencilHelper.java'
+        exclude 'shit/zen/modules/impl/render/DamageGlow.java'
+    }
+
+    filteringCharset = 'UTF-8'
+    filesMatching('**/*.java') {
+        filter { String line ->
+            String migrated = line
+                .replace('net.minecraft.resources.ResourceLocation', 'net.minecraft.resources.Identifier')
+                .replaceAll('\\bResourceLocation\\b', 'Identifier')
+                .replace('Identifier.isValidResourceLocation(string)', 'Identifier.tryParse(string) != null')
+                .replace('Identifier.isAllowedInResourceLocation', 'Identifier.isAllowedInIdentifier')
+                .replace('com.mojang.blaze3d.systems.RenderSystem',
+                    'shit.zen.fabric.render.LegacyRenderSystem')
+                .replaceAll('\\bRenderSystem\\b', 'LegacyRenderSystem')
+                .replace('com.mojang.blaze3d.vertex.BufferBuilder',
+                    'shit.zen.fabric.render.LegacyBufferBuilder')
+                .replace('com.mojang.blaze3d.vertex.BufferUploader',
+                    'shit.zen.fabric.render.LegacyBufferUploader')
+                .replace('com.mojang.blaze3d.vertex.Tesselator',
+                    'shit.zen.fabric.render.LegacyTesselator')
+                .replaceAll('\\bBufferBuilder\\b', 'LegacyBufferBuilder')
+                .replaceAll('\\bBufferUploader\\b', 'LegacyBufferUploader')
+                .replaceAll('\\bTesselator\\b', 'LegacyTesselator')
+                .replace('VertexFormat.Mode', 'com.mojang.blaze3d.PrimitiveTopology')
+                .replace('PrimitiveTopology.LINE_STRIP', 'PrimitiveTopology.DEBUG_LINE_STRIP')
+                .replace('GameRenderer::getPositionColorShader',
+                    'shit.zen.fabric.render.LegacyRenderSystem::legacyShader')
+                .replace('GameRenderer::getPositionTexColorShader',
+                    'shit.zen.fabric.render.LegacyRenderSystem::legacyShader')
+                .replace('GameRenderer::getPositionTexShader',
+                    'shit.zen.fabric.render.LegacyRenderSystem::legacyShader')
+                .replace('GameRenderer::getPositionShader',
+                    'shit.zen.fabric.render.LegacyRenderSystem::legacyShader')
+                .replace('.renderBuffers().bufferSource()', '.gameRenderer.renderBuffers()')
+                .replace('extends Screen', 'extends shit.zen.fabric.gui.FabricCompatScreen')
+                .replace(
+                    'net.minecraft.network.protocol.game.ClientboundCustomPayloadPacket',
+                    'net.minecraft.network.protocol.common.ClientboundCustomPayloadPacket'
+                )
+                .replace(
+                    'net.minecraft.network.protocol.game.ServerboundCustomPayloadPacket',
+                    'net.minecraft.network.protocol.common.ServerboundCustomPayloadPacket'
+                )
+                .replace('net.minecraft.network.PacketSendListener', 'io.netty.channel.ChannelFutureListener')
+                .replace('net/minecraft/network/PacketSendListener', 'io/netty/channel/ChannelFutureListener')
+                .replaceAll('\\bPacketSendListener\\b', 'ChannelFutureListener')
+                .replace('net.minecraft.client.gui.screens.ReceivingLevelScreen',
+                    'net.minecraft.client.gui.screens.LevelLoadingScreen')
+                .replace('ReceivingLevelScreen', 'LevelLoadingScreen')
+                .replace('net.minecraft.client.renderer.FogRenderer',
+                    'net.minecraft.client.renderer.fog.FogRenderer')
+                .replace('net.minecraft.client.player.Input', 'net.minecraft.client.player.ClientInput')
+                .replaceAll('\\bInput\\b', 'ClientInput')
+                .replace('input.forwardImpulse', 'input.getMoveVector().y')
+                .replace('input.leftImpulse', 'input.getMoveVector().x')
+                .replace('net.minecraft.network.protocol.game.ClientboundSetCarriedItemPacket',
+                    'net.minecraft.network.protocol.game.ClientboundSetHeldSlotPacket')
+                .replace('ClientboundSetCarriedItemPacket', 'ClientboundSetHeldSlotPacket')
+                .replace('carriedItem.getSlot()',
+                    'shit.zen.platform.ClientPlatforms.current().heldSlot(carriedItem)')
+                .replace('net.minecraft.network.protocol.game.ClientboundAddPlayerPacket',
+                    'net.minecraft.network.protocol.game.ClientboundAddEntityPacket')
+                .replace('ClientboundAddPlayerPacket', 'ClientboundAddEntityPacket')
+                .replace('net.minecraft.network.protocol.game.ClientboundPingPacket',
+                    'net.minecraft.network.protocol.common.ClientboundPingPacket')
+                .replace('net.minecraft.network.protocol.game.ClientboundDisconnectPacket',
+                    'net.minecraft.network.protocol.common.ClientboundDisconnectPacket')
+                .replace('net.minecraft.network.protocol.game.ClientboundKeepAlivePacket',
+                    'net.minecraft.network.protocol.common.ClientboundKeepAlivePacket')
+                .replace('net.minecraft.network.protocol.game.ServerboundKeepAlivePacket',
+                    'net.minecraft.network.protocol.common.ServerboundKeepAlivePacket')
+                .replace('net.minecraft.network.protocol.game.ServerboundPongPacket',
+                    'net.minecraft.network.protocol.common.ServerboundPongPacket')
+                .replace('net.minecraft.network.protocol.login.ClientboundGameProfilePacket',
+                    'net.minecraft.network.protocol.login.ClientboundLoginFinishedPacket')
+                .replace('ClientboundGameProfilePacket', 'ClientboundLoginFinishedPacket')
+                .replace('net.minecraft.network.protocol.status.ClientboundPongResponsePacket',
+                    'net.minecraft.network.protocol.ping.ClientboundPongResponsePacket')
+                .replace('net.minecraft.world.entity.animal.AbstractGolem',
+                    'net.minecraft.world.entity.animal.golem.AbstractGolem')
+                .replace('net.minecraft.world.entity.animal.Squid',
+                    'net.minecraft.world.entity.animal.squid.Squid')
+                .replace('net.minecraft.world.entity.monster.Slime',
+                    'net.minecraft.world.entity.monster.cubemob.Slime')
+                .replace('net.minecraft.world.entity.npc.Villager',
+                    'net.minecraft.world.entity.npc.villager.Villager')
+                .replace('net.minecraft.world.entity.projectile.Fireball',
+                    'net.minecraft.world.entity.projectile.hurtingprojectile.Fireball')
+                .replace('net.minecraft.world.entity.projectile.Arrow',
+                    'net.minecraft.world.entity.projectile.arrow.Arrow')
+                .replace('net.minecraft.world.entity.projectile.Snowball',
+                    'net.minecraft.world.entity.projectile.throwableitemprojectile.Snowball')
+                .replace('net.minecraft.world.entity.projectile.ThrownEgg',
+                    'net.minecraft.world.entity.projectile.throwableitemprojectile.ThrownEgg')
+                .replace('net.minecraft.world.entity.projectile.ThrownEnderpearl',
+                    'net.minecraft.world.entity.projectile.throwableitemprojectile.ThrownEnderpearl')
+                .replace('net.minecraft.world.entity.projectile.ThrownPotion',
+                    'net.minecraft.world.entity.projectile.throwableitemprojectile.AbstractThrownPotion')
+                .replaceAll('\\bThrownPotion\\b', 'AbstractThrownPotion')
+                .replace('net.minecraft.world.entity.vehicle.Boat',
+                    'net.minecraft.world.entity.vehicle.boat.Boat')
+                .replace('net.minecraft.world.entity.vehicle.Minecart',
+                    'net.minecraft.world.entity.vehicle.minecart.Minecart')
+                .replace('net.minecraft.world.item.UseAnim', 'net.minecraft.world.item.ItemUseAnimation')
+                .replaceAll('\\bUseAnim\\b', 'ItemUseAnimation')
+                .replace('net.minecraft.world.inventory.ClickType',
+                    'net.minecraft.world.inventory.ContainerInput')
+                .replaceAll('\\bClickType\\b', 'ContainerInput')
+                .replace('net.minecraft.client.renderer.RenderType',
+                    'net.minecraft.client.renderer.rendertype.RenderType')
+                .replace('com.mojang.blaze3d.platform.GlStateManager',
+                    'com.mojang.blaze3d.opengl.GlStateManager')
+                .replace('net.minecraft.world.item.ArmorMaterials',
+                    'net.minecraft.world.item.equipment.ArmorMaterials')
+                .replace('import net.minecraft.client.renderer.MultiBufferSource;', '')
+                .replaceAll('\\bMultiBufferSource\\b', 'Object')
+                .replace('net.minecraft.world.level.block.FungusBlock',
+                    'net.minecraft.world.level.block.NetherFungusBlock')
+                .replaceAll('\\bFungusBlock\\b', 'NetherFungusBlock')
+                .replace('import net.minecraft.world.InteractionResultHolder;', '')
+                .replace('InteractionResultHolder resultHolder = heldStack.use(level, player, interactionHand);',
+                    'InteractionResult resultHolder = heldStack.use(level, player, interactionHand);')
+                .replace('ItemStack resultStack = (ItemStack)resultHolder.getObject();',
+                    'ItemStack resultStack = resultHolder instanceof InteractionResult.Success success && success.heldItemTransformedTo() != null ? success.heldItemTransformedTo() : heldStack;')
+                .replace('return resultHolder.getResult();', 'return resultHolder;')
+                .replace('GlStateManager.SourceFactor.ONE', '1')
+                .replace('GlStateManager.DestFactor.ONE_MINUS_SRC_ALPHA', '771')
+                .replace('Enchantments.PUNCH_ARROWS', 'Enchantments.PUNCH')
+                .replace('Enchantments.POWER_ARROWS', 'Enchantments.POWER')
+                .replace('Enchantments.INFINITY_ARROWS', 'Enchantments.INFINITY')
+                .replace('Enchantments.FLAMING_ARROWS', 'Enchantments.FLAME')
+                .replace('Enchantments.BLOCK_EFFICIENCY', 'Enchantments.EFFICIENCY')
+                .replace('Enchantments.ALL_DAMAGE_PROTECTION', 'Enchantments.PROTECTION')
+                .replaceAll('EnchantmentHelper\\.getItemEnchantmentLevel\\(Enchantments\\.([A-Z_]+),\\s*([A-Za-z0-9_.]+)\\)',
+                    'shit.zen.fabric.game.FabricItemCompat.enchantmentLevel($2, Enchantments.$1)')
+                .replace('itemStack.getItem().isEdible()', 'shit.zen.fabric.game.FabricItemCompat.isEdible(itemStack)')
+                .replace('itemStack.getTag()', 'itemStack.getComponentsPatch()')
+                .replace('MobEffects.MOVEMENT_SPEED', 'MobEffects.SPEED')
+                .replace('MobEffects.MOVEMENT_SLOWDOWN', 'MobEffects.SLOWNESS')
+                .replace('MobEffects.DIG_SPEED', 'MobEffects.HASTE')
+                .replace('MobEffects.DIG_SLOWDOWN', 'MobEffects.MINING_FATIGUE')
+                .replace('MobEffects.DAMAGE_BOOST', 'MobEffects.STRENGTH')
+                .replace('MobEffects.HEAL', 'MobEffects.INSTANT_HEALTH')
+                .replace('MobEffects.HARM', 'MobEffects.INSTANT_DAMAGE')
+                .replace('MobEffects.JUMP', 'MobEffects.JUMP_BOOST')
+                .replace('MobEffects.CONFUSION', 'MobEffects.NAUSEA')
+                .replace('MobEffects.DAMAGE_RESISTANCE', 'MobEffects.RESISTANCE')
+                .replace('MobEffects.INSTANT_HEALTHTH_BOOST', 'MobEffects.HEALTH_BOOST')
+                .replaceAll('\\bMobEffect effect\\b', 'net.minecraft.core.Holder<MobEffect> effect')
+                .replace('public MobEffect getEffect()', 'public net.minecraft.core.Holder<MobEffect> getEffect()')
+                .replace('effect.getColor()', 'effect.value().getColor()')
+                .replace('effect.isBeneficial()', 'effect.value().isBeneficial()')
+                .replace('.getEffect().isInstantenous()', '.getEffect().value().isInstantenous()')
+                .replace('.getEffect().value().isInstantenous()', '.getEffect().value().isInstantaneous()')
+                .replace('.getEffect().getDisplayName()', '.getEffect().value().getDisplayName()')
+                .replace('MobEffectUtil.formatDuration(effectInstance, 1.0f)',
+                    'MobEffectUtil.formatDuration(effectInstance, 1.0f, 20.0f)')
+                .replace('LegacyBufferBuilder.RenderedBuffer', 'shit.zen.fabric.render.LegacyMesh')
+                .replace('packet.getIdentifier()', 'packet.payload().type().id()')
+                .replace('payload.getIdentifier()', 'payload.payload().type().id()')
+                .replace('packet.getData()', 'shit.zen.fabric.network.LegacyCustomPayloads.data(packet)')
+                .replace('new ServerboundCustomPayloadPacket(',
+                    'shit.zen.fabric.network.LegacyCustomPayloads.packet(')
+                .replaceAll('\\.screen\\b', '.gui.screen()')
+                .replace('.setScreen(', '.setScreenAndShow(')
+                .replace('.getMainCamera()', '.mainCamera()')
+                .replace('.camera.getPosition()', '.camera.position()')
+                .replace('camera.getPosition()', 'camera.position()')
+                .replace('.mainCamera().getPosition()', '.mainCamera().position()')
+                .replace('long window = mc.getWindow().getWindow()',
+                    'com.mojang.blaze3d.platform.Window window = mc.getWindow()')
+                .replace('GLFW.glfwSetClipboardString(ClientBase.mc.getWindow().getWindow()',
+                    'GLFW.glfwSetClipboardString(ClientBase.mc.getWindow().handle()')
+                .replace('.getWindow().getWindow()', '.getWindow()')
+                .replace('.handleInventoryMouseClick(', '.handleContainerInput(')
+                .replace('.isSingleplayer()', '.hasSingleplayerServer()')
+                .replace('.gui.getChat()', '.gui.hud.getChat()')
+                .replace('.getProfile().getName()', '.getProfile().name()')
+                .replace('.getGameProfile().getName()', '.getGameProfile().name()')
+                .replace('.profile().getName()', '.profile().name()')
+                .replace('gameProfile.getId()', 'gameProfile.id()')
+                .replace('.profile().getId()', '.profile().id()')
+                .replace('player.getSkinLocation()', 'player.getSkin().body().texturePath()')
+                .replace('player.getSkinTextureLocation()', 'player.getSkin().body().texturePath()')
+                .replace('.getObjectiveName()', '.objectiveName()')
+                .replace('clientboundSetScorePacket.getOwner()', 'clientboundSetScorePacket.owner()')
+                .replace('clientboundSetScorePacket.getScore()', 'clientboundSetScorePacket.score()')
+                .replace('packet.getOwner()', 'packet.owner()')
+                .replace('packet.getScore()', 'packet.score()')
+                .replace('motion.getId()', 'motion.id()')
+                .replace('motion.getXa() / 8000.0', 'motion.movement().x')
+                .replace('motion.getYa() / 8000.0', 'motion.movement().y')
+                .replace('motion.getZa() / 8000.0', 'motion.movement().z')
+                .replace('motionPacket.getId()', 'motionPacket.id()')
+                .replace('clientboundSetEntityMotionPacket.getId()', 'clientboundSetEntityMotionPacket.id()')
+                .replace('this.knockbackPacket.getXa() / 8000.0', 'this.knockbackPacket.movement().x')
+                .replace('this.knockbackPacket.getYa() / 8000.0', 'this.knockbackPacket.movement().y')
+                .replace('this.knockbackPacket.getZa() / 8000.0', 'this.knockbackPacket.movement().z')
+                .replace('motionPacket.getXa() / 8000.0', 'motionPacket.movement().x')
+                .replace('motionPacket.getYa() / 8000.0', 'motionPacket.movement().y')
+                .replace('motionPacket.getZa() / 8000.0', 'motionPacket.movement().z')
+                .replace('clientboundSetEntityMotionPacket.getYa() / 8000.0', 'clientboundSetEntityMotionPacket.movement().y')
+                .replace('motionPacket.getXa()', '(motionPacket.movement().x * 8000.0)')
+                .replace('motionPacket.getYa()', '(motionPacket.movement().y * 8000.0)')
+                .replace('motionPacket.getZa()', '(motionPacket.movement().z * 8000.0)')
+                .replace('this.knockbackPacket.getXa()', '(this.knockbackPacket.movement().x * 8000.0)')
+                .replace('this.knockbackPacket.getYa()', '(this.knockbackPacket.movement().y * 8000.0)')
+                .replace('this.knockbackPacket.getZa()', '(this.knockbackPacket.movement().z * 8000.0)')
+                .replace('explosion.getKnockbackX()', 'explosion.playerKnockback().orElse(Vec3.ZERO).x')
+                .replace('explosion.getKnockbackY()', 'explosion.playerKnockback().orElse(Vec3.ZERO).y')
+                .replace('explosion.getKnockbackZ()', 'explosion.playerKnockback().orElse(Vec3.ZERO).z')
+                .replace('.isInWaterRainOrBubble()', '.isInWaterOrRain()')
+                .replace('.getMinBuildHeight()', '.getMinY()')
+                .replace('.getMaxBuildHeight()', '.getMaxY()')
+                .replace('.getNormal()', '.getUnitVec3i()')
+                .replace('Direction.getNearest(direction.x, direction.y, direction.z)',
+                    'Direction.getApproximateNearest(direction.x, direction.y, direction.z)')
+                .replace('Direction.getNearest((float) dx, 0.0f, (float) dz)',
+                    'Direction.getApproximateNearest((float) dx, 0.0f, (float) dz)')
+                .replace('mc.gameMode.getPickRange()', 'mc.player.blockInteractionRange()')
+                .replace('mc.gameMode.hasFarPickRange()', 'mc.player.blockInteractionRange() >= 5.0D')
+                .replace('.key().location()', '.key().identifier()')
+                .replace('mc.levelRenderer.allChanged()',
+                    'mc.levelRenderer.invalidateCompiledGeometry(mc.level, mc.options, mc.gameRenderer.mainCamera(), mc.getBlockColors())')
+                .replace('mc.getEntityRenderDispatcher().cameraOrientation()',
+                    'mc.gameRenderer.mainCamera().rotation()')
+                .replace('mc.levelRenderer.cullingFrustum', 'mc.gameRenderer.mainCamera().getCullFrustum()')
+                .replace('player.walkDistO', 'player.walkAnimation.position(0.0F)')
+                .replace('player.walkDist', 'player.walkAnimation.position()')
+                .replace('player.oBob', 'player.walkAnimation.speed(0.0F)')
+                .replace('player.bob', 'player.walkAnimation.speed()')
+                .replace('walkAnimation.update(speed, 0.4f)', 'walkAnimation.update(speed, 0.4f, 1.0f)')
+                .replace('mc.getFrameTime()', 'mc.getDeltaTracker().getGameTimeDeltaPartialTick(false)')
+                .replace('ClientBase.mc.options.renderDebug',
+                    'ClientBase.mc.getDebugOverlay().showDebugScreen()')
+                .replace('mc.options.renderDebug', 'mc.getDebugOverlay().showDebugScreen()')
+                .replace('gameRenderer.getDepthFar()',
+                    'minecraft.options.renderDistance().get() * 64.0F')
+                .replace('Screen.hasControlDown()', 'Minecraft.getInstance().hasControlDown()')
+                .replace('Screen.isPaste(keyCode)',
+                    '(Minecraft.getInstance().hasControlDown() && keyCode == GLFW.GLFW_KEY_V)')
+                .replace('mc.gui.hud.getChat().addMessage(', 'mc.gui.hud.getChat().addClientSystemMessage(')
+                .replace('chatComponent.addMessage(', 'chatComponent.addClientSystemMessage(')
+                .replace('mc.player.input.up', 'mc.player.input.keyPresses.forward()')
+                .replace('mc.player.input.down', 'mc.player.input.keyPresses.backward()')
+                .replace('mc.player.input.left', 'mc.player.input.keyPresses.left()')
+                .replace('mc.player.input.right', 'mc.player.input.keyPresses.right()')
+                .replace('input.getXxa(), input.getZza(), input.isJumping(), input.isShiftKeyDown()));',
+                    'new net.minecraft.world.entity.player.Input(input.input().forward(), input.input().backward(), input.input().left(), input.input().right(), input.input().jump(), input.input().shift(), false)));')
+                .replace('new ServerboundUseItemPacket(interactionHand, seq)',
+                    'shit.zen.fabric.network.FabricPacketCompat.useItem(interactionHand, seq)')
+                .replace('.isOnCooldown(heldStack.getItem())', '.isOnCooldown(heldStack)')
+                .replace('new ServerboundMovePlayerPacket.Rot(currentYaw, currentPitch, mc.player.onGround())',
+                    'new ServerboundMovePlayerPacket.Rot(currentYaw, currentPitch, mc.player.onGround(), mc.player.horizontalCollision)')
+                .replace('new ServerboundMovePlayerPacket.StatusOnly(false)',
+                    'new ServerboundMovePlayerPacket.StatusOnly(false, mc.player.horizontalCollision)')
+                .replace('new ServerboundMovePlayerPacket.Rot(yaw, pitch, movePacket.isOnGround())',
+                    'new ServerboundMovePlayerPacket.Rot(yaw, pitch, movePacket.isOnGround(), movePacket.horizontalCollision())')
+                .replace('mc.player.onGround()));', 'mc.player.onGround(), mc.player.horizontalCollision));')
+                .replace('packet instanceof ClientboundPingPacket', '((Object) packet) instanceof ClientboundPingPacket')
+                .replace('mc.level.dimensionType().natural() ? mc.level.getSharedSpawnPos() : null',
+                    'mc.level.dimension() == net.minecraft.world.level.Level.OVERWORLD ? mc.level.getRespawnData().pos() : null')
+                .replace('GlStateManager._disableBlend()', 'LegacyRenderSystem.disableBlend()')
+                .replace('GlStateManager._enableBlend()', 'LegacyRenderSystem.enableBlend()')
+                .replace('this.panelTexture.getId()', 'shit.zen.fabric.render.LegacyRenderSystem.textureId(this.panelTexture)')
+                .replace('this.pointerTexture.getId()', 'shit.zen.fabric.render.LegacyRenderSystem.textureId(this.pointerTexture)')
+                .replace('dynamicTexture.getId()', 'shit.zen.fabric.render.LegacyRenderSystem.textureId(dynamicTexture)')
+                .replace('panelTexture.getId()', 'shit.zen.fabric.render.LegacyRenderSystem.textureId(panelTexture)')
+                .replace('pointerTexture.getId()', 'shit.zen.fabric.render.LegacyRenderSystem.textureId(pointerTexture)')
+                .replace('abstractTexture.getId()', 'shit.zen.fabric.render.LegacyRenderSystem.textureId(abstractTexture)')
+                .replace('chatFormatting.getColor()', 'shit.zen.fabric.game.FabricTextCompat.color(chatFormatting)')
+                .replace('mc.getTextureManager().getTexture(resourceLocation).getId()',
+                    'shit.zen.fabric.render.LegacyRenderSystem.textureId(mc.getTextureManager().getTexture(resourceLocation))')
+                .replace('GLFW.glfwGetMouseButton(mc.getWindow(),',
+                    'GLFW.glfwGetMouseButton(mc.getWindow().handle(),')
+                .replace('ClientBase.mc.getWindow(), GLFW.GLFW_MOUSE_BUTTON_LEFT)',
+                    'ClientBase.mc.getWindow().handle(), GLFW.GLFW_MOUSE_BUTTON_LEFT)')
+                .replace('GLFW.glfwGetMouseButton(window,',
+                    'GLFW.glfwGetMouseButton(window.handle(),')
+                .replace('static long windowHandle = ClientBase.mc.getWindow();',
+                    'static long windowHandle = ClientBase.mc.getWindow().handle();')
+                .replace('.getUser().getGameProfile().getId()', '.getUser().getProfileId()')
+                .replace('proxy.endpoint(), false);', 'proxy.endpoint(), ServerData.Type.OTHER);')
+                .replace('ServerAddress.parseString(proxy.endpoint()), data, false);',
+                    'ServerAddress.parseString(proxy.endpoint()), data, false, null);')
+                .replace('new DynamicTexture(', 'new DynamicTexture(() -> "mizulune/runtime", ')
+                .replace('.setPixelRGBA(', '.setPixel(')
+                .replace('EntityRenderer<?>', 'EntityRenderer<?, ?>')
+                .replace('Component.Serializer.fromJson(',
+                    'shit.zen.fabric.game.FabricTextCompat.fromJson(')
+                .replace('addPlayer.getPlayerId()', 'addPlayer.getUUID()')
+                .replace('addPlayer.getEntityId()', 'addPlayer.getId()')
+                .replace('clientboundAddPlayerPacket.getPlayerId()', 'clientboundAddPlayerPacket.getUUID()')
+                .replace('clientboundAddPlayerPacket.getEntityId()', 'clientboundAddPlayerPacket.getId()')
+                .replace('(ClientboundSetEntityMotionPacket)packet).getId()',
+                    '(ClientboundSetEntityMotionPacket)packet).id()')
+                .replace('if (tp.getId() == tracker.player.getId())',
+                    'if (tp.id() == tracker.player.getId())')
+                .replace('Vec3 pos = new Vec3(tp.getX(), tp.getY(), tp.getZ());',
+                    'Vec3 pos = net.minecraft.world.entity.PositionMoveRotation.calculateAbsolute(net.minecraft.world.entity.PositionMoveRotation.of(tracker.player), tp.change(), tp.relatives()).position();')
+                .replace('EntityType.END_CRYSTAL', 'net.minecraft.world.entity.EntityTypes.END_CRYSTAL')
+                .replace('ServerboundInteractPacket.createAttackPacket(',
+                    'shit.zen.fabric.network.FabricPacketCompat.attack(')
+                .replace('new ServerboundUseItemPacket(',
+                    'shit.zen.fabric.network.FabricPacketCompat.useItem(')
+                .replace('stack.isEdible()', 'shit.zen.fabric.game.FabricItemCompat.isEdible(stack)')
+                .replace('mc.level.getBlockState(blockPos).isSolidRender(mc.level, blockPos)',
+                    'mc.level.getBlockState(blockPos).isSolidRender()')
+                .replace('block.getSoundType(block.defaultBlockState())',
+                    'block.defaultBlockState().getSoundType()')
+                .replace('e.canBeCollidedWith() && e != projectile.getOwner()',
+                    'e.canBeCollidedWith(projectile) && e != projectile.getOwner()')
+                .replace('!other.canBeCollidedWith() || other.equals(localPlayer)',
+                    '!other.canBeCollidedWith(localPlayer) || other.equals(localPlayer)')
+                .replace('Arrow arrow = new Arrow(mc.level, x, y, z);',
+                    'Arrow arrow = new Arrow(net.minecraft.world.entity.EntityTypes.ARROW, mc.level); arrow.setPos(x, y, z);')
+                .replace('mc.font.drawInBatch(fuseLabel, -textWidth / 2.0f, 0.0f, -1, false, poseStack.last().pose(), mc.gameRenderer.renderBuffers(), Font.DisplayMode.NORMAL, 0, 0xF000F0);',
+                    'shit.zen.fabric.render.FabricRenderBridge.submitWorldText(poseStack, fuseLabel, -textWidth / 2.0f, 0.0f, -1, 0xF000F0);')
+            return migrated
+        }
+    }
+
+    filesMatching('shit/zen/utils/rotation/MovementCorrectionUtil.java') {
+        filter { String line ->
+            line.replace('input.getMoveVector().y()', 'input.forwardImpulse()')
+        }
+    }
+
+    filesMatching('shit/zen/utils/rotation/RotationHandler.java') {
+        filter { String line ->
+            line.replace('                    onGround);',
+                '                    onGround, mc.player.horizontalCollision);')
+                .replace('                        mc.player.onGround());',
+                    '                        mc.player.onGround(), mc.player.horizontalCollision);')
+        }
+    }
+
+    filesMatching('shit/zen/hud/ScoreboardHud.java') {
+        filter { String line ->
+            line
+                .replace('import net.minecraft.world.scores.Score;',
+                    'import net.minecraft.world.scores.PlayerScoreEntry;')
+                .replace('ChatFormatting color = playerTeam.getColor();',
+                    'java.util.Optional<net.minecraft.world.scores.TeamColor> color = playerTeam.getColor();')
+                .replace('int colorId = color.getId();',
+                    'int colorId = color.map(value -> value.displaySlot().id()).orElse(-1);')
+                .replace('teamObjective = scoreboard.getDisplayObjective(3 + colorId);',
+                    'teamObjective = color.map(net.minecraft.world.scores.TeamColor::displaySlot).map(scoreboard::getDisplayObjective).orElse(null);')
+                .replace('net.minecraft.world.scores.Scoreboard.DISPLAY_SLOT_SIDEBAR',
+                    'net.minecraft.world.scores.DisplaySlot.SIDEBAR')
+                .replace('Collection<Score> scores = scoreboard.getPlayerScores(objective);',
+                    'Collection<PlayerScoreEntry> scores = scoreboard.listPlayerScores(objective);')
+                .replace('List<Score> visibleScores', 'List<PlayerScoreEntry> visibleScores')
+                .replace('Score score =', 'PlayerScoreEntry score =')
+                .replace('score.getOwner()', 'score.owner()')
+                .replace('score.getScore()', 'score.value()')
+        }
+    }
+
+    filesMatching('shit/zen/utils/render/RenderUtil.java') {
+        filter { String line ->
+            line
+                .replace('mc.getMainRenderTarget()', 'mc.gameRenderer.mainRenderTarget()')
+                .replace(', Minecraft.ON_OSX);', ');')
+                .replaceAll('([A-Za-z0-9_.]+)\\.bindWrite\\(false\\);',
+                    'shit.zen.fabric.render.LegacyRenderSystem.bindRenderTarget($1);')
+                .replace('textureTarget.getColorTextureId()',
+                    'shit.zen.fabric.render.LegacyRenderSystem.rawTextureId(textureTarget.getColorTexture())')
+                .replace('new TextureTarget(1920, 1024, false, Minecraft.ON_OSX)',
+                    'new TextureTarget("mizulune_legacy_blur", 1920, 1024, false, com.mojang.blaze3d.GpuFormat.RGBA8_UNORM)')
+        }
+    }
+}
+
+sourceSets.main.java.setSrcDirs([generatedFabric26Sources, 'src/fabric26/java'])
+
+tasks.named('compileJava').configure {
+    dependsOn tasks.named('generateFabric26Sources')
+    options.compilerArgs.addAll(['-Xmaxerrs', '1000'])
+}
+
+tasks.named('sourcesJar').configure {
+    dependsOn tasks.named('generateFabric26Sources')
+}

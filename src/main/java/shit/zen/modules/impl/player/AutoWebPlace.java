@@ -17,7 +17,6 @@ import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
-import net.minecraft.world.item.SwordItem;
 import net.minecraft.world.level.ClipContext;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
@@ -28,6 +27,7 @@ import net.minecraft.world.phys.AABB;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.HitResult;
 import net.minecraft.world.phys.Vec3;
+import shit.zen.platform.ItemCompat;
 import net.minecraft.world.phys.shapes.VoxelShape;
 import shit.zen.ZenClient;
 import shit.zen.event.impl.RenderEvent;
@@ -1400,7 +1400,7 @@ public class AutoWebPlace extends Module {
     private int findSwordSlot() {
         for (int slot = 0; slot < 9; slot++) {
             ItemStack stack = mc.player.getInventory().getItem(slot);
-            if (!stack.isEmpty() && stack.getItem() instanceof SwordItem) {
+            if (!stack.isEmpty() && ItemCompat.isSword(stack)) {
                 return slot;
             }
         }

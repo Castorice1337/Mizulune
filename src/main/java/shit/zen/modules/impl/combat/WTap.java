@@ -12,7 +12,6 @@ import java.util.Locale;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
-import net.minecraft.world.item.SwordItem;
 import net.minecraft.world.phys.Vec3;
 import shit.zen.event.EventPriority;
 import shit.zen.event.EventTarget;
@@ -23,6 +22,7 @@ import shit.zen.manager.TargetManager;
 import shit.zen.modules.Category;
 import shit.zen.modules.Module;
 import shit.zen.utils.game.RotationUtil;
+import shit.zen.platform.ItemCompat;
 import shit.zen.utils.misc.ChatUtil;
 import shit.zen.value.ValueGroup;
 import shit.zen.value.impl.BooleanValue;
@@ -231,7 +231,7 @@ public class WTap extends Module {
             return "player not on ground";
         }
 
-        if (this.onlySword.getValue() && !(mc.player.getMainHandItem().getItem() instanceof SwordItem)) {
+        if (this.onlySword.getValue() && !ItemCompat.isSword(mc.player.getMainHandItem())) {
             return "main hand is not sword";
         }
 

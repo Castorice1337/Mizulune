@@ -18,21 +18,17 @@ import net.minecraft.world.inventory.BrewingStandMenu;
 import net.minecraft.world.inventory.ChestMenu;
 import net.minecraft.world.inventory.ClickType;
 import net.minecraft.world.inventory.FurnaceMenu;
-import net.minecraft.world.item.ArmorItem;
 import net.minecraft.world.item.AxeItem;
 import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.BowItem;
 import net.minecraft.world.item.CrossbowItem;
-import net.minecraft.world.item.DiggerItem;
 import net.minecraft.world.item.FishingRodItem;
 import net.minecraft.world.item.Item;
-import net.minecraft.world.item.ItemNameBlockItem;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
-import net.minecraft.world.item.PickaxeItem;
 import net.minecraft.world.item.ShovelItem;
-import net.minecraft.world.item.SwordItem;
 import shit.zen.event.impl.DisconnectEvent;
+import shit.zen.platform.ItemCompat;
 import shit.zen.event.impl.GameTickEvent;
 import shit.zen.event.impl.MotionEvent;
 import shit.zen.modules.Category;
@@ -259,8 +255,8 @@ extends Module {
         if (ItemUtil.isWeaponItem(itemStack) || ItemUtil.isOtherCheat(itemStack)) {
             return "god";
         }
-        if (item instanceof ArmorItem armorItem) {
-            return switch (armorItem.getEquipmentSlot()) {
+        if (ItemCompat.isArmor(itemStack)) {
+            return switch (ItemCompat.armorSlot(itemStack)) {
                 case HEAD -> "helmet";
                 case CHEST -> "chestplate";
                 case LEGS -> "leggings";
@@ -268,7 +264,7 @@ extends Module {
                 default -> "other";
             };
         }
-        if (item instanceof SwordItem) {
+        if (ItemCompat.isSword(itemStack)) {
             return "sword";
         }
         if (item instanceof BowItem) {
@@ -277,7 +273,7 @@ extends Module {
         if (item instanceof CrossbowItem) {
             return "crossbow";
         }
-        if (item instanceof PickaxeItem) {
+        if (ItemCompat.isPickaxe(itemStack)) {
             return "pickaxe";
         }
         if (item instanceof AxeItem) {
@@ -306,8 +302,8 @@ extends Module {
         if (ItemUtil.isWeaponItem(itemStack) || ItemUtil.isOtherCheat(itemStack)) {
             return 150;
         }
-        if (item instanceof ArmorItem armorItem) {
-            return switch (armorItem.getEquipmentSlot()) {
+        if (ItemCompat.isArmor(itemStack)) {
+            return switch (ItemCompat.armorSlot(itemStack)) {
                 case HEAD -> 100;
                 case CHEST -> 99;
                 case LEGS -> 98;
@@ -315,7 +311,7 @@ extends Module {
                 default -> 50;
             };
         }
-        if (item instanceof SwordItem) {
+        if (ItemCompat.isSword(itemStack)) {
             return 95;
         }
         if (item instanceof BowItem) {
@@ -330,7 +326,7 @@ extends Module {
         if (item == Items.GOLDEN_APPLE) {
             return 90;
         }
-        if (item instanceof PickaxeItem) {
+        if (ItemCompat.isPickaxe(itemStack)) {
             return 89;
         }
         if (item instanceof AxeItem) {
@@ -371,16 +367,16 @@ extends Module {
         if (ItemUtil.isWeaponItem(itemStack) || ItemUtil.isOtherCheat(itemStack)) {
             return 10000.0;
         }
-        if (item instanceof ArmorItem) {
+        if (ItemCompat.isArmor(itemStack)) {
             return ItemUtil.getArmorScore(itemStack);
         }
-        if (item instanceof SwordItem) {
+        if (ItemCompat.isSword(itemStack)) {
             return ItemUtil.getSwordDamage(itemStack);
         }
         if (item instanceof AxeItem && ItemUtil.isLegitAxe(itemStack)) {
             return ItemUtil.getAxeDamage(itemStack);
         }
-        if (item instanceof DiggerItem) {
+        if (ItemCompat.isDigger(itemStack)) {
             return ItemUtil.getDigSpeed(itemStack);
         }
         if (item instanceof BowItem) {
@@ -583,13 +579,13 @@ extends Module {
             if (ItemUtil.isWeaponItem(itemStack) || ItemUtil.isOtherCheat(itemStack)) {
                 return true;
             }
-            if (item instanceof SwordItem) {
+            if (ItemCompat.isSword(itemStack)) {
                 return this.isBetterThanCurrent(itemStack);
             }
-            if (item instanceof DiggerItem) {
+            if (ItemCompat.isDigger(itemStack)) {
                 return this.isBetterThanCurrent(itemStack);
             }
-            if (item instanceof ArmorItem) {
+            if (ItemCompat.isArmor(itemStack)) {
                 return this.isBetterThanCurrent(itemStack);
             }
             if (item instanceof BowItem) {
@@ -598,7 +594,7 @@ extends Module {
             if (item instanceof CrossbowItem) {
                 return this.isBetterThanCurrent(itemStack);
             }
-            if (!(item instanceof SwordItem || item instanceof DiggerItem || item instanceof ArmorItem || item instanceof BowItem || item instanceof CrossbowItem)) {
+            if (!(ItemCompat.isSword(itemStack) || ItemCompat.isDigger(itemStack) || ItemCompat.isArmor(itemStack) || item instanceof BowItem || item instanceof CrossbowItem)) {
                 return ChestStealer.isWorthStealing(itemStack) || this.pickTrashSetting.getValue() != false;
             }
         }
@@ -606,13 +602,13 @@ extends Module {
     }
 
     private boolean isBetterThanCurrent(ItemStack itemStack) {
-        if (itemStack.getItem() instanceof SwordItem) {
+        if (ItemCompat.isSword(itemStack)) {
             float candidateDamage = ItemUtil.getSwordDamage(itemStack);
             float bestDamage = ItemUtil.getBestSwordDamage();
             return candidateDamage > bestDamage;
         }
-        if (itemStack.getItem() instanceof DiggerItem) {
-            if (itemStack.getItem() instanceof PickaxeItem) {
+        if (ItemCompat.isDigger(itemStack)) {
+            if (ItemCompat.isPickaxe(itemStack)) {
                 float candidateSpeed = ItemUtil.getDigSpeed(itemStack);
                 float bestSpeed = ItemUtil.getBestPickaxeScore();
                 return candidateSpeed > bestSpeed;
@@ -635,9 +631,9 @@ extends Module {
             }
         } else {
             Item item = itemStack.getItem();
-            if (item instanceof ArmorItem armorItem) {
+            if (ItemCompat.isArmor(itemStack)) {
                 float candidateScore = ItemUtil.getArmorScore(itemStack);
-                float equippedScore = ItemUtil.getEquippedArmorScore(armorItem.getEquipmentSlot());
+                float equippedScore = ItemUtil.getEquippedArmorScore(ItemCompat.armorSlot(itemStack));
                 return candidateScore > equippedScore + 0.1f;
             }
             if (itemStack.getItem() instanceof BowItem) {
@@ -717,17 +713,17 @@ extends Module {
             return true;
         }
         Item item = itemStack.getItem();
-        if (item instanceof ArmorItem armorItem) {
+        if (ItemCompat.isArmor(itemStack)) {
             float candidateScore = ItemUtil.getArmorScore(itemStack);
-            float bestScore = ItemUtil.getBestArmorScore(armorItem.getEquipmentSlot());
+            float bestScore = ItemUtil.getBestArmorScore(ItemCompat.armorSlot(itemStack));
             return !(candidateScore <= bestScore);
         }
-        if (itemStack.getItem() instanceof SwordItem) {
+        if (ItemCompat.isSword(itemStack)) {
             float candidateDamage = ItemUtil.getSwordDamage(itemStack);
             float bestDamage = ItemUtil.getBestSwordDamage();
             return !(candidateDamage <= bestDamage);
         }
-        if (itemStack.getItem() instanceof PickaxeItem) {
+        if (ItemCompat.isPickaxe(itemStack)) {
             float candidateSpeed = ItemUtil.getDigSpeed(itemStack);
             float bestSpeed = ItemUtil.getBestPickaxeScore();
             return !(candidateSpeed <= bestSpeed);
@@ -784,7 +780,7 @@ extends Module {
         if ((itemStack.getItem() == Items.SNOWBALL || itemStack.getItem() == Items.EGG) && ItemUtil.countItem(Items.SNOWBALL) + ItemUtil.countItem(Items.EGG) + itemStack.getCount() >= InventoryManager.getMaxEggsSnowballsSize()) {
             return false;
         }
-        if (itemStack.getItem() instanceof ItemNameBlockItem) {
+        if (ItemCompat.isNamedBlock(itemStack.getItem())) {
             return false;
         }
         return ItemUtil.isUsableItem(itemStack);

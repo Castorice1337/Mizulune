@@ -11,7 +11,6 @@ import net.minecraft.network.protocol.game.ServerboundPlayerCommandPacket;
 import net.minecraft.network.protocol.game.ServerboundPongPacket;
 import net.minecraft.network.protocol.game.ServerboundUseItemPacket;
 import net.minecraft.world.item.BowItem;
-import net.minecraft.world.item.BowlFoodItem;
 import net.minecraft.world.item.ItemStack;
 import shit.zen.ZenClient;
 import shit.zen.event.impl.MotionEvent;
@@ -28,6 +27,7 @@ import shit.zen.utils.game.PlayerPositionHold;
 import shit.zen.utils.misc.ChatUtil;
 import shit.zen.utils.misc.PacketUtil;
 import shit.zen.utils.rotation.Rotation;
+import shit.zen.platform.ItemCompat;
 import shit.zen.utils.rotation.RotationHandler;
 import shit.zen.event.EventTarget;
 
@@ -149,15 +149,15 @@ extends Module implements PlayerPositionHold.DebugSink {
                 if (this.shouldSendCapturedPacket() && (this.savedYaw != currentYaw || this.savedPitch != currentPitch)) {
                     PacketUtil.sendQueued(new ServerboundMovePlayerPacket.Rot(currentYaw, currentPitch, mc.player.onGround()));
                     while (!this.pongQueue.isEmpty()) {
-                        PacketUtil.sendQueued((Packet<ServerGamePacketListener>) this.pongQueue.poll());
+                        PacketUtil.sendQueued(this.pongQueue.poll());
                     }
                     this.savedYaw = currentYaw;
                     this.savedPitch = currentPitch;
                 }
-                PacketUtil.sendQueued((Packet<ServerGamePacketListener>) this.capturedPacket);
+                PacketUtil.sendQueued(this.capturedPacket);
             } else if (!this.isAntiVoidActive() && this.ModeValue.is("Packet") && mc.player.tickCount % 10 == 0) {
                 while (!this.pongQueue.isEmpty()) {
-                    PacketUtil.sendQueued((Packet<ServerGamePacketListener>) this.pongQueue.poll());
+                    PacketUtil.sendQueued(this.pongQueue.poll());
                 }
             }
             if (this.pendingDisable) {
@@ -179,7 +179,7 @@ extends Module implements PlayerPositionHold.DebugSink {
             }
         }
         while (!this.pongQueue.isEmpty()) {
-            PacketUtil.sendQueued((Packet<ServerGamePacketListener>) this.pongQueue.poll());
+            PacketUtil.sendQueued(this.pongQueue.poll());
         }
         this.stuckState = 3;
         this.capturedPacket = null;
@@ -193,7 +193,7 @@ extends Module implements PlayerPositionHold.DebugSink {
     private boolean shouldSendCapturedPacket() {
         if (this.capturedPacket instanceof ServerboundUseItemPacket useItemPacket) {
             ItemStack heldStack = mc.player.getItemInHand(useItemPacket.getHand());
-            return !(heldStack.getItem() instanceof BowlFoodItem) && !(heldStack.getItem() instanceof BowItem);
+            return !ItemCompat.isBowlFood(heldStack.getItem()) && !(heldStack.getItem() instanceof BowItem);
         }
         if (this.capturedPacket instanceof ServerboundPlayerActionPacket actionPacket) {
             return actionPacket.getAction() == ServerboundPlayerActionPacket.Action.RELEASE_USE_ITEM && mc.player.getUseItem().getItem() instanceof BowItem;
@@ -230,7 +230,7 @@ extends Module implements PlayerPositionHold.DebugSink {
             packetEvent.setCancelled(true);
         } else if (packetEvent.getPacket() instanceof ClientboundPlayerPositionPacket && this.ModeValue.is("Delay")) {
             while (!this.pongQueue.isEmpty()) {
-                PacketUtil.sendQueued((Packet<ServerGamePacketListener>) this.pongQueue.poll());
+                PacketUtil.sendQueued(this.pongQueue.poll());
             }
             this.finishDisable(false);
         }

@@ -2,11 +2,15 @@ package shit.zen.modules.impl.render;
 
 import com.mojang.blaze3d.vertex.PoseStack;
 import net.minecraft.util.Mth;
+import net.minecraft.world.InteractionHand;
 import net.minecraft.world.entity.HumanoidArm;
+import net.minecraft.world.item.ItemStack;
 import org.joml.Quaternionf;
+import shit.zen.ClientBase;
 import shit.zen.modules.Category;
 import shit.zen.modules.Module;
 import shit.zen.modules.impl.combat.KillAura;
+import shit.zen.platform.ItemCompat;
 import shit.zen.value.impl.ModeValue;
 import shit.zen.value.impl.NumberValue;
 
@@ -28,6 +32,18 @@ extends Module {
                 && KillAura.INSTANCE.isEnabled()
                 && KillAura.INSTANCE.fakeAutoBlock.getValue()
                 && KillAura.aimingTarget != null;
+    }
+
+    /** Cross-runtime policy; the actual 1.20.1/26.2 item submission stays platform-specific. */
+    public boolean shouldApply(InteractionHand hand, ItemStack stack) {
+        if (!this.isEnabled() || ClientBase.mc == null || ClientBase.mc.player == null) {
+            return false;
+        }
+        boolean useKeyHeld = ClientBase.mc.options.keyUse.isDown()
+                && ClientBase.mc.player.getOffhandItem().isEmpty();
+        return hand == InteractionHand.MAIN_HAND
+                && ItemCompat.isSword(stack)
+                && (useKeyHeld || this.isKillAuraAttacking());
     }
 
     public static void applyTranslate(double tx, double ty, double tz, PoseStack poseStack) {

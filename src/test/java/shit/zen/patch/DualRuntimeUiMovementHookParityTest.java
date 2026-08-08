@@ -41,10 +41,8 @@ final class DualRuntimeUiMovementHookParityTest {
         assertTrue(mixinConfig.contains("\"ChatScreenMixin\""));
         assertTrue(mixinConfig.contains("\"EntityMixin\""));
 
-        Path mixinSources = Path.of(
-                "fabricmod", "src", "main", "java", "shit", "zen", "fabric", "mixin");
-        String chatMixin = Files.readString(mixinSources.resolve("ChatScreenMixin.java"), StandardCharsets.UTF_8);
-        String entityMixin = Files.readString(mixinSources.resolve("EntityMixin.java"), StandardCharsets.UTF_8);
+        String chatMixin = Files.readString(resolveMixinSource("ChatScreenMixin"), StandardCharsets.UTF_8);
+        String entityMixin = Files.readString(resolveMixinSource("EntityMixin"), StandardCharsets.UTF_8);
         assertTrue(chatMixin.contains("ChatScreenHookCallbacks.onRender"));
         assertTrue(chatMixin.contains("ChatScreenHookCallbacks.onMouseClicked"));
         assertTrue(entityMixin.contains("EntityHookCallbacks.moveRelative"));
@@ -60,8 +58,7 @@ final class DualRuntimeUiMovementHookParityTest {
         assertNotNull(injection);
         assertEquals(At.Type.HEAD, injection.at().value());
 
-        Path mixin = Path.of(
-                "fabricmod", "src", "main", "java", "shit", "zen", "fabric", "mixin", "MinecraftMixin.java");
+        Path mixin = resolveMixinSource("MinecraftMixin");
         String source = Files.readString(mixin, StandardCharsets.UTF_8);
         assertTrue(source.contains("method = \"handleKeybinds\""));
         assertTrue(source.contains("at = @At(\"HEAD\")"));
@@ -90,5 +87,17 @@ final class DualRuntimeUiMovementHookParityTest {
             new ClassReader(stream).accept(node, 0);
             return node;
         }
+    }
+
+    private static Path resolveMixinSource(String mixin) {
+        Path fabric26 = Path.of(
+                "fabricmod", "src", "fabric26", "java", "shit", "zen", "fabric", "mixin",
+                mixin + ".java");
+        if (Files.isRegularFile(fabric26)) {
+            return fabric26;
+        }
+        return Path.of(
+                "fabricmod", "src", "main", "java", "shit", "zen", "fabric", "mixin",
+                mixin + ".java");
     }
 }

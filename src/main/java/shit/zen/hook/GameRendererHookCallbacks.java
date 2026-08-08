@@ -24,10 +24,18 @@ public final class GameRendererHookCallbacks {
     }
 
     public static float getNightVisionScale(LivingEntity entity, float partialTick) {
-        if (FullBright.INSTANCE != null && FullBright.INSTANCE.isEnabled()) {
-            return FullBright.INSTANCE.brightnessSetting.getValue().floatValue() / 100.0f;
+        HookDecision<Float> fullBright = onFullBrightScale();
+        if (fullBright.handled()) {
+            return fullBright.value();
         }
         return entity.hasEffect(MobEffects.NIGHT_VISION) ? 1.0f : 0.0f;
+    }
+
+    public static HookDecision<Float> onFullBrightScale() {
+        return FullBright.INSTANCE != null && FullBright.INSTANCE.isEnabled()
+                ? HookDecision.handled(
+                        FullBright.INSTANCE.brightnessSetting.getValue().floatValue() / 100.0f)
+                : HookDecision.pass();
     }
 
     public static void onRender(GameRenderer gameRenderer, float partialTick) {

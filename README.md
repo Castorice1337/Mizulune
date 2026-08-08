@@ -126,9 +126,10 @@ This is an engineering isolation mechanism, not a security guarantee. Because re
 
 ### Dual-runtime build entry points
 
-The root ForgeGradle project remains the Forge/Patchify owner. Fabric is built
-through two isolated Java 17/Loom subprojects so Forge/ASM and DLL builds do not
-acquire Fabric or ViaVersion dependencies.
+The root ForgeGradle project remains the Minecraft 1.20.1 / Java 17
+Forge/Patchify owner. Fabric is isolated under `fabricmod/` and now targets
+Minecraft 26.2 / Java 25, so Forge/ASM and DLL builds do not acquire Fabric,
+Sodium, Iris, or ViaVersion dependencies.
 
 ```powershell
 # Forge/Patchify Java build
@@ -137,19 +138,26 @@ acquire Fabric or ViaVersion dependencies.
 # Forge/ASM DLL + FantNEL distribution
 .\gradlew.bat buildForgeAsmDll
 
-# Mizulune Fabric 1.20.1 + ViaFabricPlus OpenZen 766 + FantNEL Host
+# Mizulune Fabric 26.2 + pinned Sodium/Iris/ViaFabricPlus + FantNEL Host
 .\gradlew.bat fabricmodbuild
 
 # All Java/mod distributions
 .\gradlew.bat buildAll
 ```
 
-`fabricmodbuild` stages the two required Fabric jars and the frozen FantNEL
-sidecar under `build/mod-dist/fabric/`. `viafabricplus-2.8.7+openzen.766.jar`
-is the complete ViaFabricPlus 1.20.1 source build: it retains the original
-multiplayer version selector, settings, legacy/Bedrock support and gameplay
-Mixins, while extending the version table and ViaVersion stack with Minecraft
-1.20.5/1.20.6 protocol `766`.
+The Fabric distribution pins and checksum-verifies Sodium
+`mc26.2-0.9.1-fabric`, Iris `1.11.2+26.2-fabric`, and ViaFabricPlus `4.6.1`,
+then stages them beside Mizulune under `build/mod-dist/fabric/`; none of those
+external mods is nested into the Mizulune jar. The old `viafabricplusmod/`
+tree remains as phase 0065 history for Minecraft 1.20.1 and is no longer in the
+26.2 build graph.
+
+The 26.2 migration is currently **in progress**: toolchain, metadata, dependency
+staging, protocol API and platform boundaries are landed, while gameplay item
+components and the new render-state/GPU pipeline still block `compileJava`.
+`buildFabricMod`, `fabricmodbuild`, `buildAll`, and `runFabricClient` must not be
+treated as passing release gates until phase 0067 closes. See
+`fabricmod/README.md` and `.columbina/phase/0067_fabric-262-runtime-upgrade/`.
 
 For a development launch, use:
 
@@ -164,7 +172,7 @@ cleared when the proxy or Minecraft connection closes.
 
 ### Prerequisites
 
-- **Java**: JDK 17
+- **Java**: JDK 17 for Forge/ASM; JDK 25 for `fabricmod/`
 - **Minecraft / Forge**: Minecraft `1.20.1`, Forge `47.4.20`
 - **Native toolchain**: CMake, MSVC from Visual Studio 2022 or newer, and `vcpkg`
 - **Native dependencies**: Qt6 Widgets and Microsoft Edge WebView2 SDK through vcpkg

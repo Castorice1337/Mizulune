@@ -4,7 +4,6 @@ import java.util.concurrent.TimeUnit;
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
-import net.minecraft.network.protocol.game.ServerboundPickItemPacket;
 import net.minecraft.network.protocol.game.ServerboundPlayerActionPacket;
 import net.minecraft.network.protocol.game.ServerboundSetCarriedItemPacket;
 import net.minecraft.world.effect.MobEffects;
@@ -22,6 +21,7 @@ import shit.zen.value.impl.NumberValue;
 import shit.zen.utils.misc.PacketUtil;
 import shit.zen.utils.misc.ThreadPool;
 import shit.zen.event.EventTarget;
+import shit.zen.platform.ClientPlatforms;
 
 public class AutoOffHand extends Module {
     public static AutoOffHand INSTANCE;
@@ -144,9 +144,7 @@ public class AutoOffHand extends Module {
         mc.options.keyUse.setDown(false);
         final int savedSlot = mc.player.getInventory().selected;
         if (slot >= 9) {
-            PacketUtil.sendQueued(new ServerboundPickItemPacket(slot));
-            PacketUtil.sendQueued(new ServerboundPlayerActionPacket(
-                    ServerboundPlayerActionPacket.Action.SWAP_ITEM_WITH_OFFHAND, BlockPos.ZERO, Direction.DOWN));
+            ClientPlatforms.current().swapInventorySlotWithOffhand(slot);
             ThreadPool.scheduleWithDelay(() -> mc.execute(() -> {
                 mc.player.getInventory().selected = savedSlot;
             }), 200L, TimeUnit.MILLISECONDS);

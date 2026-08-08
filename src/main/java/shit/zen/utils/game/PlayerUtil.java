@@ -10,7 +10,6 @@ import net.minecraft.util.Mth;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.player.Player;
-import net.minecraft.world.item.ArmorItem;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.ClipContext;
@@ -26,6 +25,7 @@ import shit.zen.utils.game.RotationUtil;
 import shit.zen.utils.misc.ChatUtil;
 import shit.zen.utils.misc.ReflectionUtil;
 import shit.zen.utils.rotation.Rotation;
+import shit.zen.platform.ItemCompat;
 
 public final class PlayerUtil
 extends ClientBase {
@@ -82,11 +82,10 @@ extends ClientBase {
 
     public static int getArmorPoints(LivingEntity livingEntity) {
         int totalDefense = 0;
-        for (ItemStack itemStack : livingEntity.getArmorSlots()) {
-            Item item = itemStack.getItem();
-            if (!(item instanceof ArmorItem armorItem)) continue;
-            totalDefense += armorItem.getDefense();
-        }
+        totalDefense += ItemCompat.armorDefense(livingEntity.getItemBySlot(net.minecraft.world.entity.EquipmentSlot.FEET));
+        totalDefense += ItemCompat.armorDefense(livingEntity.getItemBySlot(net.minecraft.world.entity.EquipmentSlot.LEGS));
+        totalDefense += ItemCompat.armorDefense(livingEntity.getItemBySlot(net.minecraft.world.entity.EquipmentSlot.CHEST));
+        totalDefense += ItemCompat.armorDefense(livingEntity.getItemBySlot(net.minecraft.world.entity.EquipmentSlot.HEAD));
         return totalDefense;
     }
 

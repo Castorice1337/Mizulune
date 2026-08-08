@@ -36,7 +36,9 @@ import org.lwjgl.opengl.GL13;
 import org.lwjgl.opengl.GL14;
 import org.lwjgl.opengl.GL15;
 import org.lwjgl.opengl.GL20;
+import org.lwjgl.opengl.GL21;
 import org.lwjgl.opengl.GL30;
+import org.lwjgl.opengl.GL33;
 import shit.zen.render.CustomFont;
 import shit.zen.render.DrawContext;
 import shit.zen.render.FontRenderer;
@@ -142,28 +144,35 @@ public final class SkikoBackend implements RenderBackend {
     @Override
     public void captureCleanBackdrop(GuiGraphics guiGraphics, PoseStack poseStack) {
         RenderSystem.assertOnRenderThread();
+        GlStateGuard captureState = GlStateGuard.capture();
+        try {
+            this.ensureContext();
+            this.directContext.resetGLAll();
 
-        this.ensureContext();
-        this.directContext.resetGLAll();
+            int fbo = GL11.glGetInteger(GL30.GL_FRAMEBUFFER_BINDING);
+            Minecraft mc = Minecraft.getInstance();
+            int width = Math.max(1, mc.getWindow().getWidth());
+            int height = Math.max(1, mc.getWindow().getHeight());
 
-        int fbo = GL11.glGetInteger(GL30.GL_FRAMEBUFFER_BINDING);
-        Minecraft mc = Minecraft.getInstance();
-        int width = Math.max(1, mc.getWindow().getWidth());
-        int height = Math.max(1, mc.getWindow().getHeight());
+            this.ensureSurface(fbo, width, height);
+            this.closeCleanBackdropSnapshot();
 
-        this.ensureSurface(fbo, width, height);
-        this.closeCleanBackdropSnapshot();
+            GL11.glFlush();
 
-        GL11.glFlush();
+            this.cleanBackdropSnapshot = this.surface.makeImageSnapshot();
+            this.cleanBackdropSnapshotWidth = width;
+            this.cleanBackdropSnapshotHeight = height;
 
-        this.cleanBackdropSnapshot = this.surface.makeImageSnapshot();
-        this.cleanBackdropSnapshotWidth = width;
-        this.cleanBackdropSnapshotHeight = height;
-
-        if (this.cleanBackdropSnapshot == null) {
-            this.cleanBackdropSnapshotWidth = -1;
-            this.cleanBackdropSnapshotHeight = -1;
-            this.backdropBlurMissCount++;
+            if (this.cleanBackdropSnapshot == null) {
+                this.cleanBackdropSnapshotWidth = -1;
+                this.cleanBackdropSnapshotHeight = -1;
+                this.backdropBlurMissCount++;
+            }
+        } finally {
+            captureState.restore();
+            if (this.directContext != null) {
+                this.directContext.resetGLAll();
+            }
         }
     }
 
@@ -624,7 +633,11 @@ public final class SkikoBackend implements RenderBackend {
         if (this.surface != null && fbo == this.currentFbo && width == this.currentWidth && height == this.currentHeight) {
             return;
         }
-        this.closeSurface();
+        // Fabric 26.2 captures the clean world from one FBO and replays the
+        // original Skiko effects into a transparent GUI FBO. Preserve that
+        // snapshot across the destination switch; the Image owns its Skia GPU
+        // resource until the next clean capture or backend close.
+        this.closeSurfacePreservingCleanBackdrop();
         this.renderTarget = BackendRenderTarget.Companion.makeGL(width, height, 0, 8, fbo, FramebufferFormat.GR_GL_RGBA8);
         this.surface = Surface.Companion.makeFromBackendRenderTarget(this.directContext, this.renderTarget,
                 SurfaceOrigin.BOTTOM_LEFT, SurfaceColorFormat.RGBA_8888, null, null);
@@ -717,6 +730,16 @@ public final class SkikoBackend implements RenderBackend {
     private void closeSurface() {
         this.closeBackdropSnapshot();
         this.closeCleanBackdropSnapshot();
+
+        this.closeSurfaceObjects();
+    }
+
+    private void closeSurfacePreservingCleanBackdrop() {
+        this.closeBackdropSnapshot();
+        this.closeSurfaceObjects();
+    }
+
+    private void closeSurfaceObjects() {
 
         if (this.surface != null) {
             this.surface.close();
@@ -965,9 +988,12 @@ public final class SkikoBackend implements RenderBackend {
         private final int vertexArray;
         private final int arrayBuffer;
         private final int elementArrayBuffer;
+        private final int pixelPackBuffer;
+        private final int pixelUnpackBuffer;
         private final int currentProgram;
         private final int activeTexture;
-        private final int texture2d;
+        private final int[] texture2dBindings;
+        private final int[] samplerBindings;
         private final int readFramebuffer;
         private final int drawFramebuffer;
         private final int[] viewport = new int[4];
@@ -977,6 +1003,10 @@ public final class SkikoBackend implements RenderBackend {
         private final boolean depthTest;
         private final boolean cullFace;
         private final boolean scissorTest;
+        private final boolean stencilTest;
+        private final boolean framebufferSrgb;
+        private final boolean dither;
+        private final boolean multisample;
         private final boolean depthMask;
         private final int blendSrcRgb;
         private final int blendDstRgb;
@@ -989,9 +1019,19 @@ public final class SkikoBackend implements RenderBackend {
             this.vertexArray = GL11.glGetInteger(GL30.GL_VERTEX_ARRAY_BINDING);
             this.arrayBuffer = GL11.glGetInteger(GL15.GL_ARRAY_BUFFER_BINDING);
             this.elementArrayBuffer = GL11.glGetInteger(GL15.GL_ELEMENT_ARRAY_BUFFER_BINDING);
+            this.pixelPackBuffer = GL11.glGetInteger(GL21.GL_PIXEL_PACK_BUFFER_BINDING);
+            this.pixelUnpackBuffer = GL11.glGetInteger(GL21.GL_PIXEL_UNPACK_BUFFER_BINDING);
             this.currentProgram = GL11.glGetInteger(GL20.GL_CURRENT_PROGRAM);
             this.activeTexture = GL11.glGetInteger(GL13.GL_ACTIVE_TEXTURE);
-            this.texture2d = GL11.glGetInteger(GL11.GL_TEXTURE_BINDING_2D);
+            int textureUnitCount = Math.max(1, GL11.glGetInteger(GL20.GL_MAX_TEXTURE_IMAGE_UNITS));
+            this.texture2dBindings = new int[textureUnitCount];
+            this.samplerBindings = new int[textureUnitCount];
+            for (int unit = 0; unit < textureUnitCount; unit++) {
+                GL13.glActiveTexture(GL13.GL_TEXTURE0 + unit);
+                this.texture2dBindings[unit] = GL11.glGetInteger(GL11.GL_TEXTURE_BINDING_2D);
+                this.samplerBindings[unit] = GL11.glGetInteger(GL33.GL_SAMPLER_BINDING);
+            }
+            GL13.glActiveTexture(this.activeTexture);
             this.readFramebuffer = GL11.glGetInteger(GL30.GL_READ_FRAMEBUFFER_BINDING);
             this.drawFramebuffer = GL11.glGetInteger(GL30.GL_DRAW_FRAMEBUFFER_BINDING);
             GL11.glGetIntegerv(GL11.GL_VIEWPORT, this.viewport);
@@ -1001,6 +1041,10 @@ public final class SkikoBackend implements RenderBackend {
             this.depthTest = GL11.glIsEnabled(GL11.GL_DEPTH_TEST);
             this.cullFace = GL11.glIsEnabled(GL11.GL_CULL_FACE);
             this.scissorTest = GL11.glIsEnabled(GL11.GL_SCISSOR_TEST);
+            this.stencilTest = GL11.glIsEnabled(GL11.GL_STENCIL_TEST);
+            this.framebufferSrgb = GL11.glIsEnabled(GL30.GL_FRAMEBUFFER_SRGB);
+            this.dither = GL11.glIsEnabled(GL11.GL_DITHER);
+            this.multisample = GL11.glIsEnabled(GL13.GL_MULTISAMPLE);
             this.depthMask = GL11.glGetBoolean(GL11.GL_DEPTH_WRITEMASK);
             this.blendSrcRgb = GL11.glGetInteger(GL14.GL_BLEND_SRC_RGB);
             this.blendDstRgb = GL11.glGetInteger(GL14.GL_BLEND_DST_RGB);
@@ -1022,9 +1066,15 @@ public final class SkikoBackend implements RenderBackend {
             if (this.vertexArray != 0) {
                 GL15.glBindBuffer(GL15.GL_ELEMENT_ARRAY_BUFFER, this.elementArrayBuffer);
             }
+            GL15.glBindBuffer(GL21.GL_PIXEL_PACK_BUFFER, this.pixelPackBuffer);
+            GL15.glBindBuffer(GL21.GL_PIXEL_UNPACK_BUFFER, this.pixelUnpackBuffer);
             GL20.glUseProgram(this.currentProgram);
+            for (int unit = 0; unit < this.texture2dBindings.length; unit++) {
+                GL13.glActiveTexture(GL13.GL_TEXTURE0 + unit);
+                GL11.glBindTexture(GL11.GL_TEXTURE_2D, this.texture2dBindings[unit]);
+                GL33.glBindSampler(unit, this.samplerBindings[unit]);
+            }
             GL13.glActiveTexture(this.activeTexture);
-            GL11.glBindTexture(GL11.GL_TEXTURE_2D, this.texture2d);
             GL11.glViewport(this.viewport[0], this.viewport[1], this.viewport[2], this.viewport[3]);
             GL11.glScissor(this.scissorBox[0], this.scissorBox[1], this.scissorBox[2], this.scissorBox[3]);
             GL14.glBlendFuncSeparate(this.blendSrcRgb, this.blendDstRgb, this.blendSrcAlpha, this.blendDstAlpha);
@@ -1035,6 +1085,10 @@ public final class SkikoBackend implements RenderBackend {
             this.setEnabled(GL11.GL_DEPTH_TEST, this.depthTest);
             this.setEnabled(GL11.GL_CULL_FACE, this.cullFace);
             this.setEnabled(GL11.GL_SCISSOR_TEST, this.scissorTest);
+            this.setEnabled(GL11.GL_STENCIL_TEST, this.stencilTest);
+            this.setEnabled(GL30.GL_FRAMEBUFFER_SRGB, this.framebufferSrgb);
+            this.setEnabled(GL11.GL_DITHER, this.dither);
+            this.setEnabled(GL13.GL_MULTISAMPLE, this.multisample);
         }
 
         private void getBooleanVector(int pname, boolean[] target) {
