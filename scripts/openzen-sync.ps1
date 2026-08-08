@@ -12,8 +12,18 @@ $ErrorActionPreference = 'Stop'
 
 function Invoke-Git {
     param([string]$Repo, [string[]]$Arguments)
-    $output = & git -C $Repo @Arguments 2>&1
-    if ($LASTEXITCODE -ne 0) {
+    $previousErrorActionPreference = $ErrorActionPreference
+    try {
+        # Git writes normal progress (not only failures) to stderr. Do not let
+        # Windows PowerShell's Stop policy turn that progress into an exception.
+        $ErrorActionPreference = 'Continue'
+        $output = @(& git -C $Repo @Arguments 2>&1)
+        $exitCode = $LASTEXITCODE
+    }
+    finally {
+        $ErrorActionPreference = $previousErrorActionPreference
+    }
+    if ($exitCode -ne 0) {
         throw "git -C `"$Repo`" $($Arguments -join ' ') failed:`n$output"
     }
     return $output
