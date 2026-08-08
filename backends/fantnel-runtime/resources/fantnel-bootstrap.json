@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "fantnelCommit": "70134bf8ea16bffd951c2afe8cff1f1c1fa3713a",
+  "updateVersion": "1.0.0",
+  "versions": [
+    "1.7.0"
+  ],
+  "crcSalt": "22AC4B0143EFFC80F2905B267D4D84D3",
+  "source": "repository://Codexus.OpenSDK/Mizulune.SdkHost/profiles/bjd-viaforge-1.20.6.json"
+}

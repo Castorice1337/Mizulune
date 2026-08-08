@@ -1,0 +1,144 @@
+package shit.zen.modules.impl.misc;
+
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
+import net.minecraft.client.KeyMapping;
+import net.minecraft.world.item.BlockItem;
+import net.minecraft.world.level.block.DoorBlock;
+import net.minecraft.world.phys.BlockHitResult;
+import net.minecraft.world.phys.HitResult;
+import shit.zen.event.impl.SprintEvent;
+import shit.zen.modules.Category;
+import shit.zen.modules.Module;
+import shit.zen.value.impl.BooleanValue;
+import shit.zen.value.impl.ModeValue;
+import shit.zen.value.impl.NumberValue;
+import shit.zen.utils.animation.Timer;
+import shit.zen.utils.game.CpsUtil;
+import shit.zen.utils.misc.ReflectionUtil;
+import shit.zen.utils.misc.UnsafeUtil;
+import shit.zen.event.EventTarget;
+import shit.zen.platform.ClientPlatforms;
+
+public class AutoClicker extends Module {
+    private final NumberValue cps = new NumberValue("CPS", 7, 4, 25, 1);
+    private final ModeValue clickSide = new ModeValue("Mode", "Left", "Right", "Both").withDefault("Left");
+    private final ModeValue clickMethod = new ModeValue("Click Mode", "Method", "Key", "Mouse").withDefault("Key");
+    private final ModeValue cpsMode = new ModeValue("CPS Mode", "Normal", "DBC").withDefault("Normal");
+    private final BooleanValue breakBlock = new BooleanValue("Break Block", true);
+    private final Timer leftClickTimer = new Timer();
+    private final Timer rightClickTimer = new Timer();
+
+    public AutoClicker() {
+        super("AutoClicker", Category.MISC);
+    }
+
+    @Override
+    public String getSuffix() {
+        return this.clickSide.getValue() + " " + formatSuffixNumber(this.cps.getValue()) + " CPS";
+    }
+
+    @Override
+    public void onEnable() {
+        this.leftClickTimer.reset();
+        this.rightClickTimer.reset();
+    }
+
+    @Override
+    public void onDisable() {
+    }
+
+    @EventTarget
+    public void onSprint(SprintEvent sprintEvent) {
+        if (mc.player == null || mc.level == null) {
+            return;
+        }
+        if (this.clickSide.is("Normal")) {
+            this.clickSide.setValue("Key");
+        }
+        if (this.clickSide.is("Left")) {
+            this.doLeftClick();
+        } else if (this.clickSide.is("Right")) {
+            this.doRightClick();
+        } else {
+            this.doLeftClick();
+            this.doRightClick();
+        }
+    }
+
+    private void doLeftClick() {
+        if (mc.player.isUsingItem()
+                || !mc.options.keyAttack.isDown()
+                || mc.screen != null
+                || !this.leftClickTimer.hasPassed(CpsUtil.toDelayMs(this.cpsMode.getValue(), this.cps.getValue().doubleValue()))) {
+            return;
+        }
+        if (this.breakBlock.getValue()
+                && mc.hitResult instanceof BlockHitResult blockHitResult
+                && blockHitResult.getType() == HitResult.Type.BLOCK) {
+            return;
+        }
+        ReflectionUtil.setMissTime(0);
+        switch ((String) this.clickMethod.getValue()) {
+            case "Method":
+                this.invokeStartAttack();
+                break;
+            case "Key":
+                KeyMapping.click(mc.options.keyAttack.key);
+                break;
+            case "Mouse":
+                ClientPlatforms.current().beforeMouseButton(mc.options.keyAttack.key.getValue(), 1, 0);
+                KeyMapping.click(mc.options.keyAttack.key);
+                ClientPlatforms.current().afterMouseButton(mc.options.keyAttack.key.getValue(), 1, 0);
+                break;
+        }
+        this.leftClickTimer.reset();
+    }
+
+    private void invokeStartUseItem() {
+        try {
+            Method method = mc.getClass().getDeclaredMethod(ReflectionUtil.getMappedMethodName(mc.getClass(), "startUseItem", "()V"));
+            UnsafeUtil.makeAccessible(method);
+            method.invoke(mc);
+        } catch (IllegalAccessException | NoSuchMethodException | InvocationTargetException throwable) {
+            throw new RuntimeException(throwable);
+        }
+    }
+
+    private void invokeStartAttack() {
+        try {
+            Method method = mc.getClass().getDeclaredMethod(ReflectionUtil.getMappedMethodName(mc.getClass(), "startAttack", "()V"));
+            UnsafeUtil.makeAccessible(method);
+            method.invoke(mc);
+        } catch (IllegalAccessException | NoSuchMethodException | InvocationTargetException throwable) {
+            throw new RuntimeException(throwable);
+        }
+    }
+
+    private void doRightClick() {
+        if (mc.player.isUsingItem()
+                || !(mc.hitResult instanceof BlockHitResult)
+                || !(mc.player.getMainHandItem().getItem() instanceof BlockItem blockItem)
+                || blockItem.getBlock() instanceof DoorBlock
+                || !mc.options.keyUse.isDown()
+                || mc.screen != null
+                || !this.rightClickTimer.hasPassed(CpsUtil.toDelayMs(this.cpsMode.getValue(), this.cps.getValue().doubleValue()))) {
+            return;
+        }
+        switch ((String) this.clickMethod.getValue()) {
+            case "Method":
+                this.invokeStartUseItem();
+                break;
+            case "Key":
+                KeyMapping.click(mc.options.keyUse.key);
+                break;
+            case "Mouse":
+                ClientPlatforms.current().beforeMouseButton(mc.options.keyUse.key.getValue(), 1, 0);
+                KeyMapping.click(mc.options.keyUse.key);
+                ClientPlatforms.current().afterMouseButton(mc.options.keyUse.key.getValue(), 1, 0);
+                break;
+        }
+        ReflectionUtil.setRightClickDelay(0);
+        this.rightClickTimer.reset();
+    }
+}

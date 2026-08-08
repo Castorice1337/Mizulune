@@ -1,0 +1,49 @@
+{
+  "schemaVersion": 1,
+  "fantnelCommit": "70134bf8ea16bffd951c2afe8cff1f1c1fa3713a",
+  "fantnelTree": "3695f1d43b069606b0a0a4048b5a1384a9f77e7f",
+  "referenceCommit": "63edab4b064f3a259272eb686a6f7e0ca94a3137",
+  "referenceTree": "c7901b83d97536cd00a6d705758e0952181adc7f",
+  "resources": [
+    {
+      "path": "resources/7z.exe",
+      "version": "7-Zip 26.02 x64 standalone console",
+      "sourceUrl": "https://github.com/ip7z/7zip/releases/download/26.02/7z2602-extra.7z",
+      "sourceSha256": "081df9e9311dfd9c9e0e98c1c80180b99bb51e4cb24156b5f3057fe3c259d70a",
+      "sha256": "35d4d69d7cd6cb44558f208c3b1334268013f9daf82d2dda848893a1c30c59c2"
+    },
+    {
+      "path": "resources/7zip.LICENSE.txt",
+      "version": "7-Zip 26.02",
+      "sourceUrl": "https://github.com/ip7z/7zip/releases/download/26.02/7z2602-extra.7z",
+      "sourceSha256": "081df9e9311dfd9c9e0e98c1c80180b99bb51e4cb24156b5f3057fe3c259d70a",
+      "sha256": "39d2187b942cc88818dd959e53c6b7dddd152097a42061467c4d56050168d646"
+    },
+    {
+      "path": "resources/config.json",
+      "version": "mizulune-default-1",
+      "sourceUrl": "repository://backends/fantnel-runtime/resources/config.json",
+      "sourceSha256": "ca3d163bab055381827226140568f3bef7eaac187cebd76878e0b63e9e442356",
+      "sha256": "ca3d163bab055381827226140568f3bef7eaac187cebd76878e0b63e9e442356"
+    },
+    {
+      "path": "resources/fantnel-bootstrap.json",
+      "version": "fantnel-1.7.0-bootstrap-1",
+      "sourceUrl": "repository://Codexus.OpenSDK/Mizulune.SdkHost/profiles/bjd-viaforge-1.20.6.json",
+      "sourceSha256": "7f848ad5e7958159e5c64b9cbf59129ac1d8a05f3f66930c9c471cfa3cffeea1",
+      "sha256": "7f848ad5e7958159e5c64b9cbf59129ac1d8a05f3f66930c9c471cfa3cffeea1"
+    }
+  ],
+  "upstreamDescriptors": [
+    {
+      "mode": "static",
+      "url": "http://110.42.70.32:13423/api/fantnel/update/get?mode=static",
+      "runtimeUpdateAllowed": false
+    },
+    {
+      "mode": "static.win",
+      "url": "http://110.42.70.32:13423/api/fantnel/update/get?mode=static.win",
+      "runtimeUpdateAllowed": false
+    }
+  ]
+}

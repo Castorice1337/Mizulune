@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>net10.0</TargetFramework>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\Codexus.ModSDK\Codexus.ModSDK.csproj" />
+        <ProjectReference Include="..\Codexus.OpenSDK\Codexus.OpenSDK.csproj" />
+        <ProjectReference Include="..\Codexus.OpenTransport\Codexus.OpenTransport.csproj" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <None Include="manifest.json" CopyToOutputDirectory="PreserveNewest" />
+    </ItemGroup>
+
+    <Target Name="StageMod" AfterTargets="Build">
+        <PropertyGroup>
+            <PluginStageDir>$(MSBuildProjectDirectory)\dist\mizulune.protocol</PluginStageDir>
+        </PropertyGroup>
+        <MakeDir Directories="$(PluginStageDir)" />
+        <Copy SourceFiles="$(TargetPath);$(MSBuildProjectDirectory)\manifest.json"
+              DestinationFolder="$(PluginStageDir)" />
+    </Target>
+
+</Project>

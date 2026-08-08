@@ -1,0 +1,7 @@
+{
+  "name": "Codexus Example Protocol",
+  "id": "codexus.example.protocol",
+  "version": "1.0.0",
+  "dependencies": {},
+  "entryDll": "Codexus.ExampleMod.dll"
+}

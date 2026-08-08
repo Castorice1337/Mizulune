@@ -1,0 +1,12 @@
+{
+  "required": true,
+  "package": "com.columbina.heypixel.mixin",
+  "compatibilityLevel": "JAVA_21",
+  "client": [
+    "MouseHandlerMixin",
+    "MultiPlayerGameModeMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

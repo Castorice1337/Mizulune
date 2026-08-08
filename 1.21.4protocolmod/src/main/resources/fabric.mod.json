@@ -1,0 +1,27 @@
+{
+	"schemaVersion": 1,
+	"id": "mizulune-heypixel-protocol",
+	"version": "${version}",
+	"name": "Mizulune HeyPixel Protocol",
+	"description": "HeyPixel protocol bridge for Mizulune/Fantnel proxy sessions on Minecraft 1.21.4.",
+	"authors": [
+		"Columbina / Mizulune"
+	],
+	"license": "GPL-3.0-only",
+	"icon": "assets/mizulune-heypixel-protocol/icon.png",
+	"environment": "client",
+	"entrypoints": {
+		"client": [
+			"com.columbina.heypixel.HeyPixelProtocolModClient"
+		]
+	},
+	"mixins": [
+		"mizulune-heypixel-protocol.client.mixins.json"
+	],
+	"depends": {
+		"fabricloader": ">=0.19.3",
+		"minecraft": "~1.21.4",
+		"java": ">=21",
+		"fabric-api": "*"
+	}
+}

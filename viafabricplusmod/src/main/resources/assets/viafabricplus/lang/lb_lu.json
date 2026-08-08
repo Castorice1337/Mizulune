@@ -1,0 +1,51 @@
+{
+  "misc.viafabricplus.settings": "Astellungen",
+  "misc.viafabricplus.on": "Un",
+  "misc.viafabricplus.off": "Aus",
+  "misc.viafabricplus.lt": "Lenks, Uewen",
+  "misc.viafabricplus.rt": "Riets, Uewen",
+  "misc.viafabricplus.lb": "Lenks, Ennen",
+  "misc.viafabricplus.rb": "Riets, Ennen",
+  "misc.viafabricplus.cancel": "Ofbriechen",
+  "misc.viafabricplus.cancelreset": "Ofbriechen an zerecksetzen",
+
+  "general.viafabricplus.secret": "Super Secret Settings",
+  "general.viafabricplus.extrainformation": "Zousätzlech Informatiounen am Debug-HUD Unweisen",
+  "general.viafabricplus.classicloading": "Lued-Fortschrett an der Classic Unweisen",
+  "general.viafabricplus.main": "Positioun vun den Haupt-Buttons",
+  "general.viafabricplus.creative": "Net verfügbar Items vum Kreativ-Tab entfernen",
+  "general.viafabricplus.protocolsync": "Astellungen automatisch Un die aktuell Versioun Upassen",
+
+  "debug.viafabricplus.sequence": "Sequencing deaktiveieren",
+  "debug.viafabricplus.merchant": "Smooth out merchUnt screens",
+  "debug.viafabricplus.postfix": "Inputs Sync ausfeieren",
+  "debug.viafabricplus.sneakinstant": "InstUnt Sneak",
+  "debug.viafabricplus.inventory": "Inventory-Open Paket schecken",
+  "debug.viafabricplus.cooldown": "Cooldowns entfernen",
+  "debug.viafabricplus.idle": "IDLE-Paket schecken",
+  "debug.viafabricplus.attribute": "Attribute-Modifier entfernen",
+  "debug.viafabricplus.replacesneak": "Sneaken Unpassen",
+  "debug.viafabricplus.longsneak": "LUnges Sneaken",
+  "debug.viafabricplus.legacypseeds": "Legacy Abbaugeschwindigkeiten",
+
+  "authentication.viafabricplus.betacraft": "BetaCraft-Authentisierung notzen",
+  "authentication.viafabricplus.verify": "Erlab ViaLegacy, joinServer() opzurufen, um d´Session zu verifizeieren",
+  "authentication.viafabricplus.fail": "Disconnecten, wann den joinServer()-Opruf en Fehler geheit",
+  "authentication.viafabricplus.bedrock": "Klick, um den Bedrock-Account zu setzen",
+
+  "visual.viafabricplus.secure": "Secher-Chat-Warnung ausschalten",
+  "visual.viafabricplus.indicator": "Signatur-Indikator Unweisen",
+  "visual.viafabricplus.jigsaw": "Mie Nei Features vum Jigsaw-Screen entfernen",
+  "visual.viafabricplus.stoneslab": "Petrified oak slab entfernen",
+  "visual.viafabricplus.armor": "Rüstungs-HUD emuleieren",
+  "visual.viafabricplus.command": "Mie nei Features vum Comman-Block-Screen entfernen",
+  "visual.viafabricplus.oof": "Schaden-Soan durch OOF-Soan ersetzen",
+  "visual.viafabricplus.betahud": "Mie nei HUD-Elemente entfernen",
+  "visual.viafabricplus.classic": "Kreativ-Inventar ersetzen",
+  "visual.viafabricplus.walkanimation": "Aal Laaf-Animatioun",
+
+  "bedrocklogin.viafabricplus.text": "Däin Browser sollt elo opgaangen sinn.\nGeff w.e.g. den heien Code an: %s\nWann du desse Bildschirm zoumesst, gett den Prozess ofgebrach.",
+  "bedrocklogin.viafabricplus.error": "En Fehler ist opgetrieden! An der latest.log sin genauer Informatiounen;\n.e.g. Meld den Fehler enner: \nhttps://github.com/ViaVersion/ViaFabricPlus/issues",
+
+  "forceversion.viafabricplus.title": "W.e.g. wähl die Versioun, die bäim Verbannen mat dem Server benotzt ginn soll"
+}

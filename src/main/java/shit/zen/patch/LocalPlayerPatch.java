@@ -1,0 +1,239 @@
+package shit.zen.patch;
+
+import asm.patchify.annotation.At;
+import asm.patchify.annotation.Inject;
+import asm.patchify.annotation.Patch;
+import asm.patchify.annotation.Transform;
+import asm.patchify.annotation.WrapInvoke;
+import net.minecraft.client.player.LocalPlayer;
+import net.minecraft.client.player.Input;
+import net.minecraft.world.entity.Entity;
+import org.objectweb.asm.Opcodes;
+import org.objectweb.asm.Type;
+import org.objectweb.asm.tree.AbstractInsnNode;
+import org.objectweb.asm.tree.FieldInsnNode;
+import org.objectweb.asm.tree.InsnList;
+import org.objectweb.asm.tree.InsnNode;
+import org.objectweb.asm.tree.JumpInsnNode;
+import org.objectweb.asm.tree.MethodInsnNode;
+import org.objectweb.asm.tree.MethodNode;
+import org.objectweb.asm.tree.VarInsnNode;
+import shit.zen.ZenClient;
+import shit.zen.asm.Invocation;
+import shit.zen.event.impl.GameTickEvent;
+import shit.zen.event.impl.MotionEvent;
+import shit.zen.event.impl.SlowdownEvent;
+import shit.zen.event.impl.SprintDecisionEvent;
+import shit.zen.event.impl.SprintEvent;
+import shit.zen.hook.LocalPlayerHookCallbacks;
+import shit.zen.utils.game.DirectionalInput;
+import shit.zen.utils.misc.ReflectionUtil;
+
+@Patch(LocalPlayer.class)
+public class LocalPlayerPatch {
+
+    public static MotionEvent onMotion(double x, double y, double z, float yaw, float pitch, boolean onGround, boolean isPost) {
+        return LocalPlayerHookCallbacks.onMotion(x, y, z, yaw, pitch, onGround, isPost);
+    }
+
+    public static SlowdownEvent onSlowDown(boolean slow) {
+        return LocalPlayerHookCallbacks.onSlowDown(slow);
+    }
+
+    @Inject(
+            method = "tick",
+            desc = "()V",
+            at = @At(
+                    value = At.Type.BEFORE_INVOKE,
+                    method = "net/minecraft/client/player/AbstractClientPlayer/tick",
+                    desc = "()V")
+    )
+    public static void onTickSprintEvent(LocalPlayer player, CallbackInfo callbackInfo) {
+        LocalPlayerHookCallbacks.onTickSprintEvent(player);
+    }
+
+    @Transform(method = "aiStep", desc = "()V")
+    public static void transformAiStep(MethodNode methodNode) {
+        AbstractInsnNode targetCall = null;
+        for (AbstractInsnNode insn : methodNode.instructions) {
+            if (insn instanceof MethodInsnNode methodInsn
+                    && methodInsn.name.equals(ReflectionUtil.getMappedMethodName(LocalPlayer.class, "isUsingItem", "()Z"))
+                    && methodInsn.desc.equals("()Z")
+                    && methodInsn.getNext() instanceof JumpInsnNode) {
+                targetCall = insn;
+                break;
+            }
+        }
+        int slowdownLocalIndex = methodNode.maxLocals++;
+        InsnList prelude = new InsnList();
+        prelude.add(new VarInsnNode(Opcodes.ALOAD, 0));
+        prelude.add(new MethodInsnNode(
+                Opcodes.INVOKEVIRTUAL,
+                "net/minecraft/client/player/LocalPlayer",
+                ReflectionUtil.getMappedMethodName(LocalPlayer.class, "isUsingItem", "()Z"),
+                "()Z",
+                false));
+        prelude.add(new MethodInsnNode(
+                Opcodes.INVOKESTATIC,
+                Type.getInternalName(LocalPlayerPatch.class),
+                "onSlowDown",
+                "(Z)L" + SlowdownEvent.class.getName().replace(".", "/") + ";",
+                false));
+        prelude.add(new VarInsnNode(Opcodes.ASTORE, slowdownLocalIndex));
+        methodNode.instructions.insert(prelude);
+        InsnList replacement = new InsnList();
+        replacement.add(new VarInsnNode(Opcodes.ALOAD, slowdownLocalIndex));
+        replacement.add(new MethodInsnNode(
+                Opcodes.INVOKEVIRTUAL,
+                SlowdownEvent.class.getName().replace(".", "/"),
+                "isSlowDown",
+                "()Z",
+                false));
+        methodNode.instructions.insertBefore(targetCall, replacement);
+        methodNode.instructions.remove(targetCall);
+    }
+
+    @WrapInvoke(
+            method = "aiStep",
+            desc = "()V",
+            target = "net/minecraft/client/player/LocalPlayer/canStartSprinting",
+            targetDesc = "()Z"
+    )
+    public static boolean onCanStartSprinting(
+            LocalPlayer player,
+            Invocation<LocalPlayer, Boolean> original) throws Exception {
+        return LocalPlayerHookCallbacks.applySprintDecision(
+                player.input,
+                original.call(),
+                SprintDecisionEvent.Source.MOVEMENT_TICK);
+    }
+
+    @WrapInvoke(
+            method = "aiStep",
+            desc = "()V",
+            target = "net/minecraft/client/player/Input/hasForwardImpulse",
+            targetDesc = "()Z"
+    )
+    public static boolean onHasForwardImpulse(
+            LocalPlayer player,
+            Invocation<Input, Boolean> original) throws Exception {
+        return LocalPlayerHookCallbacks.applySprintDecision(
+                original.instance(),
+                original.call(),
+                SprintDecisionEvent.Source.MOVEMENT_TICK);
+    }
+
+    @WrapInvoke(
+            method = "sendIsSprintingIfNeeded",
+            desc = "()V",
+            target = "net/minecraft/client/player/LocalPlayer/isSprinting",
+            targetDesc = "()Z"
+    )
+    public static boolean onNetworkSprint(
+            LocalPlayer player,
+            Invocation<LocalPlayer, Boolean> original) throws Exception {
+        return LocalPlayerHookCallbacks.applySprintDecision(
+                player.input,
+                original.call(),
+                SprintDecisionEvent.Source.NETWORK);
+    }
+
+    @Inject(method = "aiStep", desc = "()V")
+    public static void onAiStep(LocalPlayer player, CallbackInfo callbackInfo) throws Throwable {
+        LocalPlayerHookCallbacks.onAiStep(player);
+    }
+
+    @Transform(method = "sendPosition", desc = "()V")
+    public static void transformSendPosition(MethodNode methodNode) throws Throwable {
+        InsnList constructEvent = new InsnList();
+        constructEvent.add(new VarInsnNode(Opcodes.ALOAD, 0));
+        constructEvent.add(invokeGetter(Entity.class, "getX", "()D"));
+        constructEvent.add(new VarInsnNode(Opcodes.ALOAD, 0));
+        constructEvent.add(invokeGetter(Entity.class, "getY", "()D"));
+        constructEvent.add(new VarInsnNode(Opcodes.ALOAD, 0));
+        constructEvent.add(invokeGetter(Entity.class, "getZ", "()D"));
+        constructEvent.add(new VarInsnNode(Opcodes.ALOAD, 0));
+        constructEvent.add(invokeGetter(Entity.class, "getYRot", "()F"));
+        constructEvent.add(new VarInsnNode(Opcodes.ALOAD, 0));
+        constructEvent.add(invokeGetter(Entity.class, "getXRot", "()F"));
+        constructEvent.add(new VarInsnNode(Opcodes.ALOAD, 0));
+        constructEvent.add(invokeGetter(Entity.class, "onGround", "()Z"));
+        constructEvent.add(new InsnNode(Opcodes.ICONST_0));
+        constructEvent.add(new MethodInsnNode(
+                Opcodes.INVOKESTATIC,
+                Type.getInternalName(LocalPlayerPatch.class),
+                "onMotion",
+                "(DDDFFZZ)L" + MotionEvent.class.getName().replace(".", "/") + ";"));
+        constructEvent.add(new VarInsnNode(Opcodes.ASTORE, 1));
+
+        InsnList finalizeEvent = new InsnList();
+        finalizeEvent.add(new VarInsnNode(Opcodes.ALOAD, 0));
+        finalizeEvent.add(invokeGetter(Entity.class, "getX", "()D"));
+        finalizeEvent.add(new VarInsnNode(Opcodes.ALOAD, 0));
+        finalizeEvent.add(invokeGetter(Entity.class, "getY", "()D"));
+        finalizeEvent.add(new VarInsnNode(Opcodes.ALOAD, 0));
+        finalizeEvent.add(invokeGetter(Entity.class, "getZ", "()D"));
+        finalizeEvent.add(new VarInsnNode(Opcodes.ALOAD, 0));
+        finalizeEvent.add(invokeGetter(Entity.class, "getYRot", "()F"));
+        finalizeEvent.add(new VarInsnNode(Opcodes.ALOAD, 0));
+        finalizeEvent.add(invokeGetter(Entity.class, "getXRot", "()F"));
+        finalizeEvent.add(new VarInsnNode(Opcodes.ALOAD, 0));
+        finalizeEvent.add(invokeGetter(Entity.class, "onGround", "()Z"));
+        finalizeEvent.add(new InsnNode(Opcodes.ICONST_1));
+        finalizeEvent.add(new MethodInsnNode(
+                Opcodes.INVOKESTATIC,
+                Type.getInternalName(LocalPlayerPatch.class),
+                "onMotion",
+                "(DDDFFZZ)L" + MotionEvent.class.getName().replace(".", "/") + ";"));
+        finalizeEvent.add(new InsnNode(Opcodes.POP));
+
+        int newLocalsShift = 1;
+        for (int i = 0; i < methodNode.instructions.size(); i++) {
+            AbstractInsnNode insn = methodNode.instructions.get(i);
+            if (insn instanceof VarInsnNode varInsn && varInsn.var >= newLocalsShift) {
+                varInsn.var += newLocalsShift;
+            }
+            if (insn instanceof MethodInsnNode methodInsn) {
+                String name = methodInsn.name;
+                if (name.equals(ReflectionUtil.getMappedMethodName(Entity.class, "onGround", "()Z"))) {
+                    redirectToEventField(methodNode, insn, i, "onGround", "Z");
+                } else if (name.equals(ReflectionUtil.getMappedMethodName(Entity.class, "getYRot", "()F"))) {
+                    redirectToEventField(methodNode, insn, i, "yaw", "F");
+                } else if (name.equals(ReflectionUtil.getMappedMethodName(Entity.class, "getXRot", "()F"))) {
+                    redirectToEventField(methodNode, insn, i, "pitch", "F");
+                } else if (name.equals(ReflectionUtil.getMappedMethodName(Entity.class, "getX", "()D"))) {
+                    redirectToEventField(methodNode, insn, i, "x", "D");
+                } else if (name.equals(ReflectionUtil.getMappedMethodName(Entity.class, "getY", "()D"))) {
+                    redirectToEventField(methodNode, insn, i, "y", "D");
+                } else if (name.equals(ReflectionUtil.getMappedMethodName(Entity.class, "getZ", "()D"))) {
+                    redirectToEventField(methodNode, insn, i, "z", "D");
+                }
+            }
+        }
+        methodNode.instructions.insert(constructEvent);
+        methodNode.instructions.insertBefore(methodNode.instructions.getLast().getPrevious(), finalizeEvent);
+    }
+
+    private static MethodInsnNode invokeGetter(Class<?> owner, String mojangName, String desc) {
+        return new MethodInsnNode(
+                Opcodes.INVOKEVIRTUAL,
+                "net/minecraft/world/entity/Entity",
+                ReflectionUtil.getMappedMethodName(owner, mojangName, desc),
+                desc);
+    }
+
+    private static void redirectToEventField(MethodNode methodNode, AbstractInsnNode callInsn, int index, String field, String desc) {
+        AbstractInsnNode preceding = methodNode.instructions.get(index - 1);
+        if (!(preceding instanceof VarInsnNode)) {
+            return;
+        }
+        methodNode.instructions.insert(preceding, new VarInsnNode(Opcodes.ALOAD, 1));
+        methodNode.instructions.remove(preceding);
+        methodNode.instructions.insert(callInsn, new FieldInsnNode(
+                Opcodes.GETFIELD,
+                MotionEvent.class.getName().replace(".", "/"),
+                field,
+                desc));
+        methodNode.instructions.remove(callInsn);
+    }
+}

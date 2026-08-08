@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <OutputType>Exe</OutputType>
+        <TargetFramework>net10.0</TargetFramework>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+        <AssemblyName>Mizulune.SdkHost</AssemblyName>
+        <RootNamespace>Mizulune.SdkHost</RootNamespace>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\Codexus.ModHost\Codexus.ModHost.csproj" />
+        <ProjectReference Include="..\Codexus.ModSDK\Codexus.ModSDK.csproj" />
+        <ProjectReference Include="..\Codexus.OpenSDK\Codexus.OpenSDK.csproj" />
+        <ProjectReference Include="..\Codexus.OpenTransport\Codexus.OpenTransport.csproj" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <PackageReference Include="Serilog" Version="4.3.0" />
+        <PackageReference Include="Serilog.Sinks.Console" Version="6.1.1" />
+        <None Include="profiles\*.json" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    </ItemGroup>
+
+</Project>

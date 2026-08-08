@@ -1,0 +1,43 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "shit.zen.fabric.mixin",
+  "compatibilityLevel": "JAVA_17",
+  "priority": 900,
+  "client": [
+    "BlockMixin",
+    "CameraMixin",
+    "ChatScreenMixin",
+    "ClientLevelMixin",
+    "ConnectionMixin",
+    "ContainerScreenMixin",
+    "EntityMixin",
+    "EntityRendererMixin",
+    "FogRendererMixin",
+    "FriendlyByteBufMixin",
+    "GameRendererMixin",
+    "GuiMixin",
+    "HumanoidModelMixin",
+    "ItemMixin",
+    "ItemInHandRendererMixin",
+    "LevelRendererMixin",
+    "LightTextureMixin",
+    "KeyboardHandlerMixin",
+    "KeyboardInputMixin",
+    "LivingEntityMixin",
+    "LivingEntityRendererMixin",
+    "LocalPlayerMixin",
+    "LocalPlayerSprintCompatMixin",
+    "MinecraftMixin",
+    "MouseHandlerMixin",
+    "MultiPlayerGameModeMixin",
+    "PacketUtilsMixin",
+    "PlayerMixin",
+    "PlayerTabOverlayMixin",
+    "ScreenEffectRendererMixin",
+    "TitleScreenMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}

@@ -1,0 +1,24 @@
+accessWidener v1 named
+
+accessible field net/minecraft/client/network/AllowedAddressResolver redirectResolver Lnet/minecraft/client/network/RedirectResolver;
+accessible field net/minecraft/item/Item ATTACK_DAMAGE_MODIFIER_ID Ljava/util/UUID;
+accessible field net/minecraft/client/gui/screen/ConnectScreen connection Lnet/minecraft/network/ClientConnection;
+accessible field net/minecraft/network/ClientConnection channel Lio/netty/channel/Channel;
+accessible field net/minecraft/client/network/ServerAddress INVALID Lnet/minecraft/client/network/ServerAddress;
+accessible field net/minecraft/client/network/ServerAddress hostAndPort Lcom/google/common/net/HostAndPort;
+accessible field net/minecraft/client/MinecraftClient fontManager Lnet/minecraft/client/font/FontManager;
+accessible field net/minecraft/client/font/FontManager fontStorages Ljava/util/Map;
+accessible field net/minecraft/network/ClientConnection EPOLL_CLIENT_IO_GROUP Lnet/minecraft/util/Lazy;
+accessible field net/minecraft/network/ClientConnection LOCAL_CLIENT_IO_GROUP Lnet/minecraft/util/Lazy;
+accessible field net/minecraft/client/gui/screen/GameMenuScreen exitButton Lnet/minecraft/client/gui/widget/ButtonWidget;
+accessible field net/minecraft/client/font/FontStorage$GlyphPair MISSING Lnet/minecraft/client/font/FontStorage$GlyphPair;
+accessible field net/minecraft/client/network/AllowedAddressResolver addressResolver Lnet/minecraft/client/network/AddressResolver;
+accessible field net/minecraft/entity/passive/AbstractHorseEntity lastAngryAnimationProgress F
+accessible field net/minecraft/entity/vehicle/BoatEntity yawVelocity F
+
+accessible method net/minecraft/screen/GenericContainerScreenHandler <init> (Lnet/minecraft/screen/ScreenHandlerType;ILnet/minecraft/entity/player/PlayerInventory;I)V
+accessible method net/minecraft/client/font/FontStorage$GlyphPair <init> (Lnet/minecraft/client/font/Glyph;Lnet/minecraft/client/font/Glyph;)V
+accessible method net/minecraft/entity/vehicle/BoatEntity getMaxPassengers ()I
+
+accessible class net/minecraft/client/gui/screen/GameModeSelectionScreen$GameModeSelection
+accessible class net/minecraft/client/font/FontStorage$GlyphPair

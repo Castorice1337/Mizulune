@@ -1,0 +1,7 @@
+.idea
+.dotnet/
+**/bin/
+**/obj/
+**/TestResults/
+**/dist/
+ModCache/

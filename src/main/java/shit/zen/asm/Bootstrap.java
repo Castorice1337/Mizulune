@@ -1,0 +1,216 @@
+package shit.zen.asm;
+
+import java.io.BufferedReader;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.nio.charset.StandardCharsets;
+import java.util.HashMap;
+import java.util.Map;
+import net.minecraft.client.Minecraft;
+import org.apache.logging.log4j.LogManager;
+import org.apache.logging.log4j.Logger;
+import shit.zen.ZenClient;
+
+/**
+ * Initialises the runtime mojmap→SRG mapping used by {@link
+ * asm.patchify.loader.PatchTransformer} when patch handlers refer to Minecraft
+ * methods/fields by their mojmap name in annotation strings.
+ *
+ * <p>Why this exists:
+ * <ul>
+ *   <li>The mod is compiled against mojmap names (e.g. {@code tick}).
+ *       ForgeGradle's {@code reobfJar} task rewrites bytecode invocations to
+ *       SRG names, but it does <b>not</b> touch string literals — so
+ *       {@code @Inject(method = "tick")} stays as {@code "tick"} in the jar.</li>
+ *   <li>In a production Forge environment Minecraft classes carry SRG names
+ *       like {@code m_91383_}, so {@code target.methods} contains no method
+ *       called {@code tick} and patches silently fail.</li>
+ *   <li>{@code mapping.srg} (shipped under {@code src/main/resources/}) lists
+ *       the SRG↔mojmap pairs. We parse it here and expose a remap helper.</li>
+ *   <li>{@code ZenClient.isMCPMapped} is set so reflective field lookups in
+ *       {@code shit.zen.utils.misc.ReflectionUtil} also use the right side
+ *       of the {@code "mojmap" : "f_xxxx_"} pairs that codebase carries.</li>
+ * </ul>
+ */
+public final class Bootstrap {
+    private static final Logger LOGGER = LogManager.getLogger(Bootstrap.class);
+    private static final String RESOURCES_PROP = "mizulune.resources";
+    private static final String LEGACY_RESOURCES_PROP = "openzen.resources";
+
+    /**
+     * Key format: {@code owner/mojName + mojDesc}. Value: SRG short method name.
+     * Owner is the JVM internal name (slashes), e.g. {@code net/minecraft/client/Minecraft}.
+     */
+    private static final Map<String, String> METHOD_MOJ_TO_SRG = new HashMap<>();
+
+    /** Same key/value, but fields don't carry a descriptor: {@code owner/mojName -> srgName}. */
+    private static final Map<String, String> FIELD_MOJ_TO_SRG = new HashMap<>();
+
+    /**
+     * Fallback table for cases where the patch annotation names the wrong owner
+     * (e.g. a child class instead of the declaring superclass). Key:
+     * {@code mojName + mojDesc}. Value: SRG name if globally unambiguous,
+     * {@link #AMBIGUOUS} otherwise.
+     */
+    private static final Map<String, String> METHOD_FALLBACK = new HashMap<>();
+    private static final Map<String, String> FIELD_FALLBACK = new HashMap<>();
+    private static final String AMBIGUOUS = "\u0000AMBIGUOUS\u0000";
+
+    private static volatile boolean initialized = false;
+    private static volatile boolean runtimeIsSrg = false;
+
+    private Bootstrap() {
+    }
+
+    public static synchronized void init() {
+        if (initialized) return;
+        initialized = true;
+        long t0 = System.nanoTime();
+        runtimeIsSrg = detectSrgRuntime();
+        if (runtimeIsSrg) {
+            loadMappings();
+        }
+        ZenClient.isMCPMapped = runtimeIsSrg;
+        long ms = (System.nanoTime() - t0) / 1_000_000L;
+        LOGGER.info("Runtime mapping = {} (methods={}, fields={}, loaded in {} ms)",
+                runtimeIsSrg ? "SRG" : "mojmap",
+                METHOD_MOJ_TO_SRG.size(), FIELD_MOJ_TO_SRG.size(), ms);
+    }
+
+    /**
+     * @return {@code true} if the live Minecraft jar is obfuscated (SRG names),
+     *         {@code false} for a ForgeGradle dev environment with mojmap names.
+     */
+    private static boolean detectSrgRuntime() {
+        try {
+            Minecraft.class.getDeclaredMethod("tick");
+            return false;
+        } catch (NoSuchMethodException e) {
+            return true;
+        } catch (Throwable t) {
+            LOGGER.warn("Could not probe Minecraft.tick for mapping detection: {}", t.toString());
+            return true;
+        }
+    }
+
+    private static InputStream openMappingStream() {
+        InputStream cp = Bootstrap.class.getResourceAsStream("/mapping.srg");
+        if (cp != null) return cp;
+        // DLL injection path extracts resources to disk because the patches
+        // and ZenClient run inside the GameClassLoader, not the URLClassLoader
+        // that owns the jar entry.
+        InputStream extracted = openExtractedMapping(RESOURCES_PROP);
+        if (extracted != null) return extracted;
+        return openExtractedMapping(LEGACY_RESOURCES_PROP);
+    }
+
+    private static InputStream openExtractedMapping(String propertyName) {
+        String dir = System.getProperty(propertyName);
+        if (dir == null || dir.isBlank()) {
+            return null;
+        }
+        File f = new File(dir, "mapping.srg");
+        if (!f.isFile()) {
+            return null;
+        }
+        try {
+            return new FileInputStream(f);
+        } catch (Exception ignored) {
+            return null;
+        }
+    }
+
+    private static void loadMappings() {
+        try (InputStream is = openMappingStream()) {
+            if (is == null) {
+                LOGGER.warn("mapping.srg not found (classpath nor {} / {}) — runtime remap disabled",
+                        RESOURCES_PROP, LEGACY_RESOURCES_PROP);
+                return;
+            }
+            try (BufferedReader reader = new BufferedReader(
+                    new InputStreamReader(is, StandardCharsets.UTF_8))) {
+                String line;
+                while ((line = reader.readLine()) != null) {
+                    if (line.length() < 4) continue;
+                    char c0 = line.charAt(0), c1 = line.charAt(1);
+                    if ((c0 != 'M' && c0 != 'F') || c1 != 'D' || line.charAt(2) != ':') continue;
+                    parseLine(line);
+                }
+            }
+        } catch (Exception e) {
+            LOGGER.error("Failed to load mapping.srg", e);
+        }
+    }
+
+    private static void parseLine(String line) {
+        String[] tok = line.split(" ");
+        if (line.charAt(0) == 'M') {
+            if (tok.length < 5) return;
+            String srgFull = tok[1];
+            String mojFull = tok[3];
+            String mojDesc = tok[4];
+            int srgSlash = srgFull.lastIndexOf('/');
+            int mojSlash = mojFull.lastIndexOf('/');
+            if (srgSlash < 0 || mojSlash < 0) return;
+            String owner = mojFull.substring(0, mojSlash);
+            String mojName = mojFull.substring(mojSlash + 1);
+            String srgName = srgFull.substring(srgSlash + 1);
+            if (mojName.equals(srgName)) return;
+            METHOD_MOJ_TO_SRG.put(owner + "/" + mojName + mojDesc, srgName);
+            String fbKey = mojName + mojDesc;
+            METHOD_FALLBACK.merge(fbKey, srgName, (existing, fresh) ->
+                    existing.equals(fresh) ? existing : AMBIGUOUS);
+        } else {
+            if (tok.length < 3) return;
+            String srgFull = tok[1];
+            String mojFull = tok[2];
+            int srgSlash = srgFull.lastIndexOf('/');
+            int mojSlash = mojFull.lastIndexOf('/');
+            if (srgSlash < 0 || mojSlash < 0) return;
+            String owner = mojFull.substring(0, mojSlash);
+            String mojName = mojFull.substring(mojSlash + 1);
+            String srgName = srgFull.substring(srgSlash + 1);
+            if (mojName.equals(srgName)) return;
+            FIELD_MOJ_TO_SRG.put(owner + "/" + mojName, srgName);
+            FIELD_FALLBACK.merge(mojName, srgName, (existing, fresh) ->
+                    existing.equals(fresh) ? existing : AMBIGUOUS);
+        }
+    }
+
+    /**
+     * Map a mojmap method reference to its SRG name, or pass through unchanged
+     * when running in mojmap mode (dev environment).
+     *
+     * <p>Resolution order:
+     * <ol>
+     *   <li>Exact {@code owner/name+desc} match.</li>
+     *   <li>Global {@code name+desc} fallback when uniquely mapped. Handles
+     *       patches that name a subclass owner for an inherited method.</li>
+     *   <li>The original input (the runtime jar likely has the same name).</li>
+     * </ol>
+     */
+    public static String remapMethod(String ownerInternalName, String mojName, String mojDesc) {
+        if (!runtimeIsSrg) return mojName;
+        String exact = METHOD_MOJ_TO_SRG.get(ownerInternalName + "/" + mojName + mojDesc);
+        if (exact != null) return exact;
+        String fb = METHOD_FALLBACK.get(mojName + mojDesc);
+        if (fb != null && fb != AMBIGUOUS) return fb;
+        return mojName;
+    }
+
+    /** Same idea for fields. */
+    public static String remapField(String ownerInternalName, String mojName) {
+        if (!runtimeIsSrg) return mojName;
+        String exact = FIELD_MOJ_TO_SRG.get(ownerInternalName + "/" + mojName);
+        if (exact != null) return exact;
+        String fb = FIELD_FALLBACK.get(mojName);
+        if (fb != null && fb != AMBIGUOUS) return fb;
+        return mojName;
+    }
+
+    public static boolean isRuntimeSrg() {
+        return runtimeIsSrg;
+    }
+}

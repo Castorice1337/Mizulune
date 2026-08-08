@@ -1,0 +1,7 @@
+{
+  "name": "Mizulune Protocol Session",
+  "id": "mizulune.protocol",
+  "version": "1.0.0",
+  "dependencies": {},
+  "entryDll": "Codexus.Protocol.dll"
+}

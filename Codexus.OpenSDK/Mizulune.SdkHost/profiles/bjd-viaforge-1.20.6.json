@@ -1,0 +1,14 @@
+{
+  "id": "bjd-viaforge-1.20.6",
+  "displayName": "布吉岛 · ViaForge 1.20.5/1.20.6",
+  "protocolVersion": 766,
+  "gameId": "4661334467366178884",
+  "gameVersion": "1.20",
+  "bootstrapMd5": "95F0C064EC0FA739613B993C92A68DB4",
+  "datFileMd5": "D285CBF97D9BA30D3C445DBF1C342634",
+  "crcSalt": "22AC4B0143EFFC80F2905B267D4D84D3",
+  "serverAddress": "pc.bjdmc.net",
+  "serverPort": 25565,
+  "localPort": 6445,
+  "viaForgeRequired": true
+}

@@ -1,0 +1,121 @@
+plugins {
+    id 'fabric-loom' version "${loom_version}"
+    id 'maven-publish'
+}
+
+version = project.mod_version
+group = project.maven_group
+
+base {
+    archivesName = project.archives_base_name
+}
+
+repositories {
+    mavenCentral()
+    exclusiveContent {
+        forRepository {
+            maven {
+                name = 'Modrinth'
+                url = 'https://api.modrinth.com/maven'
+            }
+        }
+        filter { includeGroup 'maven.modrinth' }
+    }
+}
+
+configurations.configureEach {
+    resolutionStrategy.eachDependency { details ->
+        if (details.requested.group == 'org.lwjgl') {
+            details.useVersion '3.3.1'
+            details.because 'Minecraft 1.20.1 and Sodium 0.5.13 require the vanilla LWJGL line'
+        }
+    }
+}
+
+loom {
+    accessWidenerPath = file('src/main/resources/mizulune.accesswidener')
+
+    runs {
+        client {
+            client()
+            name 'Mizulune Fabric Client'
+            runDir 'run'
+        }
+    }
+}
+
+sourceSets {
+    main {
+        java {
+            srcDirs = ['src/main/java', '../src/main/java']
+            exclude 'asm/**'
+            exclude 'shit/zen/asm/**'
+            exclude 'shit/zen/dll/**'
+            exclude 'shit/zen/patch/**'
+            exclude 'shit/zen/platform/forge/**'
+        }
+        resources {
+            srcDirs = ['src/main/resources', '../src/main/resources']
+            exclude 'META-INF/**'
+            exclude 'mapping.srg'
+        }
+    }
+}
+
+dependencies {
+    minecraft "com.mojang:minecraft:${project.minecraft_version}"
+    mappings loom.officialMojangMappings()
+    modImplementation "net.fabricmc:fabric-loader:${project.fabric_loader_version}"
+    modImplementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_api_version}"
+    // Pinned dev/runtime compatibility target; never nested into Mizulune's release JAR.
+    modRuntimeOnly 'maven.modrinth:AANobbMI:OihdIimA' // Sodium mc1.20.1-0.5.13-fabric
+
+    compileOnly 'org.projectlombok:lombok:1.18.34'
+    annotationProcessor 'org.projectlombok:lombok:1.18.34'
+    compileOnly 'org.jetbrains:annotations:24.1.0'
+    compileOnly 'com.google.code.findbugs:jsr305:3.0.2'
+    compileOnly 'io.github.llamalad7:mixinextras-common:0.4.1'
+
+    include implementation('org.jetbrains.skiko:skiko-awt:0.148.1')
+    include implementation('org.jetbrains.skiko:skiko-awt-runtime-windows-x64:0.148.1')
+    include implementation('org.jetbrains.kotlin:kotlin-stdlib:2.3.20')
+    include implementation('org.antlr:antlr4-runtime:4.9.1')
+    include implementation('com.googlecode.soundlibs:mp3spi:1.9.5.4') {
+        exclude group: 'junit', module: 'junit'
+    }
+    include implementation('com.googlecode.soundlibs:jlayer:1.0.1.4')
+    include implementation('com.googlecode.soundlibs:tritonus-share:0.3.7.4')
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+    options.release = 17
+}
+
+processResources {
+    inputs.property 'version', project.version
+    filesMatching('fabric.mod.json') {
+        expand version: project.version
+    }
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+}
+
+java {
+    toolchain.languageVersion = JavaLanguageVersion.of(17)
+    sourceCompatibility = JavaVersion.VERSION_17
+    targetCompatibility = JavaVersion.VERSION_17
+    withSourcesJar()
+}
+
+tasks.register('stageFabricMod', Copy) {
+    group = 'distribution'
+    description = 'Build and stage the remapped Fabric mod under the root build/mod-dist directory.'
+    dependsOn tasks.named('build')
+    doFirst {
+        project.delete(fileTree('../build/mod-dist/fabric') {
+            include 'mizulune-fabric-*.jar'
+        })
+    }
+    from tasks.named('remapJar').flatMap { it.archiveFile }
+    into file('../build/mod-dist/fabric')
+}

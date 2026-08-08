@@ -1,0 +1,6 @@
+[submodule "fantnel-pro"]
+	path = fantnel-pro
+	url = https://github.com/fengheng1111/fantnel-pro.git
+[submodule "fantnel"]
+	path = fantnel
+	url = https://github.com/NirvanaTec/fantnel.git

@@ -1,0 +1,1436 @@
+plugins {
+    id 'eclipse'
+    id 'idea'
+    id 'maven-publish'
+    id 'net.minecraftforge.gradle' version '[6.0,6.2)'
+    id 'mizulune-obfuscation'
+}
+
+version = mod_version
+group = mod_group_id
+
+base {
+    archivesName = mod_id
+}
+
+// Mojang ships Java 17 to end users in 1.18+, so your mod should target Java 17.
+java.toolchain.languageVersion = JavaLanguageVersion.of(17)
+
+def skikoRuntimeDir = layout.buildDirectory.dir('skiko-runtime/windows-x64')
+
+println "Java: ${System.getProperty 'java.version'}, JVM: ${System.getProperty 'java.vm.version'} (${System.getProperty 'java.vendor'}), Arch: ${System.getProperty 'os.arch'}"
+minecraft {
+    // The mappings can be changed at any time and must be in the following format.
+    // Channel:   Version:
+    // official   MCVersion             Official field/method names from Mojang mapping files
+    // parchment  YYYY.MM.DD-MCVersion  Open community-sourced parameter names and javadocs layered on top of official
+    //
+    // You must be aware of the Mojang license when using the 'official' or 'parchment' mappings.
+    // See more information here: https://github.com/MinecraftForge/MCPConfig/blob/master/Mojang.md
+    //
+    // Parchment is an unofficial project maintained by ParchmentMC, separate from MinecraftForge
+    // Additional setup is needed to use their mappings: https://parchmentmc.org/docs/getting-started
+    //
+    // Use non-default mappings at your own risk. They may not always work.
+    // Simply re-run your setup task after changing the mappings to update your workspace.
+    mappings channel: mapping_channel, version: mapping_version
+
+    // When true, this property will have all Eclipse/IntelliJ IDEA run configurations run the "prepareX" task for the given run configuration before launching the game.
+    // In most cases, it is not necessary to enable.
+    // enableEclipsePrepareRuns = true
+    // enableIdeaPrepareRuns = true
+
+    // This property allows configuring Gradle's ProcessResources task(s) to run on IDE output locations before launching the game.
+    // It is REQUIRED to be set to true for this template to function.
+    // See https://docs.gradle.org/current/dsl/org.gradle.language.jvm.tasks.ProcessResources.html
+    copyIdeResources = true
+
+    // When true, this property will add the folder name of all declared run configurations to generated IDE run configurations.
+    // The folder name can be set on a run configuration using the "folderName" property.
+    // By default, the folder name of a run configuration is the name of the Gradle project containing it.
+    // generateRunFolders = true
+
+    // This property enables access transformers for use in development.
+    // They will be applied to the Minecraft artifact.
+    // The access transformer file can be anywhere in the project.
+    // However, it must be at "META-INF/accesstransformer.cfg" in the final mod jar to be loaded by Forge.
+    // This default location is a best practice to automatically put the file in the right place in the final jar.
+    // See https://docs.minecraftforge.net/en/latest/advanced/accesstransformers/ for more information.
+    accessTransformer = file('src/main/resources/META-INF/accesstransformer.cfg')
+
+    // Default run configurations.
+    // These can be tweaked, removed, or duplicated as needed.
+    runs {
+        // applies to all the run configs below
+        configureEach {
+            workingDirectory project.file('run')
+
+            // Recommended logging data for a userdev environment
+            // The markers can be added/remove as needed separated by commas.
+            // "SCAN": For mods scan.
+            // "REGISTRIES": For firing of registry events.
+            // "REGISTRYDUMP": For getting the contents of all registries.
+            property 'forge.logging.markers', 'REGISTRIES'
+
+            // Recommended logging level for the console
+            // You can set various levels here.
+            // Please read: https://stackoverflow.com/questions/2031163/when-to-use-the-different-log-levels
+            property 'forge.logging.console.level', 'debug'
+
+            mods {
+                "${mod_id}" {
+                    source sourceSets.main
+                }
+            }
+        }
+
+        client {
+            // Comma-separated list of namespaces to load gametests from. Empty = all namespaces.
+            property 'forge.enabledGameTestNamespaces', mod_id
+            // Carry Instrumentation with the tiny JDK-only bridge. The full mod
+            // jar is loaded later by the normal Forge/DLL path.
+            jvmArgs.add "-javaagent:${layout.buildDirectory.dir('premain-bridge').get().asFile.absolutePath}\\mizulune-premain-bridge.jar".toString()
+            // Allow the agent to attach to itself if PatchAgent.installPatchesAndRetransform
+            // needs to fall back to the Attach API.
+            jvmArgs.add "-Djdk.attach.allowAttachSelf=true".toString()
+            // Forge/ModLauncher can load Skiko classes from minecraftLibrary but Skiko's
+            // own native loader does not reliably find the separate resource-only runtime
+            // jar. Point it at an extracted runtime directory for dev client runs.
+            jvmArgs.add "-Dskiko.library.path=${skikoRuntimeDir.get().asFile.absolutePath}".toString()
+            def renderBackend = project.findProperty('mizuluneRenderBackend')
+                    ?: project.findProperty('openzenRenderBackend')
+                    ?: System.getProperty('mizulune.render.backend')
+                    ?: System.getProperty('openzen.render.backend')
+            if (renderBackend != null && renderBackend.toString().trim()) {
+                jvmArgs.add "-Dmizulune.render.backend=${renderBackend}".toString()
+            }
+        }
+
+        server {
+            property 'forge.enabledGameTestNamespaces', mod_id
+            args '--nogui'
+        }
+
+        // This run config launches GameTestServer and runs all registered gametests, then exits.
+        // By default, the server will crash when no gametests are provided.
+        // The gametest system is also enabled by default for other run configs under the /test command.
+        gameTestServer {
+            property 'forge.enabledGameTestNamespaces', mod_id
+        }
+
+        data {
+            // example of overriding the workingDirectory set in configureEach above
+            workingDirectory project.file('run-data')
+
+            // Specify the modid for data generation, where to output the resulting resource, and where to look for existing resources.
+            args '--mod', mod_id, '--all', '--output', file('src/generated/resources/'), '--existing', file('src/main/resources/')
+        }
+    }
+}
+
+// Include resources generated by data generators.
+sourceSets.main.resources { srcDir 'src/generated/resources' }
+
+repositories {
+    // Put repositories for dependencies here
+    // ForgeGradle automatically adds the Forge maven and Maven Central for you
+
+    // If you have mod jar dependencies in ./libs, you can declare them as a repository like so.
+    // See https://docs.gradle.org/current/userguide/declaring_repositories.html#sub:flat_dir_resolver
+    // flatDir {
+    //     dir 'libs'
+    // }
+
+    maven { url = "https://pkgs.dev.azure.com/djtheredstoner/DevAuth/_packaging/public/maven/v1" }
+}
+
+configurations {
+    skikoNativeRuntime
+    musicRuntime
+}
+
+dependencies {
+    // Specify the version of Minecraft to use.
+    // Any artifact can be supplied so long as it has a "userdev" classifier artifact and is a compatible patcher artifact.
+    // The "userdev" classifier will be requested and setup by ForgeGradle.
+    // If the group id is "net.minecraft" and the artifact id is one of ["client", "server", "joined"],
+    // then special handling is done to allow a setup of a vanilla dependency without the use of an external repository.
+    minecraft "net.minecraftforge:forge:${minecraft_version}-${forge_version}"
+
+    compileOnly 'org.projectlombok:lombok:1.18.34'
+    annotationProcessor 'org.projectlombok:lombok:1.18.34'
+
+    testImplementation platform('org.junit:junit-bom:5.11.4')
+    testImplementation 'org.junit.jupiter:junit-jupiter'
+
+    // ASM (already on Forge classpath at runtime via Mojang deps, but declare for IDE/compile)
+    implementation 'org.ow2.asm:asm:9.6'
+    implementation 'org.ow2.asm:asm-tree:9.6'
+    implementation 'org.ow2.asm:asm-commons:9.6'
+    implementation 'org.ow2.asm:asm-util:9.6'
+
+    // Dev Auth
+    runtimeOnly("me.djtheredstoner:DevAuth-forge-latest:1.2.2")
+
+    // Skiko/Skia 2D renderer backend. The same resolved runtime jars are also
+    // embedded under openzen/dll-libs so the DLL injection path can expose them.
+    implementation 'org.jetbrains.skiko:skiko-awt-runtime-windows-x64:0.148.1'
+    implementation 'org.jetbrains.kotlin:kotlin-stdlib:2.3.20'
+    minecraftLibrary 'org.jetbrains.skiko:skiko-awt-runtime-windows-x64:0.148.1'
+    minecraftLibrary 'org.jetbrains.kotlin:kotlin-stdlib:2.3.20'
+    skikoNativeRuntime 'org.jetbrains.skiko:skiko-awt-runtime-windows-x64:0.148.1'
+
+    // MP3 decoding through Java Sound SPI for the built-in Mizulune Music player.
+    implementation('com.googlecode.soundlibs:mp3spi:1.9.5.4') {
+        exclude group: 'junit', module: 'junit'
+    }
+    minecraftLibrary('com.googlecode.soundlibs:mp3spi:1.9.5.4') {
+        exclude group: 'junit', module: 'junit'
+    }
+    musicRuntime('com.googlecode.soundlibs:mp3spi:1.9.5.4') {
+        exclude group: 'junit', module: 'junit'
+    }
+
+    // Example mod dependency with JEI - using fg.deobf() ensures the dependency is remapped to your development mappings
+    // The JEI API is declared for compile time use, while the full JEI artifact is used at runtime
+    // compileOnly fg.deobf("mezz.jei:jei-${mc_version}-common-api:${jei_version}")
+    // compileOnly fg.deobf("mezz.jei:jei-${mc_version}-forge-api:${jei_version}")
+    // runtimeOnly fg.deobf("mezz.jei:jei-${mc_version}-forge:${jei_version}")
+
+    // Example mod dependency using a mod jar from ./libs with a flat dir repository
+    // This maps to ./libs/coolmod-${mc_version}-${coolmod_version}.jar
+    // The group id is ignored when searching -- in this case, it is "blank"
+    // implementation fg.deobf("blank:coolmod-${mc_version}:${coolmod_version}")
+
+    // For more info:
+    // http://www.gradle.org/docs/current/userguide/artifact_dependencies_tutorial.html
+    // http://www.gradle.org/docs/current/userguide/dependency_management.html
+}
+
+tasks.named('test', Test).configure {
+    useJUnitPlatform()
+    systemProperty 'mizulune.fantnel.realPipeTest',
+            providers.gradleProperty('fantnelRealPipeTest').orElse('false').get()
+}
+
+// This block of code expands all declared replace properties in the specified resource targets.
+// A missing property will result in an error. Properties are expanded using ${} Groovy notation.
+// When "copyIdeResources" is enabled, this will also run before the game launches in IDE environments.
+// See https://docs.gradle.org/current/dsl/org.gradle.language.jvm.tasks.ProcessResources.html
+tasks.named('processResources', ProcessResources).configure {
+    var replaceProperties = [
+            minecraft_version: minecraft_version, minecraft_version_range: minecraft_version_range,
+            forge_version: forge_version, forge_version_range: forge_version_range,
+            loader_version_range: loader_version_range,
+            mod_id: mod_id, mod_name: mod_name, mod_license: mod_license, mod_version: mod_version,
+            mod_authors: mod_authors, mod_description: mod_description,
+    ]
+    inputs.properties replaceProperties
+
+    filesMatching(['META-INF/mods.toml', 'pack.mcmeta']) {
+        expand replaceProperties + [project: project]
+    }
+}
+
+// Example for how to get properties into the manifest for reading at runtime.
+tasks.named('jar', Jar).configure {
+    from({ configurations.skikoNativeRuntime }) {
+        into 'openzen/dll-libs'
+        include '*.jar'
+        duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    }
+    from({ configurations.musicRuntime }) {
+        into 'openzen/dll-libs'
+        include '*.jar'
+        duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    }
+
+    manifest {
+        attributes([
+                'Specification-Title'     : mod_id,
+                'Specification-Vendor'    : mod_authors,
+                'Specification-Version'   : '1', // We are version 1 of ourselves
+                'Implementation-Title'    : project.name,
+                'Implementation-Version'  : project.jar.archiveVersion,
+                'Implementation-Vendor'   : mod_authors,
+                'Implementation-Timestamp': new Date().format("yyyy-MM-dd'T'HH:mm:ssZ"),
+                // Java-agent entry points so the jar can be passed via -javaagent:
+                'Premain-Class'           : 'asm.patchify.loader.PatchAgent',
+                'Agent-Class'             : 'asm.patchify.loader.PatchAgent',
+                'Can-Retransform-Classes' : 'true',
+                'Can-Redefine-Classes'    : 'true'
+        ])
+    }
+
+    // This is the preferred method to reobfuscate your jar file
+    finalizedBy 'reobfJar'
+}
+
+// Keep the startup Instrumentation carrier separate from the 50+ MiB client
+// artifact. The bridge is intentionally one JDK-only class; the full client is
+// still loaded later through the existing Forge/DLL path.
+def premainBridgeClassEntry = 'asm/patchify/bridge/PremainBridge.class'
+def premainBridgeJar = tasks.register('premainBridgeJar', Jar) {
+    group = 'openzen'
+    description = 'Build the minimal JDK-only premain Instrumentation bridge.'
+    dependsOn tasks.named('classes')
+    archiveFileName = 'mizulune-premain-bridge.jar'
+    destinationDirectory = layout.buildDirectory.dir('premain-bridge')
+    preserveFileTimestamps = false
+    reproducibleFileOrder = true
+    includeEmptyDirs = false
+    from(sourceSets.main.output.classesDirs) {
+        include premainBridgeClassEntry
+    }
+    manifest {
+        attributes([
+                'Premain-Class'           : 'asm.patchify.bridge.PremainBridge',
+                'Can-Retransform-Classes' : 'true',
+                'Can-Redefine-Classes'    : 'true'
+        ])
+    }
+}
+
+tasks.register('verifyPremainBridgeJar') {
+    group = 'verification'
+    description = 'Verify that the premain bridge contains only its JDK-only entry class.'
+    dependsOn premainBridgeJar
+    inputs.file(premainBridgeJar.flatMap { it.archiveFile })
+    doLast {
+        File bridgeFile = premainBridgeJar.get().archiveFile.get().asFile
+        if (bridgeFile.length() > 65536L) {
+            throw new GradleException("Premain bridge is unexpectedly large: ${bridgeFile.length()} bytes")
+        }
+        java.util.zip.ZipFile zip = new java.util.zip.ZipFile(bridgeFile)
+        try {
+            List<String> fileEntries = zip.entries().toList()
+                    .findAll { !it.directory }
+                    .collect { it.name }
+                    .sort()
+            List<String> expectedEntries = [
+                    'META-INF/MANIFEST.MF',
+                    premainBridgeClassEntry
+            ].sort()
+            if (fileEntries != expectedEntries) {
+                throw new GradleException("Unexpected premain bridge entries: ${fileEntries}")
+            }
+            java.util.jar.Manifest bridgeManifest = new java.util.jar.Manifest(
+                    zip.getInputStream(zip.getEntry('META-INF/MANIFEST.MF')))
+            def attributes = bridgeManifest.mainAttributes
+            if (attributes.getValue('Premain-Class') != 'asm.patchify.bridge.PremainBridge' ||
+                    attributes.getValue('Can-Retransform-Classes') != 'true' ||
+                    attributes.getValue('Can-Redefine-Classes') != 'true') {
+                throw new GradleException('Premain bridge manifest contract mismatch.')
+            }
+            byte[] classBytes = zip.getInputStream(zip.getEntry(premainBridgeClassEntry)).readAllBytes()
+            String constantPoolText = new String(classBytes, java.nio.charset.StandardCharsets.ISO_8859_1)
+            for (String forbidden : [
+                    'org/apache/logging',
+                    'org/objectweb/asm',
+                    'net/minecraft',
+                    'net/minecraftforge',
+                    'shit/zen'
+            ]) {
+                if (constantPoolText.contains(forbidden)) {
+                    throw new GradleException("Premain bridge links forbidden runtime namespace: ${forbidden}")
+                }
+            }
+        } finally {
+            zip.close()
+        }
+    }
+}
+
+tasks.named('check').configure {
+    dependsOn tasks.named('verifyPremainBridgeJar')
+}
+
+// Build-time class-name obfuscation is provided by buildSrc's mizulune-obfuscation plugin.
+
+// IZMK-style entry point: build the jar first (so the -javaagent path exists) and then launch
+// the client. The client run config above already references tasks.jar via archiveFile.
+tasks.register('extractSkikoRuntime', Copy) {
+    group = 'openzen'
+    description = 'Extract Skiko Windows x64 native runtime files for Forge dev runs.'
+    from({ configurations.skikoNativeRuntime.collect { zipTree(it) } }) {
+        include 'skiko-windows-x64.dll'
+        include 'skiko-windows-x64.dll.sha256'
+        include 'icudtl.dat'
+    }
+    into skikoRuntimeDir
+}
+
+tasks.matching { it.name == 'runClient' }.configureEach {
+    dependsOn tasks.named('extractSkikoRuntime')
+}
+
+tasks.register('runClient0') {
+    group = 'forgegradle runs'
+    description = 'Build the mod jar, premain bridge, and start the client.'
+    dependsOn tasks.jar
+    dependsOn tasks.named('premainBridgeJar')
+    dependsOn tasks.named('extractSkikoRuntime')
+    finalizedBy tasks.runClient
+}
+
+// Example configuration to allow publishing using the maven-publish plugin
+publishing {
+    publications {
+        register('mavenJava', MavenPublication) {
+            artifact jar
+        }
+    }
+    repositories {
+        maven {
+            url "file://${project.projectDir}/mcmodsrepo"
+        }
+    }
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8' // Use the UTF-8 charset for Java compilation
+}
+
+// ===== Native build (DLL injection path) =====
+//
+// Produces:
+//   build/dist/OpenZen.dll        - injectable DLL with embedded zen.jar
+//   build/dist/OpenZenLoader.exe  - GUI injector
+//
+// Requires:
+//   - JAVA_HOME pointing at a JDK 17 install (for jni.h / jvmti.h)
+//   - CMake either on PATH, bundled with Visual Studio 2019/2022
+//     ("C++ CMake tools for Windows" workload), or installed standalone.
+//   - MSVC build tools (Visual Studio 2019+).
+//
+// Usage:
+//   ./gradlew dll
+//
+def nativeDir = file('native')
+def nativeBuildDir = file("$nativeDir/build")
+def openSdkDir = file('Codexus.OpenSDK')
+def openSdkBuildDir = file("$buildDir/opensdk")
+def fantnelDir = file('fantnel')
+def fantnelProDir = file('fantnel-pro')
+def fantnelBackendDir = file('backends/Mizulune.FantnelHost')
+def fantnelBuildDir = file("$buildDir/fantnel")
+def fantnelRuntimeLock = file('backends/fantnel-runtime.lock.json')
+def nativeDistDir = file(findProperty('nativeDistDir') ?: "$buildDir/dist")
+// Keep the primary distribution in one place. A custom directory is still
+// supported for running a second Loader while the primary distribution is in use.
+def fantnelDistDir = file(findProperty('fantnelDistDir') ?: nativeDistDir)
+def maxHookDllInput = findProperty('maxHookDll') ?: System.getenv('MAXHOOK_DLL')
+def maxHookDllSource = file(maxHookDllInput ?: "$nativeDir/runtime/maxhook/MaxHook.dll")
+def maxHookJavaHomeInput = findProperty('maxHookJavaHome') ?:
+        System.getenv('MAXHOOK_JAVA_HOME') ?: System.getenv('JAVA_HOME')
+def maxHookJavaHome = maxHookJavaHomeInput ? file(maxHookJavaHomeInput) : null
+def maxHookRuntimeDistDir = file("$buildDir/runtime-dist")
+def maxHookJavaDistDir = file("$maxHookRuntimeDistDir/jdk17")
+def maxHookJvmSha256 = '46EB16C248CEC10CDB639E6E97F31F5817ED128E86230AB85715D063DDFCBB47'
+def maxHookMaxHookSha256 = '982D8223CF8DA9584D67B1A7A24E5B2515DA22BA72EEBBAF813A353DA14F956A'
+def baseDistributionPaths = [
+        'MizuluneLoader.exe',
+        'res/bg.png',
+        'res/ic_launch.png',
+        'res/ic_notice.png',
+        'res/ic_settings.png',
+        'res/ic_version.png',
+        'res/logo.png',
+        'res/logo_text.png',
+        'webui/app.js',
+        'webui/index.html',
+        'webui/res/bg.png',
+        'webui/res/logo.png',
+        'webui/res/logo_text.png',
+        'webui/styles.css'
+].asImmutable()
+def fantnelDistributionPaths = [
+        'fantnel/Mizulune.FantnelHost.exe',
+        'fantnel/fantnel-runtime.lock.json',
+        'fantnel/resources/7z.exe',
+        'fantnel/resources/7zip.LICENSE.txt',
+        'fantnel/resources/config.json',
+        'fantnel/resources/fantnel-bootstrap.json'
+].asImmutable()
+def bundledMaxHookRelativePath = 'maxhook/MaxHook.dll'
+def bundledMaxHookJdkRelativeRoot = 'runtime/jdk17'
+def distributionManifestRelativePath = 'mizulune-distribution-manifest.json'
+
+def sha256File = { File input ->
+    def digest = java.security.MessageDigest.getInstance('SHA-256')
+    input.withInputStream { stream ->
+        byte[] buffer = new byte[1024 * 1024]
+        int read
+        while ((read = stream.read(buffer)) >= 0) {
+            if (read > 0) digest.update(buffer, 0, read)
+        }
+    }
+    digest.digest().collect { String.format('%02X', it & 0xff) }.join()
+}
+
+def sha256Text = { String input ->
+    def digest = java.security.MessageDigest.getInstance('SHA-256')
+    digest.update(input.getBytes(java.nio.charset.StandardCharsets.UTF_8))
+    digest.digest().collect { String.format('%02X', it & 0xff) }.join()
+}
+
+ext.findCmake = {
+    // 1. cmake already on PATH?
+    try {
+        def p = ['cmd', '/c', 'where', 'cmake'].execute()
+        def out = new StringBuilder()
+        p.consumeProcessOutput(out, new StringBuilder())
+        p.waitForOrKill(2000)
+        if (p.exitValue() == 0) {
+            def first = out.toString().readLines().find { it?.trim() }
+            if (first) return first.trim()
+        }
+    } catch (Exception ignored) {}
+
+    // 2. Visual Studio bundled cmake via vswhere.
+    def pf86 = System.getenv('ProgramFiles(x86)') ?: 'C:/Program Files (x86)'
+    def vswhere = "${pf86}/Microsoft Visual Studio/Installer/vswhere.exe"
+    if (file(vswhere).exists()) {
+        try {
+            def out = new StringBuilder()
+            def p = [vswhere, '-latest', '-products', '*',
+                     '-requires', 'Microsoft.VisualStudio.Component.VC.CMake.Project',
+                     '-property', 'installationPath'].execute()
+            p.consumeProcessOutput(out, new StringBuilder())
+            p.waitForOrKill(5000)
+            def vsPath = out.toString().trim()
+            if (vsPath) {
+                def cmakeExe = "${vsPath}/Common7/IDE/CommonExtensions/Microsoft/CMake/CMake/bin/cmake.exe"
+                if (file(cmakeExe).exists()) return cmakeExe
+            }
+        } catch (Exception ignored) {}
+    }
+
+    // 3. Standalone CMake installations.
+    def pf = System.getenv('ProgramFiles') ?: 'C:/Program Files'
+    def lad = System.getenv('LOCALAPPDATA') ?: ''
+    def candidates = [
+            "${pf}/CMake/bin/cmake.exe",
+            "${pf86}/CMake/bin/cmake.exe",
+            "${lad}/Programs/CMake/bin/cmake.exe",
+    ]
+    for (path in candidates) {
+        if (path && file(path).exists()) return path
+    }
+    return null
+}
+
+ext.findDotnet = {
+    def bundled = file("$openSdkDir/.dotnet/dotnet.exe")
+    if (bundled.isFile()) return bundled.absolutePath
+    try {
+        def p = ['cmd', '/c', 'where', 'dotnet'].execute()
+        def out = new StringBuilder()
+        p.consumeProcessOutput(out, new StringBuilder())
+        p.waitForOrKill(3000)
+        if (p.exitValue() == 0) {
+            def first = out.toString().readLines().find { it?.trim() }
+            if (first) return first.trim()
+        }
+    } catch (Exception ignored) {}
+    return null
+}
+
+def dotnetMissingMessage =
+        '.NET SDK 10 was not found. Install .NET SDK 10 or place the project-local runtime at ' +
+        'Codexus.OpenSDK/.dotnet/dotnet.exe.'
+
+def cmakeMissingMessage =
+        'CMake not found. Install one of:\n' +
+        '  - Standalone CMake: https://cmake.org/download/ (add to PATH)\n' +
+        '  - Visual Studio 2022 with "C++ CMake tools for Windows" workload\n' +
+        'After installing, re-run ./gradlew dll'
+
+ext.findVcpkg = {
+    def envRoot = System.getenv('VCPKG_ROOT')
+    def candidates = []
+    if (envRoot) candidates << envRoot
+    candidates += ['C:/vcpkg', 'D:/vcpkg', "${System.getProperty('user.home')}/vcpkg"]
+    // Also accept versioned install dirs like C:/vcpkg-2026.03.18.
+    ['C:/', 'D:/'].each { drive ->
+        def root = file(drive)
+        if (root.isDirectory()) {
+            root.listFiles().each { f ->
+                if (f.isDirectory() && f.name ==~ /^vcpkg(-.*)?$/) {
+                    candidates << f.absolutePath.replace('\\', '/')
+                }
+            }
+        }
+    }
+    for (root in candidates) {
+        if (root && file("$root/scripts/buildsystems/vcpkg.cmake").exists()) {
+            return root
+        }
+    }
+    return null
+}
+
+def vcpkgMissingMessage =
+        'vcpkg not found. The Qt-based loader needs vcpkg for static Qt6.\n' +
+        'One-time setup:\n' +
+        '  git clone https://github.com/microsoft/vcpkg.git C:/vcpkg\n' +
+        '  C:/vcpkg/bootstrap-vcpkg.bat\n' +
+        'Optionally set VCPKG_ROOT, or put it at C:/vcpkg or D:/vcpkg.\n' +
+        'Then re-run ./gradlew dll - the first run will build static Qt\n' +
+        '(can take 30 min to 2 h); subsequent builds are fast.'
+
+ext.gitShortRevision = {
+    // CI passes the resolved sha in OPENZEN_BUILD_REVISION so we don't have
+    // to assume git is on PATH inside the runner image.
+    def envRev = System.getenv('OPENZEN_BUILD_REVISION')
+    if (envRev && !envRev.allWhitespace) return envRev.trim().take(7)
+    try {
+        def p = ['git', 'rev-parse', '--short=7', 'HEAD'].execute(null, project.rootDir)
+        def out = new StringBuilder()
+        p.consumeProcessOutput(out, new StringBuilder())
+        p.waitForOrKill(2000)
+        if (p.exitValue() == 0) {
+            def v = out.toString().trim()
+            if (v) return v
+        }
+    } catch (Exception ignored) {}
+    return null
+}
+
+tasks.register('stageNativeJar', Copy) {
+    group = 'openzen'
+    description = 'Stage the freshly built mod jar at native/zen.jar so the DLL ' +
+                  'resource compiler can embed it.'
+    // obfuscateClasses (which dependsOn reobfJar, which dependsOn jar) rewrites
+    // the jar in place, so depend on it to guarantee the DLL embeds the
+    // obfuscated jar rather than racing the rename.
+    dependsOn 'obfuscateClasses'
+    from { tasks.jar.archiveFile }
+    into nativeDir
+    rename { 'zen.jar' }
+}
+
+tasks.register('configureNative', Exec) {
+    group = 'openzen'
+    description = 'Run CMake configure on the native sub-projects (DLL + Loader).'
+    dependsOn 'stageNativeJar'
+    workingDir nativeDir
+    commandLine 'cmake', '-S', '.', '-B', 'build', '-A', 'x64'
+    // Local builds compile Qt single-threaded (vcpkg honours VCPKG_MAX_CONCURRENCY,
+    // which sets ninja -j for the qtbase port). This rules out parallel-compilation
+    // instability on the dev toolchain. CI is left parallel (fast) — it builds Qt
+    // fine, so we only serialise locally (off GitHub Actions).
+    if (System.getenv('GITHUB_ACTIONS') == null) {
+        environment 'VCPKG_MAX_CONCURRENCY', '1'
+    }
+    doFirst {
+        def cmake = findCmake()
+        if (!cmake) throw new GradleException(cmakeMissingMessage)
+        def vcpkg = findVcpkg()
+        if (!vcpkg) throw new GradleException(vcpkgMissingMessage)
+        def rev = gitShortRevision()
+        logger.lifecycle("Using CMake : ${cmake}")
+        logger.lifecycle("Using vcpkg : ${vcpkg}")
+        logger.lifecycle("Build rev   : ${rev ?: '(unknown)'}")
+        def args = [cmake, '-S', '.', '-B', 'build', '-A', 'x64',
+                "-DCMAKE_TOOLCHAIN_FILE=${vcpkg}/scripts/buildsystems/vcpkg.cmake",
+                '-DVCPKG_TARGET_TRIPLET=x64-windows-static',
+                '-DVCPKG_HOST_TRIPLET=x64-windows-static']
+        if (rev) args << "-DOPENZEN_BUILD_REVISION=${rev}"
+        commandLine args
+    }
+}
+
+tasks.register('buildNative', Exec) {
+    group = 'openzen'
+    description = 'Compile OpenZen.dll and OpenZenLoader.exe with CMake.'
+    dependsOn 'configureNative'
+    workingDir nativeDir
+    commandLine 'cmake', '--build', 'build', '--config', 'Release'
+    doFirst {
+        def cmake = findCmake()
+        if (!cmake) throw new GradleException(cmakeMissingMessage)
+        // --parallel forwards a job count to the generator (MSBuild gets /m,
+        // Ninja gets -j). MSBuild defaults to a single process otherwise.
+        // Local builds use 1 job (single-threaded) to match the serialised Qt
+        // build above and rule out parallel-compilation instability; CI keeps
+        // full parallelism for speed.
+        def jobs = (System.getenv('GITHUB_ACTIONS') == null) ? 1 : Runtime.runtime.availableProcessors()
+        logger.lifecycle("Parallel jobs: ${jobs}")
+        commandLine cmake, '--build', 'build', '--config', 'Release',
+                '--parallel', jobs.toString()
+    }
+}
+
+tasks.register('packageDist') {
+    group = 'openzen'
+    description = 'Collect the Loader EXE into build/dist for distribution. ' +
+                  'OpenZen.dll is embedded inside the EXE, so we only ship one file.'
+    dependsOn 'buildNative', 'packageMaxHookRuntime'
+    // Use an inline copy { } block inside doLast rather than the Copy task
+    // type. Copy snapshots its source set at configuration time and reports
+    // NO-SOURCE on a first clean build because the EXE that buildNative is
+    // about to produce does not exist yet. doLast runs after buildNative,
+    // by which point the file is definitely on disk.
+    doLast {
+        def src = file("$nativeBuildDir/loader/Release/MizuluneLoader.exe")
+        if (!src.isFile()) {
+            throw new GradleException(
+                "Expected MizuluneLoader.exe at ${src} after buildNative; missing")
+        }
+        // A distribution is an exact artifact, not an append-only staging area.
+        // Remove stale Fantnel/JVM/ZIP files from previous package generations.
+        delete(nativeDistDir)
+        nativeDistDir.mkdirs()
+        copy {
+            from src
+            into nativeDistDir
+        }
+        copy {
+            from "$nativeDir/loader/res"
+            into file("$nativeDistDir/res")
+            include '*.png'
+        }
+        copy {
+            from "$nativeDir/loader/webui"
+            into file("$nativeDistDir/webui")
+        }
+        if (maxHookDllSource.isFile()) {
+            def maxHookHash = sha256File(maxHookDllSource)
+            if (!maxHookMaxHookSha256.equalsIgnoreCase(maxHookHash)) {
+                throw new GradleException("MaxHook DLL hash mismatch: ${maxHookHash}")
+            }
+            copy {
+                from maxHookDllSource
+                into file("$nativeDistDir/maxhook")
+                rename { 'MaxHook.dll' }
+            }
+            logger.lifecycle("Bundled hash-pinned MaxHook from explicit/local release input")
+        } else {
+            logger.warn('MaxHook release input is absent. The package will retain only the ' +
+                    'official-install fallback; pass -PmaxHookDll=<path> or set MAXHOOK_DLL ' +
+                    'before release verification.')
+        }
+        copy {
+            from maxHookJavaDistDir
+            into file("$nativeDistDir/$bundledMaxHookJdkRelativeRoot")
+        }
+        def packagedJvm = file(
+                "$nativeDistDir/$bundledMaxHookJdkRelativeRoot/bin/server/jvm.dll")
+        if (!packagedJvm.isFile()
+                || !maxHookJvmSha256.equalsIgnoreCase(sha256File(packagedJvm))) {
+            throw new GradleException('Primary distribution did not receive the pinned MaxHook JVM')
+        }
+        logger.lifecycle("Packaged ${src.length()} bytes -> ${buildDir}/dist/${src.name}")
+    }
+}
+
+tasks.register('packageMaxHookRuntime') {
+    group = 'openzen'
+    description = 'Package the hash-pinned Eclipse Temurin 17.0.2 JDK required by the MaxHook ID114 sink.'
+    doLast {
+        if (maxHookJavaHome == null || !maxHookJavaHome.isDirectory()) {
+            throw new GradleException(
+                'MaxHook Java runtime source was not provided. ' +
+                'Pass -PmaxHookJavaHome=<Temurin-17.0.2+8-JDK> or set MAXHOOK_JAVA_HOME.')
+        }
+        def sourceRelease = file("${maxHookJavaHome}/release")
+        def sourceJvm = file("${maxHookJavaHome}/bin/server/jvm.dll")
+        def sourceJava = file("${maxHookJavaHome}/bin/java.exe")
+        if (!sourceRelease.isFile() || !sourceJvm.isFile() || !sourceJava.isFile()) {
+            throw new GradleException("Incomplete MaxHook Java runtime at ${maxHookJavaHome}")
+        }
+        def releaseText = sourceRelease.getText('UTF-8')
+        if (!releaseText.contains('IMPLEMENTOR="Eclipse Adoptium"') ||
+                !releaseText.contains('FULL_VERSION="17.0.2+8"') ||
+                !releaseText.contains('IMAGE_TYPE="JDK"')) {
+            throw new GradleException('MaxHook runtime is not the pinned Eclipse Temurin 17.0.2+8 JDK')
+        }
+        def jvmSha256 = sha256File(sourceJvm)
+        if (!maxHookJvmSha256.equalsIgnoreCase(jvmSha256)) {
+            throw new GradleException("MaxHook JVM hash mismatch: ${jvmSha256}")
+        }
+
+        delete(maxHookJavaDistDir)
+        copy {
+            from(maxHookJavaHome) {
+                // The release input may itself be a previously packaged
+                // runtime. Never feed our generated manifest back into the
+                // canonical JDK tree or its file count/tree hash.
+                exclude 'maxhook-java-runtime-manifest.json'
+            }
+            into maxHookJavaDistDir
+        }
+        def stagedJvm = file("${maxHookJavaDistDir}/bin/server/jvm.dll")
+        def stagedJava = file("${maxHookJavaDistDir}/bin/java.exe")
+        if (!stagedJvm.isFile() || !stagedJava.isFile()) {
+            throw new GradleException('Staged MaxHook Java runtime is incomplete')
+        }
+        def entries = fileTree(maxHookJavaDistDir).files
+                .findAll { it.isFile() }
+                .sort { a, b ->
+                    a.absolutePath.replace('\\', '/').compareTo(b.absolutePath.replace('\\', '/'))
+                }
+                .collect { fileEntry ->
+                    def relative = maxHookJavaDistDir.toPath().relativize(fileEntry.toPath())
+                            .toString().replace('\\', '/')
+                    [path: relative, size: fileEntry.length(), sha256: sha256File(fileEntry)]
+                }
+        def treeMaterial = entries.collect { "${it.path}\u0000${it.size}\u0000${it.sha256}" }.join('\n')
+        def manifest = [
+                schema: 'openzen.maxhook-java-runtime/v1',
+                vendor: 'Eclipse Adoptium',
+                distribution: 'Temurin',
+                version: '17.0.2+8',
+                imageType: 'JDK',
+                os: 'Windows',
+                arch: 'x86_64',
+                requiredMaxHookSha256: maxHookMaxHookSha256,
+                requiredJvmSha256: jvmSha256.toUpperCase(),
+                javaExecutableSha256: sha256File(stagedJava),
+                fileCount: entries.size(),
+                totalBytes: entries.collect { it.size }.sum(),
+                treeSha256: sha256Text(treeMaterial),
+                legalPaths: entries.findAll {
+                    it.path == 'NOTICE' || it.path.startsWith('legal/')
+                }.collect { it.path },
+                files: entries
+        ]
+        def manifestFile = file("${maxHookJavaDistDir}/maxhook-java-runtime-manifest.json")
+        manifestFile.text = groovy.json.JsonOutput.prettyPrint(
+                groovy.json.JsonOutput.toJson(manifest)) + System.lineSeparator()
+        logger.lifecycle("MaxHook Java runtime packaged: ${maxHookJavaDistDir}")
+        logger.lifecycle("MaxHook Java files=${entries.size()} bytes=${entries.collect { it.size }.sum()} treeSha256=${manifest.treeSha256}")
+        logger.lifecycle("MaxHook JVM sha256=${jvmSha256.toUpperCase()} vendor=Eclipse Adoptium version=17.0.2+8")
+    }
+}
+
+tasks.register('packageMaxHookRuntimeZip', Zip) {
+    group = 'openzen'
+    description = 'Create a redistributable ZIP for the hash-pinned MaxHook Temurin runtime.'
+    dependsOn 'packageMaxHookRuntime'
+    archiveFileName = 'Mizulune-MaxHook-Temurin-17.0.2+8-win-x64.zip'
+    destinationDirectory = layout.buildDirectory.dir('runtime-dist')
+    from(maxHookJavaDistDir.parentFile) {
+        include 'jdk17/**'
+    }
+}
+
+ext.findUpx = {
+    try {
+        def p = ['cmd', '/c', 'where', 'upx'].execute()
+        def out = new StringBuilder()
+        p.consumeProcessOutput(out, new StringBuilder())
+        p.waitForOrKill(2000)
+        if (p.exitValue() == 0) {
+            def first = out.toString().readLines().find { it?.trim() }
+            if (first) return first.trim()
+        }
+    } catch (Exception ignored) {}
+    return null
+}
+
+tasks.register('upxCompress') {
+    group = 'openzen'
+    description = 'Run UPX --best --lzma on the packaged OpenZenLoader.exe. ' +
+                  'No-op (warning only) when upx is not on PATH so local builds ' +
+                  'do not need it installed.'
+    dependsOn 'packageDist'
+    doLast {
+        def exe = file("$buildDir/dist/MizuluneLoader.exe")
+        if (!exe.isFile()) {
+            throw new GradleException("packageDist did not produce ${exe}")
+        }
+        def upx = findUpx()
+        if (!upx) {
+            logger.warn("upx not on PATH; skipping compression. Install from " +
+                    "https://upx.github.io/ to enable.")
+            return
+        }
+        def before = exe.length()
+        exec {
+            commandLine upx, '--best', '--lzma', exe.absolutePath
+        }
+        def after = exe.length()
+        logger.lifecycle(String.format(
+                "UPX: %,d -> %,d bytes (%.1f%% of original)",
+                before, after, after * 100.0 / before))
+    }
+}
+
+tasks.register('dll') {
+    group = 'openzen'
+    description = 'Build the injectable DLL and GUI Loader (final dist artifacts).'
+    dependsOn 'packageDist'
+}
+
+tasks.register('verifyFantnelUpstream') {
+    group = 'openzen'
+    description = 'Verify the pinned Fantnel/Fantnel-Pro commits, trees, and clean worktrees.'
+    inputs.files('.gitmodules')
+    doLast {
+        def verifyRepo = { File repo, String expectedCommit, String expectedTree ->
+            if (!file("${repo}/.git").exists()) {
+                throw new GradleException("Missing initialized submodule: ${repo}. Run git submodule update --init --recursive.")
+            }
+            def gitValue = { List<String> args ->
+                def output = new ByteArrayOutputStream()
+                def errors = new ByteArrayOutputStream()
+                def result = exec {
+                    workingDir repo
+                    commandLine(['git'] + args)
+                    standardOutput = output
+                    errorOutput = errors
+                    ignoreExitValue = true
+                }
+                if (result.exitValue != 0) {
+                    throw new GradleException("git ${args.join(' ')} failed in ${repo}: ${errors.toString('UTF-8')}")
+                }
+                return output.toString('UTF-8').trim()
+            }
+            def actualCommit = gitValue(['rev-parse', 'HEAD'])
+            def actualTree = gitValue(['rev-parse', 'HEAD^{tree}'])
+            def status = gitValue(['status', '--porcelain', '--untracked-files=all'])
+            if (actualCommit != expectedCommit) {
+                throw new GradleException("Fantnel pin mismatch in ${repo}: ${actualCommit} != ${expectedCommit}")
+            }
+            if (actualTree != expectedTree) {
+                throw new GradleException("Fantnel tree mismatch in ${repo}: ${actualTree} != ${expectedTree}")
+            }
+            if (!status.isEmpty()) {
+                throw new GradleException("Frozen Fantnel submodule is dirty: ${repo}\n${status}")
+            }
+        }
+        verifyRepo(fantnelDir,
+                '70134bf8ea16bffd951c2afe8cff1f1c1fa3713a',
+                '3695f1d43b069606b0a0a4048b5a1384a9f77e7f')
+        verifyRepo(fantnelProDir,
+                '63edab4b064f3a259272eb686a6f7e0ca94a3137',
+                'c7901b83d97536cd00a6d705758e0952181adc7f')
+    }
+}
+
+tasks.register('verifyFantnelRuntimeLock') {
+    group = 'openzen'
+    description = 'Verify every staged Fantnel runtime resource against its locked SHA256.'
+    inputs.file(fantnelRuntimeLock)
+    inputs.dir(file('backends/fantnel-runtime'))
+    doLast {
+        def lock = new groovy.json.JsonSlurper().parse(fantnelRuntimeLock)
+        if (lock.schemaVersion != 1 || !lock.resources) {
+            throw new GradleException("Invalid or empty Fantnel runtime lock: ${fantnelRuntimeLock}")
+        }
+        lock.resources.each { entry ->
+            def resource = file("backends/fantnel-runtime/${entry.path}")
+            if (!resource.isFile()) throw new GradleException("Missing Fantnel runtime resource: ${resource}")
+            def digest = java.security.MessageDigest.getInstance('SHA-256')
+            resource.withInputStream { stream ->
+                byte[] buffer = new byte[65536]
+                for (int count = stream.read(buffer); count >= 0; count = stream.read(buffer)) {
+                    if (count > 0) digest.update(buffer, 0, count)
+                }
+            }
+            def actual = digest.digest().encodeHex().toString()
+            if (!actual.equalsIgnoreCase(entry.sha256 as String)) {
+                throw new GradleException("Fantnel resource hash mismatch: ${entry.path} ${actual} != ${entry.sha256}")
+            }
+        }
+    }
+}
+
+tasks.register('testFantnelHost', Exec) {
+    group = 'verification'
+    description = 'Run the Mizulune Fantnel host tests without starting the live Fantnel network runtime.'
+    dependsOn 'verifyFantnelUpstream', 'verifyFantnelRuntimeLock'
+    workingDir projectDir
+    doFirst {
+        def dotnet = findDotnet()
+        if (!dotnet) throw new GradleException(dotnetMissingMessage)
+        commandLine dotnet, 'test',
+                file('backends/Mizulune.FantnelHost.Tests/Mizulune.FantnelHost.Tests.csproj').absolutePath,
+                '--configuration', 'Release', '--nologo'
+    }
+}
+
+tasks.register('publishFantnelHost', Exec) {
+    group = 'openzen'
+    description = 'Publish the self-contained Windows x64 Fantnel named-pipe sidecar.'
+    dependsOn 'verifyFantnelUpstream', 'testFantnelHost'
+    workingDir projectDir
+    inputs.files(fileTree(fantnelBackendDir) { include '**/*.cs', '**/*.csproj' })
+    inputs.files(fileTree(fantnelDir) {
+        include '**/*.cs', '**/*.csproj'
+        exclude '**/bin/**', '**/obj/**'
+    })
+    outputs.file(file("$fantnelBuildDir/host/Mizulune.FantnelHost.exe"))
+    doFirst {
+        def dotnet = findDotnet()
+        if (!dotnet) throw new GradleException(dotnetMissingMessage)
+        commandLine dotnet, 'publish',
+                file("$fantnelBackendDir/Mizulune.FantnelHost.csproj").absolutePath,
+                '--configuration', 'Release',
+                '--runtime', 'win-x64',
+                '--self-contained', 'true',
+                '-p:PublishSingleFile=true',
+                '-p:IncludeNativeLibrariesForSelfExtract=true',
+                '-p:DebugType=None',
+                '-p:DebugSymbols=false',
+                '--output', file("$fantnelBuildDir/host").absolutePath
+    }
+    doLast {
+        def host = file("$fantnelBuildDir/host/Mizulune.FantnelHost.exe")
+        if (!host.isFile()) throw new GradleException("Fantnel host publish did not produce ${host}")
+        exec { commandLine host.absolutePath, '--health' }
+        exec { commandLine host.absolutePath, '--console-health' }
+    }
+}
+
+tasks.register('stageFantnelResources', Sync) {
+    group = 'openzen'
+    description = 'Stage only SHA256-locked Fantnel runtime resources; runtime core updates stay disabled.'
+    dependsOn 'verifyFantnelRuntimeLock'
+    into file("$fantnelBuildDir/runtime")
+    from(file('backends/fantnel-runtime'))
+    from(fantnelRuntimeLock)
+}
+
+tasks.register('packageFantnelDist') {
+    group = 'openzen'
+    description = 'Assemble the Mizulune Loader with the frozen Fantnel named-pipe backend.'
+    dependsOn 'test', 'packageDist', 'publishFantnelHost', 'stageFantnelResources'
+    doLast {
+        // packageDist already populated the primary distribution. Only copy it
+        // when a separate output directory was requested; using Sync with the
+        // same source and destination would otherwise remove the Loader assets.
+        if (fantnelDistDir.absoluteFile != nativeDistDir.absoluteFile) {
+            delete(fantnelDistDir)
+            copy {
+                from nativeDistDir
+                into fantnelDistDir
+            }
+        }
+        copy {
+            from file("$fantnelBuildDir/host")
+            into file("$fantnelDistDir/fantnel")
+        }
+        copy {
+            from file("$fantnelBuildDir/runtime")
+            into file("$fantnelDistDir/fantnel")
+        }
+        def required = [
+                file("$fantnelDistDir/MizuluneLoader.exe"),
+                file("$fantnelDistDir/fantnel/Mizulune.FantnelHost.exe"),
+                file("$fantnelDistDir/fantnel/resources/7z.exe"),
+                file("$fantnelDistDir/fantnel/resources/fantnel-bootstrap.json"),
+                file("$fantnelDistDir/fantnel/fantnel-runtime.lock.json")
+        ]
+        required.each { if (!it.isFile()) throw new GradleException("Missing Fantnel dist artifact: ${it}") }
+        def manifestFile = file("$fantnelDistDir/$distributionManifestRelativePath")
+        delete(manifestFile)
+        def maxHookFile = file("$fantnelDistDir/$bundledMaxHookRelativePath")
+        def maxHookBundled = maxHookFile.isFile()
+        if (maxHookBundled) {
+            def maxHookHash = sha256File(maxHookFile)
+            if (!maxHookMaxHookSha256.equalsIgnoreCase(maxHookHash)) {
+                throw new GradleException("Packaged MaxHook hash mismatch: ${maxHookHash}")
+            }
+        }
+
+        def expectedPaths = new ArrayList<String>()
+        expectedPaths.addAll(baseDistributionPaths)
+        expectedPaths.addAll(fantnelDistributionPaths)
+        if (maxHookBundled) expectedPaths.add(bundledMaxHookRelativePath)
+        def packagedJdkRoot = file("$fantnelDistDir/$bundledMaxHookJdkRelativeRoot")
+        def packagedJvm = file("$packagedJdkRoot/bin/server/jvm.dll")
+        def packagedJava = file("$packagedJdkRoot/bin/java.exe")
+        def packagedRuntimeManifest = file(
+                "$packagedJdkRoot/maxhook-java-runtime-manifest.json")
+        if (!packagedJvm.isFile() || !packagedJava.isFile()
+                || !packagedRuntimeManifest.isFile()) {
+            throw new GradleException('Pinned MaxHook JDK is missing from the primary distribution')
+        }
+        def packagedJvmHash = sha256File(packagedJvm)
+        if (!maxHookJvmSha256.equalsIgnoreCase(packagedJvmHash)) {
+            throw new GradleException("Packaged JVM hash mismatch: ${packagedJvmHash}")
+        }
+        expectedPaths.addAll(fileTree(packagedJdkRoot).files
+                .findAll { it.isFile() }
+                .collect { entry ->
+                    def relative = packagedJdkRoot.toPath().relativize(entry.toPath())
+                            .toString().replace('\\', '/')
+                    "$bundledMaxHookJdkRelativeRoot/$relative"
+                })
+        expectedPaths = expectedPaths.sort()
+        def actualPaths = fileTree(fantnelDistDir).files
+                .findAll { it.isFile() }
+                .collect { entry ->
+                    fantnelDistDir.toPath().relativize(entry.toPath()).toString().replace('\\', '/')
+                }
+                .sort()
+        def missingPaths = expectedPaths - actualPaths
+        def unexpectedPaths = actualPaths - expectedPaths
+        if (!missingPaths.isEmpty() || !unexpectedPaths.isEmpty()) {
+            throw new GradleException(
+                    "Fantnel distribution schema mismatch; missing=${missingPaths}, unexpected=${unexpectedPaths}")
+        }
+
+        def bundledFiles = expectedPaths.collect { relative ->
+            def entry = file("$fantnelDistDir/$relative")
+            [path: relative, size: entry.length(), sha256: sha256File(entry)]
+        }
+        def distributionManifest = [
+                schema: 'mizulune.loader-distribution/v1',
+                artifact: 'Mizulune Loader + Fantnel',
+                platform: 'Windows x86_64',
+                bundledFiles: bundledFiles,
+                maxHook: [
+                        bundled: maxHookBundled,
+                        packagedRelativePath: maxHookBundled ? bundledMaxHookRelativePath : '',
+                        stagedRelativePath: '.mizulune/runtime/maxhook/MaxHook.dll',
+                        officialInstallPreferred: '<installRoot>/native/MaxHook.dll',
+                        selectionOrder: [
+                                '<installRoot>/native/MaxHook.dll',
+                                '.mizulune/runtime/maxhook/MaxHook.dll'
+                        ],
+                        requiredSha256: maxHookMaxHookSha256,
+                        machineUnique: false,
+                        networkDownload: false
+                ],
+                jvm: [
+                        bundled: true,
+                        distribution: 'in-package',
+                        packagedRelativeRoot: bundledMaxHookJdkRelativeRoot,
+                        javaExecutableRelativePath:
+                                "$bundledMaxHookJdkRelativeRoot/bin/java.exe",
+                        runtimeManifestRelativePath:
+                                "$bundledMaxHookJdkRelativeRoot/maxhook-java-runtime-manifest.json",
+                        optionalStandaloneZipTask: 'packageMaxHookRuntimeZip',
+                        requiredJvmSha256: maxHookJvmSha256
+                ],
+                protocolOfficialInputs: [
+                        bundled: false,
+                        source: 'configured-or-auto-detected official game installation',
+                        relativePaths: ['mods', 'native', 'libraries', 'logs', 'versions']
+                ],
+                systemDependencies: [
+                        [name: 'Windows x86_64', required: true],
+                        [name: 'Microsoft Edge WebView2 Runtime', required: true]
+                ],
+                optionalNetworkServices: [
+                        [name: 'GitHub release update check', requiredForStartup: false],
+                        [name: 'Mizulune music API', requiredForProtocol: false]
+                ]
+        ]
+        manifestFile.text = groovy.json.JsonOutput.prettyPrint(
+                groovy.json.JsonOutput.toJson(distributionManifest)) + System.lineSeparator()
+        logger.lifecycle("Fantnel distribution ready: ${fantnelDistDir}")
+        logger.lifecycle("Distribution manifest: ${manifestFile}")
+        logger.lifecycle("Launch: ${file("$fantnelDistDir/MizuluneLoader.exe")}")
+    }
+}
+
+tasks.register('dllWithFantnel') {
+    group = 'openzen'
+    description = 'Build the primary Mizulune Loader distribution with the frozen Fantnel backend.'
+    dependsOn 'packageFantnelDist'
+}
+
+def distributabilityVerifier = file('scripts/verify-distributability.ps1')
+
+tasks.register('verifyDistributionSources', Exec) {
+    group = 'verification'
+    description = 'Reject production machine paths and remote WebUI runtime assets.'
+    inputs.file(distributabilityVerifier)
+    doFirst {
+        commandLine 'powershell.exe', '-NoProfile', '-ExecutionPolicy', 'Bypass',
+                '-File', distributabilityVerifier.absolutePath,
+                '-SourceOnly',
+                '-RepositoryRoot', projectDir.absolutePath,
+                '-ReportPath', file("$buildDir/reports/distributability/source.json").absolutePath
+    }
+}
+
+tasks.register('verifyDistributability', Exec) {
+    group = 'verification'
+    description = 'Verify the exact Loader package, bundled dependencies, JAR, and random-path relocation.'
+    dependsOn 'packageFantnelDist', 'jar'
+    inputs.file(distributabilityVerifier)
+    doFirst {
+        commandLine 'powershell.exe', '-NoProfile', '-ExecutionPolicy', 'Bypass',
+                '-File', distributabilityVerifier.absolutePath,
+                '-RepositoryRoot', projectDir.absolutePath,
+                '-DistDirectory', fantnelDistDir.absolutePath,
+                '-JarPath', tasks.jar.archiveFile.get().asFile.absolutePath,
+                '-ReportPath', file("$buildDir/reports/distributability/full.json").absolutePath
+    }
+}
+
+tasks.named('check').configure {
+    dependsOn 'verifyDistributionSources'
+}
+
+tasks.register('buildOpenSdkProtocol', Exec) {
+    group = 'openzen'
+    description = 'Build the Codexus.Protocol OpenSDK plugin for the SDK distribution.'
+    workingDir projectDir
+    doFirst {
+        def dotnet = findDotnet()
+        if (!dotnet) throw new GradleException(dotnetMissingMessage)
+        commandLine dotnet, 'build',
+                file("$openSdkDir/Codexus.Protocol/Codexus.Protocol.csproj").absolutePath,
+                '--configuration', 'Release'
+    }
+}
+
+tasks.register('publishOpenSdkHost', Exec) {
+    group = 'openzen'
+    description = 'Publish the self-contained Windows x64 Mizulune OpenSDK sidecar.'
+    workingDir projectDir
+    inputs.files(fileTree(openSdkDir) {
+        include '**/*.cs', '**/*.csproj', 'Codexus.OpenSDK.slnx', 'Mizulune.SdkHost/profiles/*.json'
+        exclude '**/bin/**', '**/obj/**', '**/.dotnet/**'
+    })
+    outputs.file(file("$openSdkBuildDir/host/Mizulune.SdkHost.exe"))
+    doFirst {
+        def dotnet = findDotnet()
+        if (!dotnet) throw new GradleException(dotnetMissingMessage)
+        commandLine dotnet, 'publish',
+                file("$openSdkDir/Mizulune.SdkHost/Mizulune.SdkHost.csproj").absolutePath,
+                '--configuration', 'Release',
+                '--runtime', 'win-x64',
+                '--self-contained', 'true',
+                '-p:PublishSingleFile=true',
+                '-p:IncludeNativeLibrariesForSelfExtract=true',
+                '-p:DebugType=None',
+                '-p:DebugSymbols=false',
+                '--output', file("$openSdkBuildDir/host").absolutePath
+    }
+    doLast {
+        def host = file("$openSdkBuildDir/host/Mizulune.SdkHost.exe")
+        if (!host.isFile()) throw new GradleException("OpenSDK host publish did not produce ${host}")
+        exec { commandLine host.absolutePath, '--health' }
+    }
+}
+
+tasks.register('stageOpenSdkPlugins', Sync) {
+    group = 'openzen'
+    description = 'Stage only the OpenSDK plugin entry DLL and manifest.'
+    dependsOn 'buildOpenSdkProtocol'
+    into file("$openSdkBuildDir/plugins/mizulune.protocol")
+    from(file("$openSdkDir/Codexus.Protocol/bin/Release/net10.0")) {
+        include 'Codexus.Protocol.dll'
+    }
+    from(file("$openSdkDir/Codexus.Protocol/manifest.json"))
+}
+
+tasks.register('packageSdkDist', Sync) {
+    group = 'openzen'
+    description = 'Assemble the directory-based dual-mode Loader + OpenSDK distribution.'
+    dependsOn 'packageDist', 'publishOpenSdkHost', 'stageOpenSdkPlugins'
+    into file("$buildDir/dist-sdk")
+    from(file("$buildDir/dist"))
+    from(file("$openSdkBuildDir/host/Mizulune.SdkHost.exe")) {
+        into 'sdk'
+    }
+    from(file("$openSdkBuildDir/plugins")) {
+        into 'sdk/Mods'
+    }
+    from(file("$openSdkDir/Mizulune.SdkHost/profiles")) {
+        into 'sdk/profiles'
+        include '*.json'
+    }
+    doLast {
+        def required = [
+                file("$buildDir/dist-sdk/MizuluneLoader.exe"),
+                file("$buildDir/dist-sdk/sdk/Mizulune.SdkHost.exe"),
+                file("$buildDir/dist-sdk/sdk/Mods/mizulune.protocol/Codexus.Protocol.dll"),
+                file("$buildDir/dist-sdk/sdk/Mods/mizulune.protocol/manifest.json"),
+                file("$buildDir/dist-sdk/sdk/profiles/bjd-viaforge-1.20.6.json")
+        ]
+        required.each { if (!it.isFile()) throw new GradleException("Missing SDK dist artifact: ${it}") }
+    }
+}
+
+tasks.register('dllWithSDK') {
+    group = 'openzen'
+    description = 'Compatibility alias for the primary Fantnel-backed Loader distribution.'
+    dependsOn 'packageFantnelDist'
+}
+
+tasks.register('dllWithOpenSDK') {
+    group = 'openzen'
+    description = 'Build the legacy OpenSDK fallback distribution until Fantnel live validation passes.'
+    dependsOn 'packageSdkDist'
+}
+
+tasks.register('upxCompressFantnel') {
+    group = 'openzen'
+    description = 'Compress the Fantnel Loader executable inside build/dist; Fantnel host remains untouched.'
+    dependsOn 'dllWithFantnel'
+    doLast {
+        def exe = file("$fantnelDistDir/MizuluneLoader.exe")
+        if (!exe.isFile()) throw new GradleException("dllWithFantnel did not produce ${exe}")
+        def upx = findUpx()
+        if (!upx) {
+            logger.warn('upx not on PATH; skipping Fantnel Loader compression.')
+            return
+        }
+        exec { commandLine upx, '--best', '--lzma', exe.absolutePath }
+    }
+}
+
+tasks.register('upxCompressSdk') {
+    group = 'openzen'
+    description = 'Compatibility alias for upxCompressFantnel.'
+    dependsOn 'upxCompressFantnel'
+}
+
+// Gradle's stock 'clean' only wipes the project build/ directory, so the
+// CMake out-of-source build dir and the staged jar would survive a clean
+// and silently feed stale bits into the next dll build. Wire a dedicated
+// Delete task into 'clean' so ./gradlew clean really wipes everything.
+tasks.register('cleanNative', Delete) {
+    group = 'openzen'
+    description = 'Remove native/build/ and the staged native/zen.jar.'
+    delete nativeBuildDir
+    delete file("$nativeDir/zen.jar")
+}
+
+tasks.named('clean').configure {
+    dependsOn 'cleanNative'
+}
+
+// ===== Dual runtime build entry points =====
+// Keep ForgeGradle/Patchify as the root build and run Loom as an isolated
+// nested build so `build` and `dllWithFantnel` never acquire Fabric plugins.
+def fabricBuildDir = file('fabricmod')
+def fabricWrapperCommand = System.getProperty('os.name').toLowerCase(Locale.ROOT).contains('windows')
+        ? ['cmd.exe', '/d', '/c', file('fabricmod/gradlew.bat').absolutePath]
+        : [file('fabricmod/gradlew').absolutePath]
+def viaFabricPlusBuildDir = file('viafabricplusmod')
+def viaFabricPlusWrapperCommand = System.getProperty('os.name').toLowerCase(Locale.ROOT).contains('windows')
+        ? ['cmd.exe', '/d', '/c', file('viafabricplusmod/gradlew.bat').absolutePath]
+        : [file('viafabricplusmod/gradlew').absolutePath]
+def resolveFabricJavaHome = {
+    def explicit = findProperty('fabricJavaHome') ?: System.getenv('FABRIC_JAVA_HOME')
+    if (explicit != null && explicit.toString().trim()) {
+        return file(explicit.toString()).absolutePath
+    }
+    return javaToolchains.launcherFor {
+        languageVersion = JavaLanguageVersion.of(17)
+    }.get().metadata.installationPath.asFile.absolutePath
+}
+
+tasks.register('buildForgeAsm') {
+    group = 'forgeASM'
+    description = 'Build and test the Forge 1.20.1 Patchify/ASM distribution.'
+    dependsOn tasks.named('build')
+}
+
+tasks.register('buildForgeAsmDll') {
+    group = 'forgeASM'
+    description = 'Build the existing Forge/ASM DLL plus Fantnel distribution.'
+    dependsOn tasks.named('dllWithFantnel')
+}
+
+tasks.register('buildFabricMod', Exec) {
+    group = 'fabric'
+    description = 'Build and stage the isolated Fabric 1.20.1 Mixin distribution.'
+    workingDir fabricBuildDir
+    environment 'GRADLE_USER_HOME', file('fabricmod/.gradle-user-home').absolutePath
+    doFirst {
+        environment 'JAVA_HOME', resolveFabricJavaHome()
+    }
+    commandLine(fabricWrapperCommand + [
+            'stageFabricMod',
+            '--no-parallel'
+    ])
+}
+
+tasks.register('buildViaFabricPlusMod', Exec) {
+    group = 'fabric'
+    description = 'Build and stage the full ViaFabricPlus 1.20.1 fork with protocol 766 support.'
+    workingDir viaFabricPlusBuildDir
+    environment 'GRADLE_USER_HOME', file('fabricmod/.gradle-user-home').absolutePath
+    doFirst {
+        environment 'JAVA_HOME', resolveFabricJavaHome()
+    }
+    commandLine(viaFabricPlusWrapperCommand + [
+            'stageProtocolMod',
+            '--no-parallel'
+    ])
+}
+
+tasks.register('stageFabricFantnelHost', Sync) {
+    group = 'fabric'
+    description = 'Stage the frozen Fantnel named-pipe host beside the Fabric mod jars.'
+    dependsOn tasks.named('publishFantnelHost')
+    dependsOn tasks.named('stageFantnelResources')
+    into file('build/mod-dist/fabric/fantnel')
+    from file("$fantnelBuildDir/host")
+    from file("$fantnelBuildDir/runtime")
+}
+
+// Keep the user-facing task name requested for the Gradle task panel while
+// retaining buildFabricMod for existing scripts and buildAll dependencies.
+tasks.register('fabricmodbuild') {
+    group = 'fabric'
+    description = 'Build Mizulune Fabric, the full ViaFabricPlus fork, and the FantNEL Host.'
+    dependsOn tasks.named('buildFabricMod')
+    dependsOn tasks.named('buildViaFabricPlusMod')
+    dependsOn tasks.named('stageFabricFantnelHost')
+}
+
+tasks.register('runFabricClient', Exec) {
+    group = 'fabric'
+    description = 'Run the Fabric 1.20.1 development client with the pinned Sodium runtime.'
+    workingDir fabricBuildDir
+    environment 'GRADLE_USER_HOME', file('fabricmod/.gradle-user-home').absolutePath
+    doFirst {
+        environment 'JAVA_HOME', resolveFabricJavaHome()
+        project.delete(fileTree('fabricmod/run/mods') {
+            include 'viafabricplus-*.jar'
+            include 'mizulune-viafabricplus-*.jar'
+        })
+        copy {
+            from fileTree('build/mod-dist/fabric') {
+                include 'viafabricplus-*.jar'
+            }
+            into file('fabricmod/run/mods')
+        }
+        copy {
+            from file('build/mod-dist/fabric/fantnel')
+            into file('fabricmod/run/fantnel')
+        }
+    }
+    commandLine(fabricWrapperCommand + [
+            'runClient',
+            '--no-parallel'
+    ])
+}
+
+tasks.register('buildAll') {
+    group = 'build'
+    description = 'Build Forge/ASM plus both Fabric/Mixin mod artifacts.'
+    dependsOn tasks.named('buildForgeAsm')
+    dependsOn tasks.named('buildFabricMod')
+    dependsOn tasks.named('buildViaFabricPlusMod')
+    dependsOn tasks.named('stageFabricFantnelHost')
+}
+
+tasks.named('buildFabricMod').configure {
+    mustRunAfter tasks.named('buildForgeAsm')
+}
+
+tasks.named('buildViaFabricPlusMod').configure {
+    mustRunAfter tasks.named('buildFabricMod')
+}
+
+tasks.named('runFabricClient').configure {
+    dependsOn tasks.named('buildViaFabricPlusMod')
+    dependsOn tasks.named('stageFabricFantnelHost')
+}
+
+// Release builds are cut by .github/workflows/build-loader.yml when the head commit
+// message contains [Release]. Every build emits fresh random class names; see
+// buildSrc's mizulune-obfuscation plugin and the obfuscation section in the README.
