@@ -46,6 +46,7 @@ native/runtime/maxhook/MaxHook.dll
 .claude/
 .cursor/
 .columbina-legacy*/
+**/__pycache__/
 
 # Local source/archive dumps; source of truth is the working tree
 src.zip
