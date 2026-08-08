@@ -9,9 +9,9 @@ param(
 $ErrorActionPreference = 'Stop'
 
 function GitAt {
-    param([string]$Repo, [string[]]$Args)
-    $result = & git -C $Repo @Args 2>&1
-    if ($LASTEXITCODE -ne 0) { throw "git -C $Repo $($Args -join ' ') failed:`n$result" }
+    param([string]$Repo, [string[]]$Arguments)
+    $result = & git -C $Repo @Arguments 2>&1
+    if ($LASTEXITCODE -ne 0) { throw "git -C $Repo $($Arguments -join ' ') failed:`n$result" }
     return $result
 }
 
