@@ -1,0 +1,3 @@
+[workflow]
+version = 2
+mode = "strict"

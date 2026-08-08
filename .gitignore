@@ -41,12 +41,11 @@ native/dll/src/generated_names.h
 native/runtime/maxhook/MaxHook.dll
 
 # Local agent/workflow configuration
-AGENTS.md
-.columbina/
 .codex/
 .agents/
 .claude/
 .cursor/
+.columbina-legacy*/
 
 # Local source/archive dumps; source of truth is the working tree
 src.zip

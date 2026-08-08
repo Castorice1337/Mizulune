@@ -1,0 +1,39 @@
+[phase]
+id = "0067"
+slug = "fabric-262-runtime-upgrade"
+title = "Fabric 26.2 runtime upgrade"
+status = "verified"
+depends_on = []
+
+[owner]
+actor_id = "castorice1337-f9462369"
+name = "Castorice1337"
+email = "ilovecastoriceforever@gmail.com"
+
+[evidence]
+base_commit = "dd998b1"
+last_commit = "686b6d5"
+modified_files = [
+  "AGENTS.md",
+  "README.md",
+  "build.gradle",
+  "fabricmod/build.gradle",
+  "fabricmod/src/fabric26/",
+  "src/main/java/shit/zen/platform/ItemCompat.java",
+  "src/test/java/shit/zen/patch/DualRuntimeMixinCoverageTest.java"
+]
+
+[checks]
+build = "pass"
+build_note = "gradlew.bat build --no-daemon completed successfully; source portability and sync-token ABI checks passed."
+test = "pass"
+human_confirmed_by = "项目用户"
+human_confirmed_at = "2026-08-08T00:00:00+08:00"
+
+[[contributors]]
+actor_id = "castorice1337-f9462369"
+name = "Castorice1337"
+email = "ilovecastoriceforever@gmail.com"
+branch = "codex/fabric-262"
+commits = ["686b6d5"]
+role = "implementation"
